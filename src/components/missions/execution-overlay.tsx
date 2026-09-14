@@ -1,0 +1,378 @@
+"use client";
+
+import { AnimatePresence, motion } from "motion/react";
+import { Check, CircleAlert, Droplets, Gauge, LoaderCircle, Send, Sparkles, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { AnimatedNumber } from "@/components/ui/animated-number";
+import { Button } from "@/components/ui/button";
+import { ProgressBar } from "@/components/ui/progress-bar";
+import { SimulationBadge } from "@/components/ui/simulation-badge";
+import { Surface } from "@/components/ui/surface";
+import { getLevelProgress } from "@/lib/gamification/levels";
+import type { DispenseProgress } from "@/lib/iot/types";
+import type { MissionDefinition } from "@/lib/missions/catalog";
+import { FAILURE_COPY, isTerminal, xpForExecution } from "@/lib/missions/execution";
+import { cn } from "@/lib/utils/cn";
+import { formatDecimal, formatDuration, formatLiters } from "@/lib/utils/format";
+import { MissionIcon } from "./mission-icon";
+
+const STEPS = [
+  { title: "Preparando sua missão", icon: Send },
+  { title: "Liberando água", icon: Droplets },
+  { title: "Confirmando volume", icon: Gauge },
+  { title: "Ação concluída", icon: Check },
+] as const;
+
+function stepIndex(progress: DispenseProgress | null) {
+  switch (progress?.status) {
+    case "EXECUTING":
+      return 1;
+    case "MEASURING":
+      return 2;
+    case "COMPLETED":
+      return 3;
+    case "FAILED":
+      return progress.startedAt ? 1 : 0;
+    default:
+      return 0;
+  }
+}
+
+function stepDetail(index: number, collectorCode: string) {
+  return [
+    `Comando enviado ao captador ${collectorCode}.`,
+    "Válvula aberta. O sensor acompanha a queda do nível.",
+    "Válvula fechada. Aguardando a água estabilizar.",
+    "Volume confirmado pelo sensor.",
+  ][index];
+}
+
+interface ExecutionOverlayProps {
+  mission: MissionDefinition;
+  collectorCode: string;
+  progress: DispenseProgress | null;
+  xpBefore: number;
+  onClose: () => void;
+}
+
+export function ExecutionOverlay({ mission, collectorCode, progress, xpBefore, onClose }: ExecutionOverlayProps) {
+  const terminal = isTerminal(progress);
+
+  return (
+    <motion.div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Execução da missão ${mission.title}`}
+      className="fixed inset-0 z-40 overflow-y-auto bg-abyss-950"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25 }}
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 bg-[radial-gradient(100%_55%_at_50%_0%,rgb(20_167_218/0.2),transparent_65%)]"
+      />
+      <div className="relative mx-auto flex min-h-dvh max-w-md flex-col px-5 pb-safe pt-safe">
+        <header className="flex items-center gap-3 pt-5">
+          <MissionIcon icon={mission.icon} size="sm" />
+          <div className="min-w-0 flex-1">
+            <p className="eyebrow">{terminal ? "Missão finalizada" : "Missão em execução"}</p>
+            <p className="truncate font-display font-semibold text-mist-50">{mission.title}</p>
+          </div>
+          {progress?.origin === "simulation" && <SimulationBadge />}
+          {terminal && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Fechar"
+              className="grid size-10 shrink-0 place-items-center rounded-full bg-white/[0.06] text-mist-300 active:scale-95"
+            >
+              <X className="size-5" />
+            </button>
+          )}
+        </header>
+
+        <AnimatePresence mode="wait">
+          {progress?.status === "COMPLETED" ? (
+            <ResultPanel key="result" mission={mission} progress={progress} xpBefore={xpBefore} onClose={onClose} />
+          ) : progress?.status === "FAILED" ? (
+            <FailurePanel key="failure" progress={progress} collectorCode={collectorCode} onClose={onClose} />
+          ) : (
+            <RunningPanel key="running" mission={mission} collectorCode={collectorCode} progress={progress} />
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  );
+}
+
+const panelMotion = {
+  initial: { opacity: 0, y: 14 },
+  animate: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -14 },
+  transition: { duration: 0.3, ease: [0.22, 1, 0.36, 1] as const },
+};
+
+function RunningPanel({
+  mission,
+  collectorCode,
+  progress,
+}: {
+  mission: MissionDefinition;
+  collectorCode: string;
+  progress: DispenseProgress | null;
+}) {
+  const target = progress?.targetLiters ?? mission.liters ?? 0;
+  const delivered = progress?.deliveredLiters ?? 0;
+  const current = stepIndex(progress);
+
+  return (
+    <motion.div className="flex flex-1 flex-col" {...panelMotion}>
+      <div className="flex flex-1 flex-col items-center justify-center py-8 text-center" data-testid="execution-stage">
+        <p className="eyebrow text-aqua-300">{STEPS[current]?.title}</p>
+        <p className="mt-3 font-display text-6xl font-bold tracking-tight text-mist-50">
+          <AnimatedNumber value={delivered} format={(value) => formatDecimal(Math.max(0, value))} />
+          <span className="ml-1 text-3xl text-aqua-300">L</span>
+        </p>
+        <p className="mt-2 text-sm text-mist-400">medidos pelo sensor, de {formatLiters(target, 1)}</p>
+        <ProgressBar
+          value={target > 0 ? delivered / target : 0}
+          tone="aqua"
+          label="Volume liberado"
+          className="mt-6 w-full max-w-xs"
+        />
+      </div>
+      <StepList current={current} collectorCode={collectorCode} failed={false} />
+      <p className="py-5 text-center text-xs text-mist-500">
+        A válvula fecha automaticamente. Mantenha o regador na saída do captador.
+      </p>
+    </motion.div>
+  );
+}
+
+function StepList({ current, collectorCode, failed }: { current: number; collectorCode: string; failed: boolean }) {
+  return (
+    <ol className="space-y-1" aria-label="Etapas da missão">
+      {STEPS.map((step, index) => {
+        const isLast = index === STEPS.length - 1;
+        const state =
+          failed && index === current
+            ? "failed"
+            : index < current || (index === current && isLast)
+              ? "done"
+              : index === current
+                ? "active"
+                : "pending";
+        const Icon = step.icon;
+        return (
+          <li
+            key={step.title}
+            aria-current={state === "active" ? "step" : undefined}
+            className={cn(
+              "flex items-center gap-3 rounded-2xl px-3 py-2.5 transition-colors duration-300",
+              state === "active" && "bg-white/[0.05]",
+            )}
+          >
+            <span
+              className={cn(
+                "grid size-9 shrink-0 place-items-center rounded-full ring-1 ring-inset transition-colors duration-300",
+                state === "done" && "bg-leaf-400/15 text-leaf-300 ring-leaf-400/30",
+                state === "active" && "bg-aqua-400/15 text-aqua-300 ring-aqua-400/35",
+                state === "failed" && "bg-alert-400/15 text-alert-400 ring-alert-400/35",
+                state === "pending" && "text-mist-500 ring-white/10",
+              )}
+            >
+              {state === "done" ? (
+                <Check className="size-4" strokeWidth={2.75} />
+              ) : state === "active" ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : state === "failed" ? (
+                <X className="size-4" strokeWidth={2.75} />
+              ) : (
+                <Icon className="size-4" />
+              )}
+            </span>
+            <div className="min-w-0">
+              <p className={cn("text-sm font-semibold", state === "pending" ? "text-mist-500" : "text-mist-50")}>
+                {step.title}
+              </p>
+              {state === "active" && <p className="text-xs text-mist-400">{stepDetail(index, collectorCode)}</p>}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function ResultPanel({
+  mission,
+  progress,
+  xpBefore,
+  onClose,
+}: {
+  mission: MissionDefinition;
+  progress: DispenseProgress;
+  xpBefore: number;
+  onClose: () => void;
+}) {
+  const router = useRouter();
+  const xp = xpForExecution(mission, progress);
+  const before = getLevelProgress(xpBefore);
+  const after = getLevelProgress(xpBefore + xp);
+  const leveledUp = after.level > before.level;
+  const duration = progress.startedAt !== null && progress.finishedAt !== null ? progress.finishedAt - progress.startedAt : null;
+
+  const leave = (href: "/" | "/agua") => {
+    onClose();
+    router.push(href);
+  };
+
+  return (
+    <motion.div className="relative flex flex-1 flex-col" {...panelMotion}>
+      <Confetti />
+      <div className="flex flex-col items-center pt-10 text-center">
+        <motion.span
+          initial={{ scale: 0, rotate: -40 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: "spring", stiffness: 260, damping: 15, delay: 0.1 }}
+          className="grid size-16 place-items-center rounded-full bg-leaf-400 text-abyss-950 shadow-[0_0_48px_rgb(91_227_143/0.55)]"
+        >
+          <Check className="size-8" strokeWidth={3} />
+        </motion.span>
+        <p className="eyebrow mt-5 text-leaf-300">Missão concluída</p>
+        <p className="mt-3 text-mist-300">Você reutilizou</p>
+        <p className="font-display text-7xl font-bold tracking-tight text-leaf-300">
+          <AnimatedNumber value={progress.deliveredLiters} format={(value) => formatDecimal(value)} />
+          <span className="ml-1 text-3xl">L</span>
+        </p>
+        <p className="mt-2 text-sm text-mist-400">de água que seria descartada · {mission.location}</p>
+      </div>
+
+      <Surface className="mt-7 grid grid-cols-3 divide-x divide-white/[0.06] py-4 text-center">
+        <Metric label="Solicitado" value={formatLiters(progress.targetLiters)} />
+        <Metric label="Medido" value={formatLiters(progress.deliveredLiters)} highlight />
+        <Metric label="Duração" value={duration !== null ? formatDuration(duration) : "—"} />
+      </Surface>
+
+      <Surface className="mt-3 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2 font-display text-lg font-bold text-sun-300">
+            <Sparkles className="size-5" aria-hidden />+{xp} XP
+          </span>
+          <span className="text-right text-xs text-mist-400">
+            {leveledUp ? `Novo nível: ${after.title}!` : `Nível ${after.level} · ${after.title}`}
+          </span>
+        </div>
+        <DelayedProgress from={before.progress} to={leveledUp ? 1 : after.progress} />
+      </Surface>
+
+      <div className="mt-auto grid gap-3 py-6">
+        <Button size="lg" variant="leaf" onClick={() => leave("/")}>
+          Voltar ao início
+        </Button>
+        <Button variant="secondary" onClick={() => leave("/agua")}>
+          Ver o captador
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
+
+function DelayedProgress({ from, to }: { from: number; to: number }) {
+  const [value, setValue] = useState(from);
+  useEffect(() => {
+    const id = window.setTimeout(() => setValue(to), 600);
+    return () => window.clearTimeout(id);
+  }, [to]);
+  return <ProgressBar value={value} tone="sun" label="Progresso de XP" className="mt-3" />;
+}
+
+function Metric({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
+  return (
+    <div className="px-2">
+      <p className="eyebrow">{label}</p>
+      <p className={cn("mt-1 font-display text-sm font-semibold tabular-nums", highlight ? "text-leaf-300" : "text-mist-100")}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function FailurePanel({
+  progress,
+  collectorCode,
+  onClose,
+}: {
+  progress: DispenseProgress;
+  collectorCode: string;
+  onClose: () => void;
+}) {
+  const copy = FAILURE_COPY[progress.failure ?? "SENSOR_ERROR"];
+  return (
+    <motion.div className="flex flex-1 flex-col" {...panelMotion}>
+      <div className="flex flex-col items-center pt-12 text-center">
+        <span className="grid size-16 place-items-center rounded-full bg-alert-400/15 text-alert-400 ring-1 ring-inset ring-alert-400/30">
+          <CircleAlert className="size-8" />
+        </span>
+        <h2 className="mt-5 font-display text-2xl font-bold text-mist-50">{copy.title}</h2>
+        <p className="mt-2 max-w-xs text-sm leading-relaxed text-mist-300">{copy.message}</p>
+        {progress.deliveredLiters > 0.01 && (
+          <p className="mt-4 text-sm text-mist-400">
+            Medido antes do fechamento:{" "}
+            <span className="font-semibold text-mist-100">{formatLiters(progress.deliveredLiters)}</span>
+          </p>
+        )}
+        <p className="mt-4 text-xs text-mist-500">Nenhuma penalidade: você pode tentar outra missão.</p>
+      </div>
+      <div className="mt-8">
+        <StepList current={stepIndex(progress)} collectorCode={collectorCode} failed />
+      </div>
+      <div className="mt-auto py-6">
+        <Button size="lg" variant="secondary" className="w-full" onClick={onClose}>
+          Voltar às missões
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
+
+/** Pseudoaleatório determinístico: mantém a renderização pura. */
+function seeded(index: number, salt: number) {
+  const value = Math.sin(index * 12.9898 + salt * 78.233) * 43758.5453;
+  return value - Math.floor(value);
+}
+
+const CONFETTI_COLORS = ["var(--color-leaf-400)", "var(--color-aqua-300)", "var(--color-sun-400)", "var(--color-mist-50)"];
+
+function Confetti() {
+  const pieces = useMemo(
+    () =>
+      Array.from({ length: 22 }, (_, index) => ({
+        x: (seeded(index, 1) - 0.5) * 320,
+        peak: -60 - seeded(index, 2) * 120,
+        fall: 180 + seeded(index, 3) * 160,
+        rotate: (seeded(index, 4) - 0.5) * 540,
+        delay: seeded(index, 5) * 0.15,
+        color: CONFETTI_COLORS[index % CONFETTI_COLORS.length],
+      })),
+    [],
+  );
+
+  return (
+    <div aria-hidden className="pointer-events-none absolute inset-x-0 top-16 flex justify-center">
+      {pieces.map((piece, index) => (
+        <motion.span
+          key={index}
+          className="absolute size-2 rounded-[2px]"
+          style={{ backgroundColor: piece.color }}
+          initial={{ x: 0, y: 0, opacity: 0, rotate: 0, scale: 0.5 }}
+          animate={{ x: piece.x, y: [0, piece.peak, piece.fall], opacity: [0, 1, 0], rotate: piece.rotate, scale: 1 }}
+          transition={{ duration: 1.7, ease: "easeOut", delay: 0.25 + piece.delay }}
+        />
+      ))}
+    </div>
+  );
+}

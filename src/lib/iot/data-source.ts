@@ -16,6 +16,8 @@ import type {
 export interface CollectorDataSource {
   readonly origin: DataOrigin;
   subscribe(listener: () => void): () => void;
+  /** Códigos dos captadores disponíveis (referência estável enquanto a lista não mudar). */
+  getCollectorCodes(): readonly string[];
   getSnapshot(collectorCode: string): CollectorSnapshot | null;
   getProgress(commandId: string): DispenseProgress | null;
   /** Idempotente por `commandId`: reenviar o mesmo comando retorna o progresso existente. */

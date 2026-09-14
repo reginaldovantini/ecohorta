@@ -9,6 +9,8 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // O indicador flutuante cobre a navegação inferior no teste pelo celular.
+  devIndicators: false,
   // Permite testar o servidor de desenvolvimento pelo celular na mesma rede Wi-Fi
   // (somente faixas de IP privadas).
   allowedDevOrigins: ["192.168.*.*", "10.*.*.*", "172.*.*.*"],
