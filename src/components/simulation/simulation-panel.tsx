@@ -1,0 +1,205 @@
+"use client";
+
+import { Droplets, Gauge, RotateCcw, Timer, TriangleAlert } from "lucide-react";
+import { useCallback, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
+import { Button } from "@/components/ui/button";
+import { TIME_SCALES, type SimulationControls } from "@/lib/iot/simulation-source";
+import { cn } from "@/lib/utils/cn";
+import { formatDecimal } from "@/lib/utils/format";
+import { SimulationPanelContext } from "./simulation-panel-context";
+
+const LEVEL_PRESETS = [0.1, 0.5, 0.9, 0.97, 1] as const;
+const INFLOW_PRESETS = [0.6, 1.2, 3] as const;
+
+export function SimulationPanelProvider({ controls, children }: { controls: SimulationControls; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const api = useMemo(() => ({ open: () => setOpen(true) }), []);
+  const close = useCallback(() => setOpen(false), []);
+
+  return (
+    <SimulationPanelContext value={api}>
+      {children}
+      <BottomSheet
+        open={open}
+        onClose={close}
+        title="Painel da simulação"
+        description="O dispositivo virtual emula o captador e o firmware do ESP32 para demonstrar e testar estados. Nada aqui é dado real."
+      >
+        <SimulationPanelBody controls={controls} />
+      </BottomSheet>
+    </SimulationPanelContext>
+  );
+}
+
+function SimulationPanelBody({ controls }: { controls: SimulationControls }) {
+  const settings = useSyncExternalStore(controls.subscribe, controls.getSettings, controls.getSettings);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const setLevel = (ratio: number) => {
+    setNotice(controls.setLevel(ratio) ? null : "Aguarde a liberação atual terminar para mudar o nível.");
+  };
+
+  return (
+    <div className="space-y-6">
+      <PanelGroup
+        icon={<Timer />}
+        title="Velocidade do tempo"
+        hint="O condensado real acumula devagar (cerca de 1 L/h). Acelere para demonstrar."
+      >
+        <Segmented
+          label="Velocidade do tempo"
+          options={TIME_SCALES.map((scale) => ({ value: scale, label: scale === 1 ? "1× real" : `${scale}×` }))}
+          value={settings.timeScale}
+          onChange={(timeScale) => controls.update({ timeScale })}
+        />
+      </PanelGroup>
+
+      <PanelGroup icon={<Droplets />} title="Ar-condicionado">
+        <SwitchRow
+          label="Produzindo condensado"
+          checked={settings.inflowEnabled}
+          onChange={(inflowEnabled) => controls.update({ inflowEnabled })}
+        />
+        <Segmented
+          label="Vazão de condensado"
+          options={INFLOW_PRESETS.map((rate) => ({ value: rate, label: `${formatDecimal(rate, 1)} L/h` }))}
+          value={settings.inflowLitersPerHour}
+          disabled={!settings.inflowEnabled}
+          onChange={(inflowLitersPerHour) => controls.update({ inflowLitersPerHour })}
+        />
+      </PanelGroup>
+
+      <PanelGroup icon={<Gauge />} title="Definir nível do captador">
+        <div className="grid grid-cols-5 gap-2">
+          {LEVEL_PRESETS.map((ratio) => (
+            <Button key={ratio} variant="secondary" size="sm" className="px-0" onClick={() => setLevel(ratio)}>
+              {Math.round(ratio * 100)}%
+            </Button>
+          ))}
+        </div>
+        {notice && <p className="text-xs text-ember-400">{notice}</p>}
+      </PanelGroup>
+
+      <PanelGroup icon={<TriangleAlert />} title="Falhas para testar">
+        <SwitchRow
+          label="Válvula sem vazão"
+          description="Válvula inadequada para baixa pressão: abre, mas a água não sai (NO_FLOW)."
+          checked={settings.faultNoFlow}
+          onChange={(faultNoFlow) => controls.update({ faultNoFlow })}
+        />
+        <SwitchRow
+          label="Captador offline"
+          description="O dispositivo para de enviar leituras e não recebe comandos."
+          checked={settings.offline}
+          onChange={(offline) => controls.update({ offline })}
+        />
+      </PanelGroup>
+
+      <Button
+        variant="ghost"
+        className="w-full"
+        icon={<RotateCcw className="size-4" />}
+        onClick={() => {
+          controls.reset();
+          setNotice(null);
+        }}
+      >
+        Reiniciar simulação
+      </Button>
+    </div>
+  );
+}
+
+function PanelGroup({ icon, title, hint, children }: { icon: ReactNode; title: string; hint?: string; children: ReactNode }) {
+  return (
+    <section className="space-y-2.5">
+      <h3 className="eyebrow flex items-center gap-2 text-sim-300 [&_svg]:size-3.5">
+        {icon}
+        {title}
+      </h3>
+      {hint && <p className="text-xs text-mist-400">{hint}</p>}
+      {children}
+    </section>
+  );
+}
+
+function Segmented<T extends number>({
+  label,
+  options,
+  value,
+  disabled = false,
+  onChange,
+}: {
+  label: string;
+  options: { value: T; label: string }[];
+  value: number;
+  disabled?: boolean;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className={cn("grid grid-flow-col auto-cols-fr gap-1 rounded-2xl bg-white/[0.04] p-1", disabled && "opacity-45")}
+    >
+      {options.map((option) => {
+        const selected = option.value === value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            disabled={disabled}
+            onClick={() => onChange(option.value)}
+            className={cn(
+              "h-10 rounded-xl text-sm font-semibold transition-colors",
+              selected ? "bg-sim-400/20 text-sim-300 ring-1 ring-inset ring-sim-400/40" : "text-mist-300",
+            )}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function SwitchRow({
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className="flex w-full items-center gap-3 rounded-2xl bg-white/[0.04] p-3 text-left"
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-mist-50">{label}</span>
+        {description && <span className="mt-0.5 block text-xs leading-snug text-mist-400">{description}</span>}
+      </span>
+      <span
+        aria-hidden
+        className={cn("relative h-7 w-12 shrink-0 rounded-full transition-colors", checked ? "bg-sim-500" : "bg-white/15")}
+      >
+        <span
+          className={cn(
+            "absolute left-0 top-1 size-5 rounded-full bg-white shadow transition-transform",
+            checked ? "translate-x-6" : "translate-x-1",
+          )}
+        />
+      </span>
+    </button>
+  );
+}

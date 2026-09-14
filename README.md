@@ -17,10 +17,10 @@ A água de condensação dos aparelhos de ar-condicionado costuma ser descartada
 |---|---|
 | Setup (Next.js, TypeScript, Tailwind, testes) | ✅ |
 | Documentação e contrato de dados | ✅ |
-| Design System | 🚧 Dias 1–3 |
-| Experiência mobile (Home, missões, execução) | 🚧 Dias 1–3 |
-| Captador animado | 🚧 Dias 1–3 |
-| Dispositivo virtual (SIMULAÇÃO) | 🚧 Dias 1–3 |
+| Design System | ✅ |
+| Experiência mobile (Home, missões, execução) | ✅ |
+| Captador animado | ✅ |
+| Dispositivo virtual (SIMULAÇÃO) | ✅ |
 | Supabase (schema, RLS, login) | ⏳ Dias 6–7 |
 | API IoT + ESP32 | ⏳ Dias 8–13 |
 
@@ -51,6 +51,25 @@ Abra http://localhost:3000.
 2. Abra esse endereço no navegador do celular.
 3. Se o celular não conectar, libere o Node.js no Firewall do Windows para **redes privadas**.
 
+### Modo simulação (sem hardware)
+
+Enquanto o ESP32 não está conectado, os dados vêm de um **dispositivo virtual** que emula o captador e o firmware.
+
+- **O que ele emula:**
+  - entrada de condensado e saída por gravidade (vazão ∝ √altura);
+  - ruído do sensor com filtro de mediana;
+  - fechamento da válvula pelo volume **medido**;
+  - falha por falta de vazão (`NO_FLOW`), timeout e comandos idempotentes;
+  - transbordamento com descarte estimado.
+- **Painel da simulação:** toque no selo **SIMULAÇÃO**. Ele controla:
+  - velocidade do tempo (1× real, 30×, 120×);
+  - ar-condicionado e vazão de condensado;
+  - nível do captador (10–100%);
+  - falhas: válvula sem vazão e captador offline.
+- **Dica para demonstrar:** use **30×**. Uma liberação de 3 L leva cerca de 2 min simulados, ou 4 s na tela.
+- **Estado salvo:** a simulação e o perfil de demonstração ficam salvos no navegador. Para recomeçar, use "Reiniciar simulação" no painel e "Reiniciar demonstração" no Perfil.
+- **Parâmetros:** estão em `src/lib/iot/simulation-source.ts` (capacidade, altura útil, vazão) e devem ser trocados pelos valores **medidos** no captador real.
+
 ## Scripts
 
 | Comando | O que faz |
@@ -61,6 +80,8 @@ Abra http://localhost:3000.
 | `npm run lint` | ESLint |
 | `npm run test` | Testes unitários (Vitest) |
 | `npm run check` | Tudo acima, na ordem. Rode antes de cada commit |
+| `npm run screenshot -- /rota` | Captura telas em 360/390/412 px (requer `npm run dev` e Edge ou Chrome) |
+| `npm run icons` | Gera os ícones PNG do PWA a partir de `src/app/icon.svg` |
 
 ## Variáveis de ambiente
 

@@ -25,6 +25,13 @@ ESP32-C3 ──HTTPS──► /api/iot/* (Next.js na Vercel) ──► Supabase 
 Toda tela lê o captador através de `CollectorDataSource` (`src/lib/iot/data-source.ts`).
 
 - **Hoje:** o dispositivo virtual implementa essa interface e roda no navegador. Toda a interface exibe **SIMULAÇÃO**.
+  - `src/lib/iot/virtual-device.ts` é lógica pura e testada. Emula:
+    - a física: condensado e saída por gravidade (Torricelli);
+    - o firmware: ruído do sensor, faixa física, mediana, calibração, fechamento pelo volume medido com antecipação da latência, `NO_FLOW`, `TIMEOUT`, dispositivo ocupado e offline;
+    - a estimativa de descarte no dreno.
+  - `src/lib/iot/simulation-source.ts` cuida do relógio (velocidade 1×/30×/120×), da persistência local e do painel de controle.
+  - A física usa tempo simulado. Latência de rede e estabilização da superfície usam tempo real, para que cada etapa seja visível.
+  - O mesmo dispositivo virtual poderá rodar em Node.js contra a API real (Dias 8–9), testando o backend antes do ESP32.
 - **Dias 6–9:** uma implementação com o Supabase Realtime lê os dados enviados pelo ESP32. As telas não mudam.
 - `DataOrigin` (`"device" | "simulation"`) acompanha cada leitura e cada comando. Um dado simulado nunca é exibido sem indicação.
 

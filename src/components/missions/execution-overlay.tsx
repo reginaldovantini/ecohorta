@@ -80,7 +80,7 @@ export function ExecutionOverlay({ mission, collectorCode, progress, xpBefore, o
         <header className="flex items-center gap-3 pt-5">
           <MissionIcon icon={mission.icon} size="sm" />
           <div className="min-w-0 flex-1">
-            <p className="eyebrow">{terminal ? "Missão finalizada" : "Missão em execução"}</p>
+            <p className="eyebrow truncate">{terminal ? "Finalizada" : "Em execução"}</p>
             <p className="truncate font-display font-semibold text-mist-50">{mission.title}</p>
           </div>
           {progress?.origin === "simulation" && <SimulationBadge />}
