@@ -20,7 +20,11 @@ A água de condensação dos aparelhos de ar-condicionado costuma ser descartada
 | Design System | ✅ |
 | Experiência mobile (Home, missões, execução) | ✅ |
 | Captador animado | ✅ |
-| Dispositivo virtual (SIMULAÇÃO) | ✅ |
+| Dispositivo virtual (SIMULAÇÃO) pela API IoT | ✅ |
+| Perfis de usuário e cadastro inicial (dados de exibição) | ✅ |
+| Missões com ilustrações, Missão de Resgate e cancelamento | ✅ |
+| XP, conquistas e ranking com impacto coletivo | ✅ |
+| PWA (manifest, ícones, service worker) | ✅ |
 | Supabase (schema, RLS, login) | ⏳ Dias 6–7 |
 | API IoT + ESP32 | ⏳ Dias 8–13 |
 

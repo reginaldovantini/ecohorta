@@ -162,9 +162,20 @@ export function createCollectorService({
     return record.simulation ? { settings: record.simulation.settings, action: record.simulation.pendingAction } : null;
   }
 
+  /**
+   * Ações da simulação só afetam a contabilidade quando o dispositivo confirma que as aplicou:
+   * antes disso as leituras ainda são do nível antigo e o salto contaminaria a tendência.
+   */
   function acknowledgeSimulation(record: CollectorRecord, appliedId: number | null | undefined) {
     const pending = record.simulation?.pendingAction;
-    if (pending && (appliedId ?? 0) >= pending.id) record.simulation!.pendingAction = null;
+    if (!pending || (appliedId ?? 0) < pending.id) return;
+    record.simulation!.pendingAction = null;
+    if (pending.type === "reset") {
+      record.accounting = createAccountingState();
+    } else {
+      // Ajuste manual de nível: a tendência recomeça, os totais já medidos são mantidos.
+      record.accounting.samples = [];
+    }
   }
 
   function snapshot(record: CollectorRecord): CollectorSnapshot {
@@ -347,8 +358,6 @@ export function createCollectorService({
       record.simulation.settings = { ...record.simulation.settings, ...request.settings };
       if (request.action) {
         record.simulation.pendingAction = { id: record.simulation.nextActionId++, ...request.action };
-        // Mudança manual de nível ou reinício: a contabilidade recomeça do novo estado.
-        record.accounting = createAccountingState();
       }
       return { ok: true, value: record.simulation.settings };
     },

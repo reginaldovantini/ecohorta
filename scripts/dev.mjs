@@ -21,7 +21,10 @@ function stop(code) {
 }
 
 function run(name, args) {
-  const child = spawn("npx", args, { env, stdio: "inherit", shell: isWindows });
+  // No Windows o npx precisa do shell; o comando vai como texto único (argumentos fixos, sem entrada do usuário).
+  const child = isWindows
+    ? spawn(`npx ${args.join(" ")}`, { env, stdio: "inherit", shell: true })
+    : spawn("npx", args, { env, stdio: "inherit" });
   child.on("exit", (code) => {
     if (!stopping) {
       console.log(`[dev] ${name} encerrou (código ${code ?? 0}).`);

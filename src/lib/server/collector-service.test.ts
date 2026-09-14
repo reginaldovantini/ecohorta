@@ -187,6 +187,45 @@ describe("simulação", () => {
     expect(acknowledged.simulation?.action).toBeNull();
   });
 
+  it("ajuste de nível confirmado recomeça a tendência sem apagar o reúso medido", () => {
+    service.ingestTelemetry("EC-001", telemetry({ volume_liters: 8 }));
+    service.requestDispense("EC-001", dispenseRequest(IDS.a, 2));
+    service.ingestTelemetry(
+      "EC-001",
+      telemetry({
+        volume_liters: 6,
+        command_report: {
+          command_id: IDS.a,
+          status: "COMPLETED",
+          delivered_liters: 2,
+          start_volume_liters: 8,
+          end_volume_liters: 6,
+          failure: null,
+          started_uptime_ms: 3000,
+          finished_uptime_ms: 60_000,
+        },
+      }),
+    );
+
+    service.updateSimulation("EC-001", { action: { type: "set_level", ratio: 0.95 } });
+    // Ainda no nível antigo (dispositivo não aplicou): nada muda.
+    service.ingestTelemetry("EC-001", telemetry({ volume_liters: 6 }));
+    // Dispositivo confirma e já envia o novo nível.
+    service.ingestTelemetry("EC-001", telemetry({ volume_liters: 11.4, applied_simulation_action_id: 1 }));
+    for (let i = 0; i < 5; i++) service.ingestTelemetry("EC-001", telemetry({ volume_liters: 11.4 }));
+
+    const snapshot = service.getSnapshot("EC-001")!;
+    expect(snapshot.totals.reusedLiters).toBe(2);
+    expect(snapshot.telemetry.trend).toBe("stable");
+  });
+
+  it("reiniciar a simulação zera o balanço após a confirmação", () => {
+    service.ingestTelemetry("EC-001", telemetry({ volume_liters: 8 }));
+    service.updateSimulation("EC-001", { action: { type: "reset" } });
+    service.ingestTelemetry("EC-001", telemetry({ volume_liters: 6.6, applied_simulation_action_id: 1 }));
+    expect(service.getSnapshot("EC-001")!.totals.reusedLiters).toBe(0);
+  });
+
   it("recusa comandos de simulação para captadores reais", () => {
     const real = createCollectorService({
       seeds: [{ info: SIMULATED_COLLECTOR, deviceId: "ESP32-001", isSimulated: false, tokenEnvVar: "X" }],
