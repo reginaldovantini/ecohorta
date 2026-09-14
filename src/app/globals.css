@@ -125,6 +125,57 @@
   }
 }
 
+/* ---------- Captador animado (CollectorTank) ---------- */
+
+@keyframes tank-wave {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-68px);
+  }
+}
+
+@keyframes tank-bubble {
+  0% {
+    transform: translateY(0);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateY(-46px);
+    opacity: 0;
+  }
+}
+
+@keyframes tank-drip {
+  0% {
+    transform: translateY(0) scaleY(0.6);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(172px) scaleY(1.15);
+    opacity: 1;
+  }
+}
+
+@keyframes flow-dash {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+@keyframes glow-pulse {
+  50% {
+    opacity: 0.12;
+  }
+}
+
 @utility pt-safe {
   padding-top: env(safe-area-inset-top);
 }

@@ -1,9 +1,11 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { Check, CircleAlert, Droplets, Gauge, LoaderCircle, Send, Sparkles, X } from "lucide-react";
+import { Check, CircleAlert, Droplets, Gauge, LoaderCircle, MapPin, Send, Sparkles, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { useCollectorSnapshot } from "@/components/collector/collector-source";
+import { CollectorTank, tankPropsFromSnapshot } from "@/components/collector/collector-tank";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { Button } from "@/components/ui/button";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -124,25 +126,31 @@ function RunningPanel({
   collectorCode: string;
   progress: DispenseProgress | null;
 }) {
+  const snapshot = useCollectorSnapshot(collectorCode);
   const target = progress?.targetLiters ?? mission.liters ?? 0;
   const delivered = progress?.deliveredLiters ?? 0;
   const current = stepIndex(progress);
 
   return (
     <motion.div className="flex flex-1 flex-col" {...panelMotion}>
-      <div className="flex flex-1 flex-col items-center justify-center py-8 text-center" data-testid="execution-stage">
-        <p className="eyebrow text-aqua-300">{STEPS[current]?.title}</p>
-        <p className="mt-3 font-display text-6xl font-bold tracking-tight text-mist-50">
-          <AnimatedNumber value={delivered} format={(value) => formatDecimal(Math.max(0, value))} />
-          <span className="ml-1 text-3xl text-aqua-300">L</span>
-        </p>
-        <p className="mt-2 text-sm text-mist-400">medidos pelo sensor, de {formatLiters(target, 1)}</p>
-        <ProgressBar
-          value={target > 0 ? delivered / target : 0}
-          tone="aqua"
-          label="Volume liberado"
-          className="mt-6 w-full max-w-xs"
-        />
+      <div className="flex flex-1 items-center justify-center gap-4 py-8" data-testid="execution-stage">
+        {snapshot && (
+          <div className="-ml-2 h-64 shrink-0">
+            <CollectorTank {...tankPropsFromSnapshot(snapshot)} measuring={progress?.status === "MEASURING"} />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="eyebrow text-aqua-300">{STEPS[current]?.title}</p>
+          <p className="mt-2 font-display text-5xl font-bold tracking-tight text-mist-50">
+            <AnimatedNumber value={delivered} format={(value) => formatDecimal(Math.max(0, value))} />
+            <span className="ml-1 text-2xl text-aqua-300">L</span>
+          </p>
+          <p className="mt-1 text-sm text-mist-400">medidos pelo sensor, de {formatLiters(target, 1)}</p>
+          <ProgressBar value={target > 0 ? delivered / target : 0} tone="aqua" label="Volume liberado" className="mt-4" />
+          <p className="mt-4 flex items-center gap-1.5 text-xs text-mist-400">
+            <MapPin className="size-3.5" aria-hidden /> Destino: {mission.location}
+          </p>
+        </div>
       </div>
       <StepList current={current} collectorCode={collectorCode} failed={false} />
       <p className="py-5 text-center text-xs text-mist-500">

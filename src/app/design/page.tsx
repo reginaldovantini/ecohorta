@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Droplets, Leaf, MapPin, Sparkles, Timer } from "lucide-react";
+import { CollectorTank, type CollectorTankProps } from "@/components/collector/collector-tank";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -21,6 +22,16 @@ const palette = [
 ];
 
 const surfaceTones: SurfaceTone[] = ["default", "raised", "aqua", "leaf", "ember", "alert", "sim"];
+
+const baseTank = { inflowActive: false, dispensing: false, overflowing: false } as const;
+const tankStates: { label: string; props: CollectorTankProps }[] = [
+  { label: "Baixo · acumulando", props: { ...baseTank, ratio: 0.22, urgency: "normal", inflowActive: true } },
+  { label: "Disponível", props: { ...baseTank, ratio: 0.62, urgency: "normal" } },
+  { label: "Liberando", props: { ...baseTank, ratio: 0.48, urgency: "normal", dispensing: true, measuring: true } },
+  { label: "Atenção", props: { ...baseTank, ratio: 0.9, urgency: "attention", inflowActive: true } },
+  { label: "Crítico", props: { ...baseTank, ratio: 0.97, urgency: "critical", inflowActive: true } },
+  { label: "Transbordando", props: { ...baseTank, ratio: 1, urgency: "critical", inflowActive: true, overflowing: true } },
+];
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -94,6 +105,19 @@ export default function DesignSystemPage() {
         <div className="flex flex-wrap gap-2">
           {DEVICE_STATUSES.map((status) => (
             <StatusPill key={status} status={status} />
+          ))}
+        </div>
+      </Section>
+
+      <Section title="Captador — estados visuais">
+        <div className="grid grid-cols-3 gap-3">
+          {tankStates.map((state) => (
+            <Surface key={state.label} className="flex flex-col items-center gap-2 px-2 py-4">
+              <div className="h-40">
+                <CollectorTank {...state.props} />
+              </div>
+              <p className="text-center text-xs font-semibold text-mist-300">{state.label}</p>
+            </Surface>
           ))}
         </div>
       </Section>

@@ -1,6 +1,6 @@
 "use client";
 
-import { CollectorHero } from "@/components/collector/collector-hero";
+import { CollectorLiveCard } from "@/components/collector/collector-live-card";
 import { usePrimaryCollectorCode, useCollectorSnapshot } from "@/components/collector/collector-source";
 import { WaterBalance } from "@/components/collector/water-balance";
 import { ScreenHeader } from "@/components/student/screen-header";
@@ -58,7 +58,7 @@ export function WaterScreen() {
         isSimulation={telemetry.origin === "simulation"}
       />
 
-      <CollectorHero snapshot={snapshot} />
+      <CollectorLiveCard snapshot={snapshot} />
 
       <section className="space-y-3">
         <h2 className="eyebrow">Telemetria</h2>

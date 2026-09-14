@@ -10,6 +10,7 @@ import { useNow } from "@/hooks/use-now";
 import { fillRatio, getLevelState, type LevelStateId } from "@/lib/collector/level-state";
 import type { CollectorSnapshot, CollectorTelemetry } from "@/lib/iot/types";
 import { formatDecimal, formatLiters, formatPercent, formatRelativeTime } from "@/lib/utils/format";
+import { CollectorTank, tankPropsFromSnapshot } from "./collector-tank";
 
 const STATE_TONE: Record<LevelStateId, ChipTone> = {
   low: "neutral",
@@ -75,12 +76,8 @@ export function CollectorHero({ snapshot, href }: CollectorHeroProps) {
       </div>
 
       <div className="mt-5 flex items-end gap-5">
-        {/* Fase 5: captador animado */}
-        <div data-slot="tank" className="relative h-40 w-20 shrink-0 overflow-hidden rounded-2xl bg-white/[0.05] ring-1 ring-inset ring-white/10">
-          <div
-            className="absolute inset-x-0 bottom-0 bg-linear-to-t from-aqua-600 to-aqua-300 transition-[height] duration-700"
-            style={{ height: `${ratio * 100}%` }}
-          />
+        <div className="-mb-3 -ml-2 h-44 shrink-0">
+          <CollectorTank {...tankPropsFromSnapshot(snapshot)} />
         </div>
         <div className="min-w-0 flex-1 pb-1">
           <p className="font-display text-[3.25rem] font-bold leading-none tracking-tight text-mist-50">
