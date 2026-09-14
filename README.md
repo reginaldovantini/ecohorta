@@ -1,36 +1,101 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 💧 EcoHorta Inteligente
 
-## Getting Started
+**Investigação e Automação no Reúso Hídrico Escolar**. Projeto para o **Samsung Solve for Tomorrow Brasil**.
 
-First, run the development server:
+A água de condensação dos aparelhos de ar-condicionado costuma ser descartada. A EcoHorta capta essa água, mede o volume com um sensor e a disponibiliza em **missões reais**. O estudante aceita uma missão, a válvula libera a água, o sensor confirma o volume e a ação vira XP, evidência e impacto mensurável.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```text
+ÁGUA REAL → SENSOR → ESP32 → SUPABASE → PLATAFORMA → MISSÃO → VÁLVULA
+→ MEDIÇÃO REAL → CONFIRMAÇÃO → XP → EVIDÊNCIA → TIMELINE → IMPACTO
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+> **Princípio de verdade:** o que acontece na tela acontece fisicamente. Enquanto o hardware não está conectado, todo dado vem de um dispositivo virtual e aparece identificado como **SIMULAÇÃO**.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Status
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Etapa | Situação |
+|---|---|
+| Setup (Next.js, TypeScript, Tailwind, testes) | ✅ |
+| Documentação e contrato de dados | ✅ |
+| Design System | 🚧 Dias 1–3 |
+| Experiência mobile (Home, missões, execução) | 🚧 Dias 1–3 |
+| Captador animado | 🚧 Dias 1–3 |
+| Dispositivo virtual (SIMULAÇÃO) | 🚧 Dias 1–3 |
+| Supabase (schema, RLS, login) | ⏳ Dias 6–7 |
+| API IoT + ESP32 | ⏳ Dias 8–13 |
 
-## Learn More
+## Stack
 
-To learn more about Next.js, take a look at the following resources:
+- **Frontend:** Next.js 16 (App Router, Turbopack), React 19, TypeScript strict, Tailwind CSS 4, Motion, Lucide
+- **Backend:** Route Handlers do Next.js e funções SQL no Supabase
+- **Dados:** Supabase (Postgres, Auth, Storage, Realtime), plano gratuito
+- **Hospedagem:** Vercel
+- **App:** PWA instalável (Android, iPhone e desktop)
+- **Hardware:** ESP32-C3 + VL53L1X + válvula NC de baixa pressão (a definir, veja [docs/HARDWARE.md](docs/HARDWARE.md))
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Como rodar
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Requisitos: Node.js 20.9+ (testado com 24) e npm.
 
-## Deploy on Vercel
+```bash
+npm install
+cp .env.example .env.local   # no Windows: copy .env.example .env.local
+npm run dev
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Abra http://localhost:3000.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Testar no celular (mesma rede Wi-Fi)
+
+1. Rode `npm run dev`. O terminal mostra o endereço **Network**, ex.: `http://192.168.x.x:3000`.
+2. Abra esse endereço no navegador do celular.
+3. Se o celular não conectar, libere o Node.js no Firewall do Windows para **redes privadas**.
+
+## Scripts
+
+| Comando | O que faz |
+|---|---|
+| `npm run dev` | Servidor de desenvolvimento |
+| `npm run build` | Build de produção |
+| `npm run typecheck` | Gera os tipos de rotas e verifica o TypeScript |
+| `npm run lint` | ESLint |
+| `npm run test` | Testes unitários (Vitest) |
+| `npm run check` | Tudo acima, na ordem. Rode antes de cada commit |
+
+## Variáveis de ambiente
+
+Todas estão documentadas em [.env.example](.env.example), organizadas pela etapa em que se tornam necessárias. **Nunca coloque credenciais no código nem versione o `.env.local`.**
+
+| Variável | Onde é usada | Etapa |
+|---|---|---|
+| `NEXT_PUBLIC_APP_URL` | QR Codes e links | Já |
+| `NEXT_PUBLIC_DATA_SOURCE` | `simulation` ou `supabase` | Já |
+| `NEXT_PUBLIC_SUPABASE_URL` | Cliente Supabase | Dias 6–7 |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Cliente Supabase (protegido pelo RLS) | Dias 6–7 |
+| `SUPABASE_SECRET_KEY` | **Somente servidor** | Dias 6–7 |
+| `IOT_TOKEN_PEPPER` | Hash dos tokens dos dispositivos | Dias 8–9 |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Web Push | Dia 18 |
+
+## Estrutura
+
+```text
+src/
+├── app/            rotas (App Router)
+├── components/     ui/ · collector/ · missions/ · gamification/
+├── lib/            iot/ · collector/ · missions/ · gamification/
+└── hooks/
+docs/               ARCHITECTURE.md · HARDWARE.md
+```
+
+Veja os detalhes em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Documentação
+
+- [Arquitetura](docs/ARCHITECTURE.md): fluxo IoT, estados, contrato da API, schema e acesso dos estudantes sem e-mail
+- [Hardware](docs/HARDWARE.md): **risco da válvula em sistema por gravidade**, VL53L1X, calibração e segurança do firmware
+
+## Convenções
+
+- Código em inglês e interface em português (pt-BR)
+- Commits no padrão `feat:`, `fix:`, `docs:`, `chore:`
+- Dados simulados sempre identificados na interface
