@@ -1,26 +1,155 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* =====================================================================
+   EcoHorta Design System — tokens
+   Conceito: "laboratório no fundo da lagoa"
+   tecnologia + natureza + ciência + jogo
+   Documentação: docs/DESIGN-SYSTEM.md
+   ===================================================================== */
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@theme {
+  /* Superfícies — azul-petróleo profundo */
+  --color-abyss-950: #030b10;
+  --color-abyss-900: #06131a;
+  --color-abyss-850: #091a22;
+  --color-abyss-800: #0c212b;
+  --color-abyss-700: #122d39;
+  --color-abyss-600: #1b3b49;
+  --color-abyss-500: #2a5263;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  /* Texto */
+  --color-mist-50: #f2fafc;
+  --color-mist-100: #e3f1f5;
+  --color-mist-300: #b3cbd4;
+  --color-mist-400: #8aa7b2;
+  --color-mist-500: #64818c;
+
+  /* Água — cor primária */
+  --color-aqua-200: #b5ecfb;
+  --color-aqua-300: #7fdcf7;
+  --color-aqua-400: #2ec5f0;
+  --color-aqua-500: #14a7da;
+  --color-aqua-600: #0a82bd;
+  --color-aqua-700: #07608f;
+  --color-aqua-800: #06456a;
+
+  /* Vida — reúso, plantas, sucesso */
+  --color-leaf-300: #a3f2c0;
+  --color-leaf-400: #5be38f;
+  --color-leaf-500: #2fc46f;
+  --color-leaf-600: #1f9955;
+
+  /* Sol — XP e conquistas */
+  --color-sun-300: #fbe08f;
+  --color-sun-400: #f5c542;
+  --color-sun-500: #dfa716;
+
+  /* Estados do captador */
+  --color-ember-400: #ff9f43; /* atenção */
+  --color-ember-500: #f08419;
+  --color-alert-400: #ff5a69; /* crítico */
+  --color-alert-500: #e8303f;
+
+  /* Simulação — cor exclusiva, nunca usada para dado real */
+  --color-sim-300: #cbbdff;
+  --color-sim-400: #a78bfa;
+  --color-sim-500: #8b6cf2;
+
+  --radius-card: 1.5rem;
+  --radius-control: 1rem;
+
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-pulse-ring: pulse-ring 1.8s var(--ease-soft) infinite;
+
+  @keyframes shimmer {
+    from {
+      background-position: 200% 0;
+    }
+    to {
+      background-position: -200% 0;
+    }
+  }
+
+  @keyframes pulse-ring {
+    0% {
+      transform: scale(1);
+      opacity: 0.55;
+    }
+    100% {
+      transform: scale(2.6);
+      opacity: 0;
+    }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-space-grotesk), var(--font-inter), ui-sans-serif, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-tap-highlight-color: transparent;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-abyss-900);
+    color: var(--color-mist-100);
+  }
+
+  /* Luz ambiente fixa: pintada uma vez, não repinta ao rolar. */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(120% 55% at 50% -12%, rgb(20 167 218 / 0.18), transparent 62%),
+      radial-gradient(80% 45% at 110% 105%, rgb(47 196 111 / 0.09), transparent 60%),
+      radial-gradient(60% 40% at -20% 60%, rgb(10 130 189 / 0.08), transparent 60%);
+  }
+
+  ::selection {
+    background: rgb(46 197 240 / 0.35);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-aqua-400);
+    outline-offset: 2px;
+  }
+}
+
+@utility pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Rótulo pequeno em caixa alta (sobretítulos, legendas de métricas) */
+@utility eyebrow {
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-mist-400);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
