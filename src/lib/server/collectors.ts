@@ -1,9 +1,6 @@
 import { SIMULATED_COLLECTOR, SIMULATED_DEVICE_ID } from "@/lib/iot/simulation-config";
 import { createCollectorService, type CollectorSeed, type CollectorService } from "./collector-service";
 
-/** Escola do MVP. A estrutura (school_id em todas as entidades) já permite várias escolas. */
-export const SCHOOL = { id: "school-clarinda", name: "EE Prof.ª Clarinda Mendes de Aquino" } as const;
-
 /**
  * Captadores cadastrados. Nos Dias 6–7 esta lista vem das tabelas collectors/devices.
  * O EC-001 começa como SIMULADO; quando o ESP32 chegar, entra um registro com

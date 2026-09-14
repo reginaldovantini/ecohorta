@@ -34,14 +34,16 @@ describe("contabilidade hídrica", () => {
     expect(getTrend(stable.state, false).trend).toBe("stable");
   });
 
-  it("calcula o captado pelo balanço de massa", () => {
+  it("calcula o captado pelo balanço de massa, incluindo a água presente no início", () => {
     const { state, volume } = feed(undefined, { durationMs: 60 * 60_000, stepMs: 5_000, startLiters: 4, rateLph: 2 });
-    expect(getTotals(state, volume).capturedLiters).toBeCloseTo(2, 2);
+    expect(getTotals(state, volume).capturedLiters).toBeCloseTo(6, 2);
 
-    registerReuse(state, 1.5);
-    const afterReuse = getTotals(state, volume - 1.5);
-    expect(afterReuse.capturedLiters).toBeCloseTo(2, 2);
-    expect(afterReuse.reusedLiters).toBe(1.5);
+    registerReuse(state, 5);
+    const afterReuse = getTotals(state, volume - 5);
+    expect(afterReuse.capturedLiters).toBeCloseTo(6, 2);
+    expect(afterReuse.reusedLiters).toBe(5);
+    // Aproveitamento nunca ultrapassa 100%, mesmo reutilizando o estoque inicial.
+    expect(afterReuse.reusedLiters / afterReuse.capturedLiters).toBeLessThanOrEqual(1);
   });
 
   it("estima o descarte no dreno com a taxa aprendida antes do limite", () => {

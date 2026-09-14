@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { Droplets, House, Target, UserRound } from "lucide-react";
+import { Droplets, House, Target, Trophy, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
@@ -10,6 +10,7 @@ const TABS = [
   { href: "/", label: "Início", icon: House },
   { href: "/agua", label: "Água", icon: Droplets },
   { href: "/missoes", label: "Missões", icon: Target },
+  { href: "/ranking", label: "Ranking", icon: Trophy },
   { href: "/perfil", label: "Perfil", icon: UserRound },
 ] as const;
 

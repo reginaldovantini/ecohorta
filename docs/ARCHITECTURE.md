@@ -134,12 +134,27 @@ AVAILABLE → ACCEPTED → QUEUED → EXECUTING → MEASURING → COMPLETED
 - **Taxa de aproveitamento** = reutilizado ÷ captado × 100.
 - **Descartado:** é sempre **estimado**. O VL53L1X não enxerga a água que sai pelo dreno. A estimativa usa a taxa de acúmulo medida antes do limite, multiplicada pelo tempo em nível máximo.
 
-## 6. Acesso dos estudantes (proposta — implementação nos Dias 6–7)
+## 6. Usuários e privacidade
 
-Objetivo: **nenhum e-mail e o mínimo de dados pessoais** (LGPD/ECA).
+Participam **estudantes, professores e funcionários** (`student`, `teacher`, `staff`). O perfil `admin` gerencia a plataforma.
+
+| Camada | Conteúdo | Tabela | Quem vê |
+|---|---|---|---|
+| **Dados de exibição** | Apelido, avatar (emblema ilustrado), perfil, turma ou função/setor | `profiles` | Comunidade da escola |
+| **Dados cadastrais** | Nome, sobrenome, data de nascimento | `person_records` | O próprio usuário e professores/admin da escola |
+
+- **Idade:** nunca é armazenada. É calculada a partir da data de nascimento por `ageOn()` (`src/lib/users/age.ts`) e pela view `participant_age_bands`, que agrupa por faixa etária sem expor datas.
+- **Timeline e ranking:** usam só o apelido.
+- **Consentimento do responsável (LGPD art. 14):** `guardian_consents` registra quem registrou, quando e como, sem guardar dados do responsável.
+- **Schema:** o rascunho está em `supabase/migrations/20260914000000_identity.sql`, ainda não aplicado.
+- **Hoje, sem login:** o cadastro inicial (`/boas-vindas`) guarda no aparelho **apenas dados de exibição**.
+
+### Acesso dos estudantes (Dias 6–7)
+
+Objetivo: **nenhum e-mail pessoal**.
 
 1. O professor cria a turma. O sistema gera, para cada estudante, um **código de acesso** (ex.: `7A-K3QX`) e um **PIN**, entregues em cartão impresso com QR.
-2. O perfil guarda apenas o **nome de exibição** definido pelo professor (primeiro nome e inicial, ou apelido) e a turma. Não guarda e-mail, data de nascimento nem documentos.
+2. A escola registra os dados cadastrais. O estudante escolhe apelido e avatar.
 3. **Parte técnica:**
    - O servidor cria o usuário no Supabase Auth com um identificador sintético não roteável (`<uuid>@alunos.ecohorta.invalid`, pois o domínio `.invalid` é reservado pela RFC 2606).
    - O estudante digita só o código e o PIN.
@@ -155,7 +170,7 @@ Todas as tabelas usam UUID, `created_at`/`updated_at` e `school_id` para permiti
 
 | Grupo | Tabelas |
 |---|---|
-| Organização | `schools`, `classes`, `profiles` (papel: student, teacher ou admin) |
+| Organização | `schools`, `school_classes` (nível de ensino, série, turma), `profiles` (exibição; papel student, teacher, staff ou admin), `person_records` (cadastro protegido), `guardian_consents` |
 | Hardware | `collectors`, `devices` (hash do token, `is_simulated`), `sensors`, `calibrations`, `calibration_points` |
 | Dados | `telemetry` (sensor_id, reading_type, value, unit, measured_at), `collector_state`, `water_events` |
 | Missões | `missions`, `mission_executions`, `device_commands` |

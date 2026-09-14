@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { displayIdentitySchema, type DisplayIdentity } from "@/lib/users/types";
 
 /**
  * Perfil de DEMONSTRAÇÃO, salvo apenas neste navegador.
- * Enquanto não há login (Dias 6–7), registra XP e ações das missões simuladas.
- * Depois, XP e histórico passam a vir do banco (xp_transactions / mission_executions).
+ * Guarda somente DADOS DE EXIBIÇÃO (apelido, avatar, perfil, turma/função),
+ * XP e o histórico das missões. Dados cadastrais nunca ficam no aparelho.
+ * Com o login (Dias 6–7), XP e histórico passam a vir do banco.
  */
 
 const executionRecordSchema = z.object({
@@ -21,6 +23,7 @@ const executionRecordSchema = z.object({
 });
 
 const profileSchema = z.object({
+  identity: displayIdentitySchema.nullable().default(null),
   xp: z.number().int().nonnegative(),
   history: z.array(executionRecordSchema),
 });
@@ -30,7 +33,7 @@ export type DemoProfile = z.infer<typeof profileSchema>;
 
 const STORAGE_KEY = "ecohorta:demo-profile:v1";
 const MAX_HISTORY = 100;
-const EMPTY_PROFILE: DemoProfile = { xp: 0, history: [] };
+const EMPTY_PROFILE: DemoProfile = { identity: null, xp: 0, history: [] };
 
 let state: DemoProfile = EMPTY_PROFILE;
 let hydrated = false;
@@ -74,16 +77,26 @@ export const demoProfileStore = {
   getServerSnapshot(): DemoProfile {
     return EMPTY_PROFILE;
   },
+  setIdentity(identity: DisplayIdentity) {
+    hydrate();
+    commit({ ...state, identity });
+  },
   /** Idempotente por `executionId`: a mesma execução nunca soma XP duas vezes. */
   record(entry: ExecutionRecord) {
     hydrate();
     if (state.history.some((record) => record.executionId === entry.executionId)) return;
     commit({
+      ...state,
       xp: state.xp + entry.xpAwarded,
       history: [entry, ...state.history].slice(0, MAX_HISTORY),
     });
   },
-  reset() {
+  /** Zera XP e histórico, mantendo o perfil. */
+  resetProgress() {
+    commit({ ...state, xp: 0, history: [] });
+  },
+  /** Remove tudo deste aparelho (troca de usuário). */
+  clear() {
     commit(EMPTY_PROFILE);
   },
 };

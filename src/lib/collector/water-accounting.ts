@@ -7,13 +7,16 @@ import type { WaterTotals, WaterTrend } from "@/lib/iot/types";
  * O relógio usado é o `uptime_ms` do próprio dispositivo (monotônico),
  * então as taxas continuam corretas mesmo com atraso de rede ou simulação acelerada.
  *
- * Balanço:  captado = Δ armazenado + reutilizado + descartado(estimado)
+ * Balanço:  captado = armazenado − base + reutilizado + descartado(estimado)
+ *           A base começa em 0: a água já presente no início da medição conta como
+ *           captada, então o aproveitamento (reutilizado ÷ captado) nunca passa de 100%.
  * Descarte: o sensor não vê o dreno. Estimamos com a taxa de acúmulo aprendida
  *           ANTES do limite × tempo no limite. Sempre exibido como estimativa.
  */
 
 export interface AccountingState {
-  baselineLiters: number | null;
+  /** Ajustada para baixo quando há saída não registrada (esvaziamento manual, vazamento). */
+  baselineLiters: number;
   reusedLiters: number;
   discardedEstimatedLiters: number;
   learnedInflowLitersPerHour: number;
@@ -47,7 +50,7 @@ const MS_PER_HOUR = 3_600_000;
 
 export function createAccountingState(): AccountingState {
   return {
-    baselineLiters: null,
+    baselineLiters: 0,
     reusedLiters: 0,
     discardedEstimatedLiters: 0,
     learnedInflowLitersPerHour: 0,
@@ -88,8 +91,6 @@ export function ingestReading(state: AccountingState, reading: Reading): Account
     state.samples = [];
     state.lastUptimeMs = null;
   }
-
-  if (state.baselineLiters === null) state.baselineLiters = volumeLiters;
 
   const gapMs = state.lastUptimeMs === null ? 0 : Math.min(uptimeMs - state.lastUptimeMs, MAX_ESTIMATE_GAP_MS);
 
@@ -147,7 +148,7 @@ export function getTrend(state: AccountingState, dispensing: boolean): { trend: 
 }
 
 export function getTotals(state: AccountingState, currentVolumeLiters: number): WaterTotals {
-  const stored = state.baselineLiters === null ? 0 : currentVolumeLiters - state.baselineLiters;
+  const stored = currentVolumeLiters - state.baselineLiters;
   return {
     capturedLiters: Math.max(0, stored + state.reusedLiters + state.discardedEstimatedLiters),
     reusedLiters: state.reusedLiters,

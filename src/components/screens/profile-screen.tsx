@@ -1,27 +1,33 @@
 "use client";
 
-import { CircleAlert, Droplets, History, RotateCcw, Sparkles, Target } from "lucide-react";
+import { CircleAlert, Droplets, History, RefreshCw, RotateCcw, Sparkles, Target } from "lucide-react";
 import Link from "next/link";
-import { LevelBadge } from "@/components/gamification/level-card";
+import { useRouter } from "next/navigation";
+import { LevelBadge } from "@/components/gamification/level-badge";
 import { ScreenHeader } from "@/components/student/screen-header";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Surface } from "@/components/ui/surface";
+import { Avatar } from "@/components/users/avatar";
 import { useDemoProfile } from "@/hooks/use-demo-profile";
 import { useNow } from "@/hooks/use-now";
 import { getLevelProgress, LEVELS } from "@/lib/gamification/levels";
 import { findMission } from "@/lib/missions/catalog";
 import { demoProfileStore, summarizeProfile } from "@/lib/student/demo-profile";
+import { DEFAULT_AVATAR_ID } from "@/lib/users/avatars";
+import { describeIdentity } from "@/lib/users/display";
 import { cn } from "@/lib/utils/cn";
 import { formatDecimal, formatLiters, formatRelativeTime } from "@/lib/utils/format";
 
 export function ProfileScreen() {
+  const router = useRouter();
   const profile = useDemoProfile();
   const now = useNow(30_000);
   const level = getLevelProgress(profile.xp);
   const summary = summarizeProfile(profile);
   const nextTitle = LEVELS[level.level]?.title;
+  const { identity } = profile;
 
   const stats = [
     { label: "Litros reutilizados", value: formatDecimal(summary.litersReused, 1), unit: " L", icon: Droplets, tone: "text-leaf-300" },
@@ -34,15 +40,21 @@ export function ProfileScreen() {
       <ScreenHeader
         eyebrow="Perfil de demonstração"
         title="Meu impacto"
-        subtitle="Salvo apenas neste aparelho até o login das turmas."
+        subtitle="Salvo apenas neste aparelho até o login oficial."
         isSimulation
       />
 
       <Surface tone="aqua" className="flex flex-col items-center px-5 py-6 text-center">
-        <LevelBadge level={level.level} size="lg" />
-        <p className="eyebrow mt-4 text-sun-300">Nível {String(level.level).padStart(2, "0")}</p>
-        <p className="font-display text-2xl font-bold text-mist-50">{level.title}</p>
-        <ProgressBar value={level.progress} tone="sun" label="Progresso de XP" className="mt-4 w-full" />
+        <div className="relative">
+          <Avatar avatarId={identity?.avatarId ?? DEFAULT_AVATAR_ID} size="lg" />
+          <LevelBadge level={level.level} size="sm" className="absolute -bottom-2 -right-3 ring-2 ring-abyss-800" />
+        </div>
+        <p className="mt-4 font-display text-2xl font-bold text-mist-50">{identity?.nickname ?? "Sem perfil"}</p>
+        {identity && <p className="mt-0.5 text-sm text-mist-300">{describeIdentity(identity)}</p>}
+        <p className="eyebrow mt-5 text-sun-300">
+          Nível {String(level.level).padStart(2, "0")} · {level.title}
+        </p>
+        <ProgressBar value={level.progress} tone="sun" label="Progresso de XP" className="mt-3 w-full" />
         <p className="mt-2 text-xs text-mist-400">
           {level.nextLevelXp !== null && nextTitle
             ? `${level.xp} / ${level.nextLevelXp} XP · próximo nível: ${nextTitle}`
@@ -92,7 +104,7 @@ export function ProfileScreen() {
                     <span
                       className={cn(
                         "grid size-10 shrink-0 place-items-center rounded-xl",
-                        completed ? "bg-leaf-400/15 text-leaf-300" : "bg-alert-400/15 text-alert-400",
+                        completed ? "bg-leaf-400/15 text-leaf-300" : "bg-white/[0.06] text-mist-400",
                       )}
                     >
                       {completed ? <Droplets className="size-5" /> : <CircleAlert className="size-5" />}
@@ -116,16 +128,23 @@ export function ProfileScreen() {
         )}
       </section>
 
-      {profile.history.length > 0 && (
+      <div className="grid gap-2">
+        {profile.history.length > 0 && (
+          <Button variant="ghost" icon={<RotateCcw className="size-4" />} onClick={() => demoProfileStore.resetProgress()}>
+            Zerar XP e histórico
+          </Button>
+        )}
         <Button
           variant="ghost"
-          className="w-full"
-          icon={<RotateCcw className="size-4" />}
-          onClick={() => demoProfileStore.reset()}
+          icon={<RefreshCw className="size-4" />}
+          onClick={() => {
+            demoProfileStore.clear();
+            router.replace("/boas-vindas");
+          }}
         >
-          Reiniciar demonstração
+          Trocar de perfil neste aparelho
         </Button>
-      )}
+      </div>
     </div>
   );
 }

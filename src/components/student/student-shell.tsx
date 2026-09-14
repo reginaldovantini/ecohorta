@@ -2,7 +2,10 @@
 
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import { WifiOff } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+import { useDemoProfile } from "@/hooks/use-demo-profile";
+import { useHydrated } from "@/hooks/use-hydrated";
 import { CollectorSourceProvider, useConnectionState } from "@/components/collector/collector-source";
 import { MissionRunnerProvider, useMissionBoard } from "@/components/missions/mission-runner";
 import { BottomNav } from "@/components/navigation/bottom-nav";
@@ -12,6 +15,17 @@ import { createApiSource } from "@/lib/iot/api-source";
 function Navigation() {
   const { availableCount } = useMissionBoard();
   return <BottomNav availableMissions={availableCount} />;
+}
+
+/** Sem perfil neste aparelho: leva ao cadastro inicial. */
+function OnboardingGuard() {
+  const router = useRouter();
+  const hydrated = useHydrated();
+  const { identity } = useDemoProfile();
+  useEffect(() => {
+    if (hydrated && identity === null) router.replace("/boas-vindas");
+  }, [hydrated, identity, router]);
+  return null;
 }
 
 function ConnectionBanner() {
@@ -51,6 +65,7 @@ export function StudentShell({ children }: { children: ReactNode }) {
       <CollectorSourceProvider source={source}>
         <SimulationPanelProvider>
           <MissionRunnerProvider>
+            <OnboardingGuard />
             <ConnectionBanner />
             <div className="mx-auto min-h-dvh max-w-md px-5 pb-32 pt-safe">{children}</div>
             <Navigation />
