@@ -8,21 +8,21 @@
    ===================================================================== */
 
 @theme {
-  /* Superfícies — azul-petróleo profundo */
-  --color-abyss-950: #030b10;
-  --color-abyss-900: #06131a;
-  --color-abyss-850: #091a22;
-  --color-abyss-800: #0c212b;
-  --color-abyss-700: #122d39;
-  --color-abyss-600: #1b3b49;
-  --color-abyss-500: #2a5263;
+  /* Superfícies — verde-petróleo profundo (água + vegetação) */
+  --color-abyss-950: #030f0d;
+  --color-abyss-900: #061613;
+  --color-abyss-850: #0a1e1a;
+  --color-abyss-800: #0e2621;
+  --color-abyss-700: #14322b;
+  --color-abyss-600: #1d4239;
+  --color-abyss-500: #2d5a4e;
 
   /* Texto */
-  --color-mist-50: #f2fafc;
-  --color-mist-100: #e3f1f5;
-  --color-mist-300: #b3cbd4;
-  --color-mist-400: #8aa7b2;
-  --color-mist-500: #64818c;
+  --color-mist-50: #f1faf6;
+  --color-mist-100: #e2f1ea;
+  --color-mist-300: #b2ccc2;
+  --color-mist-400: #89a99d;
+  --color-mist-500: #638377;
 
   /* Água — cor primária */
   --color-aqua-200: #b5ecfb;
@@ -110,9 +110,10 @@
     z-index: -1;
     pointer-events: none;
     background:
-      radial-gradient(120% 55% at 50% -12%, rgb(20 167 218 / 0.18), transparent 62%),
-      radial-gradient(80% 45% at 110% 105%, rgb(47 196 111 / 0.09), transparent 60%),
-      radial-gradient(60% 40% at -20% 60%, rgb(10 130 189 / 0.08), transparent 60%);
+      radial-gradient(110% 50% at 50% -10%, rgb(47 196 111 / 0.16), transparent 62%),
+      radial-gradient(70% 40% at 105% 20%, rgb(20 167 218 / 0.12), transparent 60%),
+      radial-gradient(80% 45% at -15% 95%, rgb(47 196 111 / 0.12), transparent 60%),
+      linear-gradient(180deg, #071a15 0%, var(--color-abyss-900) 45%, #04110e 100%);
   }
 
   ::selection {
@@ -173,6 +174,13 @@
 @keyframes glow-pulse {
   50% {
     opacity: 0.12;
+  }
+}
+
+/* Pulso de urgência: nunca some por completo (continua legível em captura estática) */
+@keyframes urgent-pulse {
+  50% {
+    opacity: 0.45;
   }
 }
 
