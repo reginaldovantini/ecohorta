@@ -8,6 +8,8 @@ const variants = {
   primary:
     "bg-linear-to-b from-aqua-300 to-aqua-500 text-abyss-950 shadow-[0_10px_30px_-10px_rgb(46_197_240/0.7),inset_0_1px_0_rgb(255_255_255/0.45)]",
   leaf: "bg-linear-to-b from-leaf-300 to-leaf-500 text-abyss-950 shadow-[0_10px_30px_-10px_rgb(91_227_143/0.6),inset_0_1px_0_rgb(255_255_255/0.45)]",
+  alert:
+    "bg-linear-to-b from-alert-400 to-alert-500 text-white shadow-[0_10px_30px_-10px_rgb(255_90_105/0.75),inset_0_1px_0_rgb(255_255_255/0.35)]",
   secondary: "bg-white/[0.07] text-mist-50 ring-1 ring-inset ring-white/10 hover:bg-white/10",
   ghost: "text-mist-300 hover:bg-white/[0.06] hover:text-mist-50",
   danger: "bg-alert-400/15 text-alert-400 ring-1 ring-inset ring-alert-400/30",

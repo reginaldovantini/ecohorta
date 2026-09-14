@@ -10,7 +10,7 @@ import { CATEGORY_LABEL, DIFFICULTY_LABEL, type MissionDefinition } from "@/lib/
 import { cn } from "@/lib/utils/cn";
 import { formatLiters } from "@/lib/utils/format";
 import { HoldToConfirm } from "./hold-to-confirm";
-import { MissionIcon } from "./mission-icon";
+import { MissionArt } from "./mission-art";
 
 type Stage = "collapsed" | "details" | "confirm";
 
@@ -42,8 +42,10 @@ export function MissionCard({ mission, availability, collectorCode, onConfirm }:
   const [stage, setStage] = useState<Stage>("collapsed");
   const available = availability.status === "available";
   const expanded = stage !== "collapsed";
+  const rescue = mission.category === "rescue";
   const status = availabilityText(availability);
   const liters = mission.liters ?? 0;
+  const toggle = () => setStage(expanded ? "collapsed" : "details");
 
   return (
     <motion.article
@@ -53,33 +55,28 @@ export function MissionCard({ mission, availability, collectorCode, onConfirm }:
       transition={{ layout: { type: "spring", stiffness: 420, damping: 40 } }}
       className={cn(
         "relative overflow-hidden rounded-card border bg-abyss-800/85 shadow-[inset_0_1px_0_rgb(255_255_255/0.04)]",
-        expanded ? "border-aqua-400/25" : "border-white/[0.07]",
+        rescue ? "border-alert-400/40" : expanded ? "border-leaf-400/30" : "border-white/[0.07]",
       )}
     >
-      <div
-        aria-hidden
-        className={cn(
-          "pointer-events-none absolute -right-20 -top-24 size-64 rounded-full",
-          available
-            ? "bg-[radial-gradient(closest-side,rgb(91_227_143/0.16),transparent)]"
-            : "bg-[radial-gradient(closest-side,rgb(255_255_255/0.03),transparent)]",
-        )}
-      />
-
-      <motion.button
-        layout="position"
-        type="button"
-        aria-expanded={expanded}
-        onClick={() => setStage(expanded ? "collapsed" : "details")}
-        className="relative flex w-full items-start gap-4 p-5 text-left"
-      >
-        <MissionIcon icon={mission.icon} dimmed={!available} />
+      <motion.div layout="position" className="flex gap-4 p-4">
+        <button type="button" onClick={toggle} aria-label={`Detalhes: ${mission.title}`} className="shrink-0 rounded-2xl active:scale-95 transition-transform">
+          <MissionArt art={mission.art} dimmed={!available} className="size-[5.5rem]" />
+        </button>
         <div className="min-w-0 flex-1">
-          <p className="eyebrow">
-            {CATEGORY_LABEL[mission.category]} · Fase {mission.phase}
-          </p>
-          <h3 className="mt-0.5 font-display text-lg font-semibold leading-snug text-mist-50">{mission.title}</h3>
-          <div className="mt-3 flex flex-wrap gap-2">
+          <button type="button" onClick={toggle} aria-expanded={expanded} className="flex w-full items-start gap-2 text-left">
+            <span className="min-w-0 flex-1">
+              <span className={cn("eyebrow block", rescue && "text-alert-400")}>
+                {CATEGORY_LABEL[mission.category]} · Fase {mission.phase}
+              </span>
+              <span className="mt-0.5 block font-display text-[1.05rem] font-semibold leading-snug text-mist-50">
+                {mission.title}
+              </span>
+            </span>
+            <motion.span animate={{ rotate: expanded ? 180 : 0 }} className="mt-0.5 text-mist-400" aria-hidden>
+              <ChevronDown className="size-5" />
+            </motion.span>
+          </button>
+          <div className="mt-2 flex flex-wrap gap-1.5">
             {mission.liters !== null && (
               <Chip tone="aqua" icon={<Droplets />}>
                 {formatLiters(liters, 1)}
@@ -89,15 +86,25 @@ export function MissionCard({ mission, availability, collectorCode, onConfirm }:
               +{mission.xp} XP
             </Chip>
           </div>
-          <p className={cn("mt-3 flex items-center gap-2 text-xs font-medium", status.className)}>
-            <span className={cn("size-1.5 rounded-full", status.dot)} aria-hidden />
-            {status.text}
+          <p className={cn("mt-2 flex items-center gap-2 text-xs font-medium", status.className)}>
+            <span className={cn("size-1.5 shrink-0 rounded-full", status.dot)} aria-hidden />
+            <span className="truncate">{status.text}</span>
           </p>
         </div>
-        <motion.span animate={{ rotate: expanded ? 180 : 0 }} className="mt-1 text-mist-400" aria-hidden>
-          <ChevronDown className="size-5" />
-        </motion.span>
-      </motion.button>
+      </motion.div>
+
+      {!expanded && available && (
+        <motion.div layout="position" className="px-4 pb-4">
+          <Button
+            variant={rescue ? "alert" : "leaf"}
+            className="w-full"
+            onClick={() => setStage("confirm")}
+            data-testid="accept-mission"
+          >
+            {rescue ? "Resgatar agora" : "Aceitar missão"}
+          </Button>
+        </motion.div>
+      )}
 
       <AnimatePresence initial={false}>
         {expanded && (
@@ -109,7 +116,7 @@ export function MissionCard({ mission, availability, collectorCode, onConfirm }:
             transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
             className="relative overflow-hidden"
           >
-            <div className="space-y-5 px-5 pb-5">
+            <div className="space-y-5 px-4 pb-4">
               <p className="text-[0.95rem] leading-relaxed text-mist-300">{mission.summary}</p>
 
               <dl className="grid grid-cols-3 gap-2 text-center">
@@ -126,6 +133,17 @@ export function MissionCard({ mission, availability, collectorCode, onConfirm }:
                 ))}
               </dl>
 
+              <ol className="space-y-2.5">
+                {mission.steps.map((step, index) => (
+                  <li key={step} className="flex gap-3 text-sm text-mist-300">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-white/[0.06] font-display text-xs font-semibold text-mist-100">
+                      {index + 1}
+                    </span>
+                    <span className="pt-0.5">{step}</span>
+                  </li>
+                ))}
+              </ol>
+
               <AnimatePresence mode="wait" initial={false}>
                 {stage === "confirm" ? (
                   <motion.div
@@ -133,7 +151,10 @@ export function MissionCard({ mission, availability, collectorCode, onConfirm }:
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="space-y-3 rounded-2xl border border-aqua-400/25 bg-aqua-500/10 p-4"
+                    className={cn(
+                      "space-y-3 rounded-2xl border p-4",
+                      rescue ? "border-alert-400/30 bg-alert-500/10" : "border-leaf-400/25 bg-leaf-500/10",
+                    )}
                   >
                     <p className="font-display font-semibold text-mist-50">Confirme a liberação</p>
                     <p className="text-sm leading-relaxed text-mist-300">
@@ -156,31 +177,16 @@ export function MissionCard({ mission, availability, collectorCode, onConfirm }:
                     </Button>
                   </motion.div>
                 ) : (
-                  <motion.div
-                    key="details"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="space-y-5"
-                  >
-                    <ol className="space-y-2.5">
-                      {mission.steps.map((step, index) => (
-                        <li key={step} className="flex gap-3 text-sm text-mist-300">
-                          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-white/[0.06] font-display text-xs font-semibold text-mist-100">
-                            {index + 1}
-                          </span>
-                          <span className="pt-0.5">{step}</span>
-                        </li>
-                      ))}
-                    </ol>
+                  <motion.div key="details" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
                     <Button
                       size="lg"
+                      variant={rescue ? "alert" : "leaf"}
                       className="w-full"
                       disabled={!available}
                       icon={<Droplets className="size-5" />}
                       onClick={() => setStage("confirm")}
                     >
-                      {available ? "Aceitar missão" : status.text}
+                      {available ? (rescue ? "Resgatar agora" : "Aceitar missão") : status.text}
                     </Button>
                   </motion.div>
                 )}

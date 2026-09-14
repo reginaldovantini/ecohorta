@@ -3,7 +3,9 @@
 import { CircleAlert, Droplets, History, RefreshCw, RotateCcw, Sparkles, Target } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { AchievementBadge } from "@/components/gamification/achievement-badge";
 import { LevelBadge } from "@/components/gamification/level-badge";
+import { ACHIEVEMENTS, unlockedAchievements } from "@/lib/gamification/achievements";
 import { ScreenHeader } from "@/components/student/screen-header";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
@@ -28,6 +30,7 @@ export function ProfileScreen() {
   const summary = summarizeProfile(profile);
   const nextTitle = LEVELS[level.level]?.title;
   const { identity } = profile;
+  const unlocked = unlockedAchievements(profile.history);
 
   const stats = [
     { label: "Litros reutilizados", value: formatDecimal(summary.litersReused, 1), unit: " L", icon: Droplets, tone: "text-leaf-300" },
@@ -74,6 +77,17 @@ export function ProfileScreen() {
           </Surface>
         ))}
       </div>
+
+      <section className="space-y-3">
+        <h2 className="eyebrow">
+          Conquistas · {unlocked.size}/{ACHIEVEMENTS.length}
+        </h2>
+        <div className="grid gap-2">
+          {ACHIEVEMENTS.map((achievement) => (
+            <AchievementBadge key={achievement.id} achievement={achievement} unlocked={unlocked.has(achievement.id)} />
+          ))}
+        </div>
+      </section>
 
       <section className="space-y-3">
         <h2 className="eyebrow flex items-center gap-2">

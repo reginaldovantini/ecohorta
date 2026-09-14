@@ -9,6 +9,7 @@ import { WaterBalance } from "@/components/collector/water-balance";
 import { MyImpactCard } from "@/components/gamification/my-impact-card";
 import { MissionCard } from "@/components/missions/mission-card";
 import { useMissionBoard, useMissionRunner } from "@/components/missions/mission-runner";
+import { RescueCard } from "@/components/missions/rescue-card";
 import { SimulationBadge } from "@/components/ui/simulation-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/users/avatar";
@@ -16,6 +17,7 @@ import { useDemoProfile } from "@/hooks/use-demo-profile";
 import { getCollectorAlert } from "@/lib/collector/alerts";
 import { fillRatio } from "@/lib/collector/level-state";
 import { getLevelProgress } from "@/lib/gamification/levels";
+import { getRescuePlan } from "@/lib/missions/rescue";
 import { DEFAULT_AVATAR_ID } from "@/lib/users/avatars";
 import { ROLE_LABEL } from "@/lib/users/types";
 
@@ -41,6 +43,7 @@ export function HomeScreen() {
     trend: snapshot.telemetry.trend,
     overflowing: snapshot.telemetry.overflowing,
   });
+  const plan = getRescuePlan(snapshot);
   const featured = items[0];
 
   return (
@@ -50,7 +53,7 @@ export function HomeScreen() {
           <Avatar avatarId={identity?.avatarId ?? DEFAULT_AVATAR_ID} />
         </Link>
         <div className="min-w-0 flex-1">
-          <h1 className="truncate font-display text-[1.55rem] font-bold leading-tight tracking-tight text-mist-50">
+          <h1 className="truncate font-display text-[1.3rem] font-bold leading-tight tracking-tight text-mist-50 min-[380px]:text-[1.55rem]">
             Olá{identity ? `, ${identity.nickname}` : ""}! <span aria-hidden>🌱</span>
           </h1>
           <p className="truncate text-sm text-mist-400">
@@ -65,7 +68,7 @@ export function HomeScreen() {
         <CollectorHero snapshot={snapshot} href="/agua" />
       </motion.div>
 
-      {alert && <CollectorAlertBanner alert={alert} />}
+      {plan ? <RescueCard snapshot={snapshot} plan={plan} /> : alert && <CollectorAlertBanner alert={alert} />}
 
       {featured && (
         <motion.section variants={item} className="space-y-3">

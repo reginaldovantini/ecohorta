@@ -8,6 +8,7 @@ import {
   useDispenseProgress,
   usePrimaryCollectorCode,
 } from "@/components/collector/collector-source";
+import { unlockedAchievements } from "@/lib/gamification/achievements";
 import { getMissionAvailability } from "@/lib/missions/availability";
 import { MISSION_CATALOG, type MissionDefinition } from "@/lib/missions/catalog";
 import { isTerminal, xpForExecution } from "@/lib/missions/execution";
@@ -21,6 +22,7 @@ interface ActiveExecution {
   mission: MissionDefinition;
   collectorCode: string;
   xpBefore: number;
+  achievementsBefore: string[];
 }
 
 interface MissionRunnerValue {
@@ -40,12 +42,14 @@ export function MissionRunnerProvider({ children }: { children: ReactNode }) {
   const start = useCallback(
     (mission: MissionDefinition, collectorCode: string) => {
       if (mission.liters === null) return;
+      const profile = demoProfileStore.getSnapshot();
       const execution: ActiveExecution = {
         executionId: createId(),
         commandId: createId(),
         mission,
         collectorCode,
-        xpBefore: demoProfileStore.getSnapshot().xp,
+        xpBefore: profile.xp,
+        achievementsBefore: [...unlockedAchievements(profile.history)],
       };
       setActive(execution);
       source.dispense({
@@ -90,6 +94,7 @@ export function MissionRunnerProvider({ children }: { children: ReactNode }) {
             collectorCode={active.collectorCode}
             progress={progress}
             xpBefore={active.xpBefore}
+            achievementsBefore={active.achievementsBefore}
             onCancel={() => source.cancel(active.commandId)}
             onClose={() => setActive(null)}
           />
