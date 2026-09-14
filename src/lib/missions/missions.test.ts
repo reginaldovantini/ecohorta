@@ -22,6 +22,7 @@ function snapshot(volumeLiters: number, status: CollectorSnapshot["telemetry"]["
       measuredAt: 0,
     },
     totals: { capturedLiters: 0, reusedLiters: 0, discardedEstimatedLiters: 0 },
+    simulation: null,
   };
 }
 
@@ -60,12 +61,14 @@ describe("execução", () => {
     startedAt: 1,
     finishedAt: 2,
     failure: null,
+    cancelRequested: false,
     origin: "simulation",
   });
 
   it("identifica estados terminais", () => {
     expect(isTerminal(progress("COMPLETED"))).toBe(true);
     expect(isTerminal(progress("FAILED"))).toBe(true);
+    expect(isTerminal(progress("CANCELLED"))).toBe(true);
     expect(isTerminal(progress("EXECUTING"))).toBe(false);
     expect(isTerminal(null)).toBe(false);
   });
@@ -73,6 +76,7 @@ describe("execução", () => {
   it("concede XP somente com conclusão confirmada", () => {
     expect(xpForExecution(mission, progress("COMPLETED"))).toBe(50);
     expect(xpForExecution(mission, progress("FAILED"))).toBe(0);
+    expect(xpForExecution(mission, progress("CANCELLED"))).toBe(0);
   });
 
   it("todas as missões de ação têm volume positivo", () => {

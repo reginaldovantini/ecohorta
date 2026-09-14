@@ -98,7 +98,11 @@ export function CollectorHero({ snapshot, href }: CollectorHeroProps) {
 
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/[0.06] pt-3 text-xs text-mist-400">
         <TrendLabel telemetry={telemetry} />
-        {now !== null && <span className="shrink-0">Leitura {formatRelativeTime(telemetry.measuredAt, now)}</span>}
+        <span className="shrink-0">
+          {telemetry.measuredAt === null
+            ? "Aguardando primeira leitura"
+            : now !== null && `Leitura ${formatRelativeTime(telemetry.measuredAt, now)}`}
+        </span>
       </div>
     </Surface>
   );

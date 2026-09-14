@@ -1,33 +1,57 @@
 "use client";
 
-import { MotionConfig } from "motion/react";
+import { AnimatePresence, motion, MotionConfig } from "motion/react";
+import { WifiOff } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
-import { CollectorSourceProvider } from "@/components/collector/collector-source";
+import { CollectorSourceProvider, useConnectionState } from "@/components/collector/collector-source";
 import { MissionRunnerProvider, useMissionBoard } from "@/components/missions/mission-runner";
 import { BottomNav } from "@/components/navigation/bottom-nav";
 import { SimulationPanelProvider } from "@/components/simulation/simulation-panel";
-import { createSimulationSource } from "@/lib/iot/simulation-source";
+import { createApiSource } from "@/lib/iot/api-source";
 
 function Navigation() {
   const { availableCount } = useMissionBoard();
   return <BottomNav availableMissions={availableCount} />;
 }
 
+function ConnectionBanner() {
+  const connection = useConnectionState();
+  return (
+    <AnimatePresence>
+      {connection === "error" && (
+        <motion.div
+          role="status"
+          initial={{ y: -40, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -40, opacity: 0 }}
+          className="fixed inset-x-0 top-0 z-50 pt-safe"
+        >
+          <div className="mx-auto mt-2 flex max-w-md items-center gap-2 rounded-2xl border border-ember-400/30 bg-abyss-850/95 px-4 py-2.5 text-sm text-mist-100 shadow-lg mx-3 sm:mx-auto">
+            <WifiOff className="size-4 shrink-0 text-ember-400" aria-hidden />
+            Sem conexão com a plataforma. Tentando novamente…
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 /**
- * Casca do app do estudante: fonte de dados, execução de missões e navegação.
- * Hoje a fonte é o dispositivo virtual (SIMULAÇÃO); nos Dias 6–9 entra a fonte
- * Supabase alimentada pelo ESP32, com o mesmo contrato `CollectorDataSource`.
+ * Casca do app: fonte de dados (somente a API da plataforma), execução de
+ * missões e navegação. O captador por trás da API pode ser o ESP32 real ou o
+ * dispositivo virtual — a interface identifica pela origem de cada leitura.
  */
 export function StudentShell({ children }: { children: ReactNode }) {
-  const [runtime] = useState(createSimulationSource);
+  const [source] = useState(() => createApiSource());
 
-  useEffect(() => runtime.start(), [runtime]);
+  useEffect(() => source.start(), [source]);
 
   return (
     <MotionConfig reducedMotion="user">
-      <CollectorSourceProvider source={runtime.source}>
-        <SimulationPanelProvider controls={runtime.controls}>
+      <CollectorSourceProvider source={source}>
+        <SimulationPanelProvider>
           <MissionRunnerProvider>
+            <ConnectionBanner />
             <div className="mx-auto min-h-dvh max-w-md px-5 pb-32 pt-safe">{children}</div>
             <Navigation />
           </MissionRunnerProvider>

@@ -53,7 +53,7 @@ Abra http://localhost:3000.
 
 ### Modo simulação (sem hardware)
 
-Enquanto o ESP32 não está conectado, os dados vêm de um **dispositivo virtual** que emula o captador e o firmware.
+Enquanto o ESP32 não está conectado, os dados vêm do **dispositivo virtual EC-001**. É um processo separado que emula o captador e o firmware e conversa com a plataforma **pela mesma API que o ESP32 usará**. O app nunca fala com o dispositivo, só com a API. `npm run dev` sobe os dois processos.
 
 - **O que ele emula:**
   - entrada de condensado e saída por gravidade (vazão ∝ √altura);
@@ -67,14 +67,21 @@ Enquanto o ESP32 não está conectado, os dados vêm de um **dispositivo virtual
   - nível do captador (10–100%);
   - falhas: válvula sem vazão e captador offline.
 - **Dica para demonstrar:** use **30×**. Uma liberação de 3 L leva cerca de 2 min simulados, ou 4 s na tela.
-- **Estado salvo:** a simulação e o perfil de demonstração ficam salvos no navegador. Para recomeçar, use "Reiniciar simulação" no painel e "Reiniciar demonstração" no Perfil.
-- **Parâmetros:** estão em `src/lib/iot/simulation-source.ts` (capacidade, altura útil, vazão) e devem ser trocados pelos valores **medidos** no captador real.
+- **Estado salvo:**
+  - o nível do dispositivo virtual fica em `.data/`;
+  - o balanço (captado/reutilizado) fica na memória do servidor e recomeça quando ele reinicia, até o Supabase;
+  - o perfil de demonstração fica no navegador.
+- **Para recomeçar:** "Reiniciar simulação" no painel e "Reiniciar demonstração" no Perfil.
+- **Parâmetros:** estão em `src/lib/iot/simulation-config.ts` (capacidade, altura útil, vazão) e devem ser trocados pelos valores **medidos** no captador real.
+- **Captador compartilhado:** se outra pessoa estiver executando uma missão, todos veem "Liberando água" e as missões ficam em espera.
 
 ## Scripts
 
 | Comando | O que faz |
 |---|---|
-| `npm run dev` | Servidor de desenvolvimento |
+| `npm run dev` | Plataforma + dispositivo virtual EC-001 (com token gerado na hora) |
+| `npm run dev:app` | Só a plataforma |
+| `npm run device:virtual` | Só o dispositivo virtual (requer `IOT_SIMULATED_DEVICE_TOKEN` no `.env.local`) |
 | `npm run build` | Build de produção |
 | `npm run typecheck` | Gera os tipos de rotas e verifica o TypeScript |
 | `npm run lint` | ESLint |
@@ -90,7 +97,7 @@ Todas estão documentadas em [.env.example](.env.example), organizadas pela etap
 | Variável | Onde é usada | Etapa |
 |---|---|---|
 | `NEXT_PUBLIC_APP_URL` | QR Codes e links | Já |
-| `NEXT_PUBLIC_DATA_SOURCE` | `simulation` ou `supabase` | Já |
+| `IOT_SIMULATED_DEVICE_TOKEN` | Token do dispositivo virtual (opcional: `npm run dev` gera um) | Já |
 | `NEXT_PUBLIC_SUPABASE_URL` | Cliente Supabase | Dias 6–7 |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Cliente Supabase (protegido pelo RLS) | Dias 6–7 |
 | `SUPABASE_SECRET_KEY` | **Somente servidor** | Dias 6–7 |

@@ -14,7 +14,7 @@ import { Surface } from "@/components/ui/surface";
 import { getLevelProgress } from "@/lib/gamification/levels";
 import type { DispenseProgress } from "@/lib/iot/types";
 import type { MissionDefinition } from "@/lib/missions/catalog";
-import { FAILURE_COPY, isTerminal, xpForExecution } from "@/lib/missions/execution";
+import { CANCELLED_COPY, FAILURE_COPY, isTerminal, xpForExecution } from "@/lib/missions/execution";
 import { cn } from "@/lib/utils/cn";
 import { formatDecimal, formatDuration, formatLiters } from "@/lib/utils/format";
 import { MissionIcon } from "./mission-icon";
@@ -35,6 +35,7 @@ function stepIndex(progress: DispenseProgress | null) {
     case "COMPLETED":
       return 3;
     case "FAILED":
+    case "CANCELLED":
       return progress.startedAt ? 1 : 0;
     default:
       return 0;
@@ -55,10 +56,11 @@ interface ExecutionOverlayProps {
   collectorCode: string;
   progress: DispenseProgress | null;
   xpBefore: number;
+  onCancel: () => void;
   onClose: () => void;
 }
 
-export function ExecutionOverlay({ mission, collectorCode, progress, xpBefore, onClose }: ExecutionOverlayProps) {
+export function ExecutionOverlay({ mission, collectorCode, progress, xpBefore, onCancel, onClose }: ExecutionOverlayProps) {
   const terminal = isTerminal(progress);
 
   return (
@@ -99,10 +101,16 @@ export function ExecutionOverlay({ mission, collectorCode, progress, xpBefore, o
         <AnimatePresence mode="wait">
           {progress?.status === "COMPLETED" ? (
             <ResultPanel key="result" mission={mission} progress={progress} xpBefore={xpBefore} onClose={onClose} />
-          ) : progress?.status === "FAILED" ? (
+          ) : progress?.status === "FAILED" || progress?.status === "CANCELLED" ? (
             <FailurePanel key="failure" progress={progress} collectorCode={collectorCode} onClose={onClose} />
           ) : (
-            <RunningPanel key="running" mission={mission} collectorCode={collectorCode} progress={progress} />
+            <RunningPanel
+              key="running"
+              mission={mission}
+              collectorCode={collectorCode}
+              progress={progress}
+              onCancel={onCancel}
+            />
           )}
         </AnimatePresence>
       </div>
@@ -121,11 +129,14 @@ function RunningPanel({
   mission,
   collectorCode,
   progress,
+  onCancel,
 }: {
   mission: MissionDefinition;
   collectorCode: string;
   progress: DispenseProgress | null;
+  onCancel: () => void;
 }) {
+  const cancellable = progress?.status === "QUEUED" || progress?.status === "EXECUTING";
   const snapshot = useCollectorSnapshot(collectorCode);
   const target = progress?.targetLiters ?? mission.liters ?? 0;
   const delivered = progress?.deliveredLiters ?? 0;
@@ -153,9 +164,22 @@ function RunningPanel({
         </div>
       </div>
       <StepList current={current} collectorCode={collectorCode} failed={false} />
-      <p className="py-5 text-center text-xs text-mist-500">
-        A válvula fecha automaticamente. Mantenha o regador na saída do captador.
-      </p>
+      <div className="space-y-3 py-5">
+        {cancellable && (
+          <Button
+            variant="danger"
+            className="w-full"
+            disabled={progress?.cancelRequested}
+            onClick={onCancel}
+            data-testid="cancel-mission"
+          >
+            {progress?.cancelRequested ? "Fechando a válvula…" : "Cancelar missão"}
+          </Button>
+        )}
+        <p className="text-center text-xs text-mist-500">
+          A válvula fecha automaticamente. Mantenha o regador na saída do captador.
+        </p>
+      </div>
     </motion.div>
   );
 }
@@ -318,12 +342,18 @@ function FailurePanel({
   collectorCode: string;
   onClose: () => void;
 }) {
-  const copy = FAILURE_COPY[progress.failure ?? "SENSOR_ERROR"];
+  const cancelled = progress.status === "CANCELLED";
+  const copy = cancelled ? CANCELLED_COPY : FAILURE_COPY[progress.failure ?? "SENSOR_ERROR"];
   return (
     <motion.div className="flex flex-1 flex-col" {...panelMotion}>
       <div className="flex flex-col items-center pt-12 text-center">
-        <span className="grid size-16 place-items-center rounded-full bg-alert-400/15 text-alert-400 ring-1 ring-inset ring-alert-400/30">
-          <CircleAlert className="size-8" />
+        <span
+          className={cn(
+            "grid size-16 place-items-center rounded-full ring-1 ring-inset",
+            cancelled ? "bg-white/[0.06] text-mist-300 ring-white/10" : "bg-alert-400/15 text-alert-400 ring-alert-400/30",
+          )}
+        >
+          {cancelled ? <X className="size-8" /> : <CircleAlert className="size-8" />}
         </span>
         <h2 className="mt-5 font-display text-2xl font-bold text-mist-50">{copy.title}</h2>
         <p className="mt-2 max-w-xs text-sm leading-relaxed text-mist-300">{copy.message}</p>

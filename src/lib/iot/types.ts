@@ -39,22 +39,16 @@ export type ValveState = "closed" | "open" | "unknown";
  * o captador trabalha por gravidade e exige válvula NC de acionamento
  * direto / pressão zero (ver docs/HARDWARE.md).
  */
-export type ValveKind =
-  | "undefined"
-  | "solenoid_direct_acting"
-  | "motorized_ball"
-  | "pump";
+export type ValveKind = "undefined" | "solenoid_direct_acting" | "motorized_ball" | "pump";
 
 export type WaterTrend = "rising" | "falling" | "stable";
 
-export type FailureReason =
-  | "NO_FLOW"
-  | "TIMEOUT"
-  | "INSUFFICIENT_WATER"
-  | "DEVICE_OFFLINE"
-  | "DEVICE_BUSY"
-  | "SENSOR_ERROR"
-  | "CANCELLED_BY_USER";
+/** Falhas detectadas e reportadas pelo firmware. */
+export const DEVICE_FAILURES = ["NO_FLOW", "TIMEOUT", "INSUFFICIENT_WATER", "SENSOR_ERROR", "DEVICE_BUSY"] as const;
+export type DeviceFailure = (typeof DEVICE_FAILURES)[number];
+
+/** Falhas possíveis de uma execução: do dispositivo, da plataforma ou da conexão do app. */
+export type FailureReason = DeviceFailure | "DEVICE_OFFLINE" | "CONNECTION_ERROR";
 
 export interface CollectorInfo {
   /** collector_id — UUID no banco; identificador estável. */
@@ -77,13 +71,13 @@ export interface CollectorTelemetry {
   distanceMm: number | null;
   volumeLiters: number;
   valve: ValveState;
-  /** Taxa líquida estimada (L/h). Positiva = acumulando. */
+  /** Taxa líquida estimada pelo servidor (L/h). Positiva = acumulando. */
   netFlowLitersPerHour: number;
   trend: WaterTrend;
   /** Nível no limite do dreno de segurança: água pode estar sendo descartada. */
   overflowing: boolean;
-  /** epoch ms da leitura */
-  measuredAt: number;
+  /** epoch ms da última leitura recebida; `null` antes da primeira conexão. */
+  measuredAt: number | null;
 }
 
 export interface WaterTotals {
@@ -93,10 +87,20 @@ export interface WaterTotals {
   discardedEstimatedLiters: number;
 }
 
+/** Parâmetros do dispositivo virtual — só existem para captadores simulados. */
+export interface SimulationSettings {
+  timeScale: number;
+  inflowEnabled: boolean;
+  inflowLitersPerHour: number;
+  faultNoFlow: boolean;
+  offline: boolean;
+}
+
 export interface CollectorSnapshot {
   info: CollectorInfo;
   telemetry: CollectorTelemetry;
   totals: WaterTotals;
+  simulation: SimulationSettings | null;
 }
 
 /** Comando de liberação de água. `commandId` é único: repetir o envio nunca executa duas vezes. */
@@ -108,9 +112,14 @@ export interface DispenseCommand {
   targetLiters: number;
 }
 
+export type DispenseStatus = Extract<
+  ExecutionStatus,
+  "QUEUED" | "EXECUTING" | "MEASURING" | "COMPLETED" | "FAILED" | "CANCELLED"
+>;
+
 export interface DispenseProgress {
   commandId: string;
-  status: Extract<ExecutionStatus, "QUEUED" | "EXECUTING" | "MEASURING" | "COMPLETED" | "FAILED">;
+  status: DispenseStatus;
   targetLiters: number;
   /** Volume efetivamente medido pelo sensor (não o comandado). */
   deliveredLiters: number;
@@ -120,5 +129,9 @@ export interface DispenseProgress {
   startedAt: number | null;
   finishedAt: number | null;
   failure: FailureReason | null;
+  /** Cancelamento pedido e ainda não confirmado pelo dispositivo. */
+  cancelRequested: boolean;
   origin: DataOrigin;
 }
+
+export type ConnectionState = "connecting" | "online" | "error";

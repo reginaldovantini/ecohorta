@@ -90,6 +90,7 @@ export function MissionRunnerProvider({ children }: { children: ReactNode }) {
             collectorCode={active.collectorCode}
             progress={progress}
             xpBefore={active.xpBefore}
+            onCancel={() => source.cancel(active.commandId)}
             onClose={() => setActive(null)}
           />
         )}

@@ -24,20 +24,37 @@ ESP32-C3 ──HTTPS──► /api/iot/* (Next.js na Vercel) ──► Supabase 
 
 Toda tela lê o captador através de `CollectorDataSource` (`src/lib/iot/data-source.ts`).
 
-- **Hoje:** o dispositivo virtual implementa essa interface e roda no navegador. Toda a interface exibe **SIMULAÇÃO**.
-  - `src/lib/iot/virtual-device.ts` é lógica pura e testada. Emula:
-    - a física: condensado e saída por gravidade (Torricelli);
-    - o firmware: ruído do sensor, faixa física, mediana, calibração, fechamento pelo volume medido com antecipação da latência, `NO_FLOW`, `TIMEOUT`, dispositivo ocupado e offline;
-    - a estimativa de descarte no dreno.
-  - `src/lib/iot/simulation-source.ts` cuida do relógio (velocidade 1×/30×/120×), da persistência local e do painel de controle.
-  - A física usa tempo simulado. Latência de rede e estabilização da superfície usam tempo real, para que cada etapa seja visível.
-  - O mesmo dispositivo virtual poderá rodar em Node.js contra a API real (Dias 8–9), testando o backend antes do ESP32.
-- **Dias 6–9:** uma implementação com o Supabase Realtime lê os dados enviados pelo ESP32. As telas não mudam.
+- **Caminho único:** a interface usa somente a API da plataforma (`src/lib/iot/api-source.ts`). Ela nunca fala com o dispositivo.
+- **Dispositivo virtual EC-001** (`tools/virtual-device/run.ts`, `is_simulated = true`) é um processo Node que se comporta como o ESP32 e usa **a mesma API**:
+  - `src/lib/iot/virtual-device.ts` emula a física (condensado e saída por gravidade, Torricelli) e o firmware (ruído do sensor, faixa física, mediana, calibração, fechamento pelo volume medido, `NO_FLOW`, `TIMEOUT`, cancelamento e comandos idempotentes);
+  - a velocidade (1×/30×/120×) acelera só a física; a estabilização da medição é sempre em tempo real;
+  - `npm run dev` sobe a plataforma e o dispositivo, com um token aleatório a cada execução.
+- **Servidor** (`src/lib/server/collector-service.ts`):
+  - autentica o dispositivo por token;
+  - guarda as leituras;
+  - calcula tendência, transbordamento, descarte estimado e balanço (`src/lib/collector/water-accounting.ts`);
+  - valida e entrega os comandos.
+
+  O estado fica em memória até o Supabase (Dias 6–7).
+- **ESP32 real:** entra como outro dispositivo, com `is_simulated = false` e token próprio. As telas não mudam.
 - `DataOrigin` (`"device" | "simulation"`) acompanha cada leitura e cada comando. Um dado simulado nunca é exibido sem indicação.
 
-Seleção por variável de ambiente: `NEXT_PUBLIC_DATA_SOURCE=simulation | supabase`.
+## 3. Contrato IoT (implementado)
 
-## 3. Contrato IoT (implementação nos Dias 8–9)
+O contrato completo, validado com zod, está em `src/lib/iot/api-schema.ts`.
+
+| Rota | Quem chama | Função |
+|---|---|---|
+| `POST /api/iot/telemetry` | Dispositivo | Envia leitura (`uptime_ms`, distância, volume, válvula) e relatório do comando; recebe o comando pendente |
+| `GET /api/iot/simulation` | Dispositivo virtual | Canal de controle enquanto simula estar offline |
+| `GET /api/collectors` | App | Lista de captadores |
+| `GET /api/collectors/{code}` | App | Snapshot: telemetria, tendência, balanço e parâmetros da simulação |
+| `POST /api/collectors/{code}/commands` | App | Pede liberação (idempotente por `command_id`) |
+| `GET /api/collectors/{code}/commands/{id}` | App | Andamento do comando |
+| `POST /api/collectors/{code}/commands/{id}/cancel` | App | Pede o fechamento da válvula |
+| `POST /api/collectors/{code}/simulation` | Painel da simulação | Velocidade, condensado, nível e falhas. Recusado para captadores reais |
+
+As rotas do app ainda não exigem login. A autenticação entra com o Supabase (Dias 6–7).
 
 ### `POST /api/iot/telemetry`
 

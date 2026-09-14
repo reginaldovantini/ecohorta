@@ -44,7 +44,10 @@ export function WaterScreen() {
       value: `${telemetry.netFlowLitersPerHour >= 0 ? "+" : ""}${formatDecimal(telemetry.netFlowLitersPerHour)} L/h`,
     },
     { label: "Válvula", value: VALVE_STATE[telemetry.valve] },
-    { label: "Última leitura", value: now === null ? "—" : formatRelativeTime(telemetry.measuredAt, now) },
+    {
+      label: "Última leitura",
+      value: now === null || telemetry.measuredAt === null ? "—" : formatRelativeTime(telemetry.measuredAt, now),
+    },
     { label: "Dispositivo", value: telemetry.deviceId, mono: true },
     { label: "Tipo de válvula", value: VALVE_KIND[info.valveKind] },
   ];

@@ -1,10 +1,16 @@
 "use client";
 
 import { Droplets, Gauge, RotateCcw, Timer, TriangleAlert } from "lucide-react";
-import { useCallback, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  useCollectorSnapshot,
+  useCollectorSource,
+  usePrimaryCollectorCode,
+} from "@/components/collector/collector-source";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
-import { TIME_SCALES, type SimulationControls } from "@/lib/iot/simulation-source";
+import type { SimulationRequest } from "@/lib/iot/data-source";
+import { DEFAULT_SIMULATION_SETTINGS, TIME_SCALES } from "@/lib/iot/simulation-config";
 import { cn } from "@/lib/utils/cn";
 import { formatDecimal } from "@/lib/utils/format";
 import { SimulationPanelContext } from "./simulation-panel-context";
@@ -12,7 +18,7 @@ import { SimulationPanelContext } from "./simulation-panel-context";
 const LEVEL_PRESETS = [0.1, 0.5, 0.9, 0.97, 1] as const;
 const INFLOW_PRESETS = [0.6, 1.2, 3] as const;
 
-export function SimulationPanelProvider({ controls, children }: { controls: SimulationControls; children: ReactNode }) {
+export function SimulationPanelProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const api = useMemo(() => ({ open: () => setOpen(true) }), []);
   const close = useCallback(() => setOpen(false), []);
@@ -24,20 +30,28 @@ export function SimulationPanelProvider({ controls, children }: { controls: Simu
         open={open}
         onClose={close}
         title="Painel da simulação"
-        description="O dispositivo virtual emula o captador e o firmware do ESP32 para demonstrar e testar estados. Nada aqui é dado real."
+        description="Controla o dispositivo virtual EC-001, que fala com a plataforma pela mesma API do ESP32. Nada aqui é dado real."
       >
-        <SimulationPanelBody controls={controls} />
+        <SimulationPanelBody />
       </BottomSheet>
     </SimulationPanelContext>
   );
 }
 
-function SimulationPanelBody({ controls }: { controls: SimulationControls }) {
-  const settings = useSyncExternalStore(controls.subscribe, controls.getSettings, controls.getSettings);
+function SimulationPanelBody() {
+  const source = useCollectorSource();
+  const code = usePrimaryCollectorCode();
+  const snapshot = useCollectorSnapshot(code);
   const [notice, setNotice] = useState<string | null>(null);
+  const settings = snapshot?.simulation;
 
-  const setLevel = (ratio: number) => {
-    setNotice(controls.setLevel(ratio) ? null : "Aguarde a liberação atual terminar para mudar o nível.");
+  if (!code || !settings) {
+    return <p className="text-sm text-mist-400">Este captador é real: não há controles de simulação.</p>;
+  }
+
+  const send = async (request: SimulationRequest) => {
+    const result = await source.updateSimulation(code, request);
+    setNotice(result.ok ? null : (result.message ?? "Não foi possível atualizar a simulação."));
   };
 
   return (
@@ -51,7 +65,7 @@ function SimulationPanelBody({ controls }: { controls: SimulationControls }) {
           label="Velocidade do tempo"
           options={TIME_SCALES.map((scale) => ({ value: scale, label: scale === 1 ? "1× real" : `${scale}×` }))}
           value={settings.timeScale}
-          onChange={(timeScale) => controls.update({ timeScale })}
+          onChange={(timeScale) => void send({ settings: { timeScale } })}
         />
       </PanelGroup>
 
@@ -59,26 +73,31 @@ function SimulationPanelBody({ controls }: { controls: SimulationControls }) {
         <SwitchRow
           label="Produzindo condensado"
           checked={settings.inflowEnabled}
-          onChange={(inflowEnabled) => controls.update({ inflowEnabled })}
+          onChange={(inflowEnabled) => void send({ settings: { inflowEnabled } })}
         />
         <Segmented
           label="Vazão de condensado"
           options={INFLOW_PRESETS.map((rate) => ({ value: rate, label: `${formatDecimal(rate, 1)} L/h` }))}
           value={settings.inflowLitersPerHour}
           disabled={!settings.inflowEnabled}
-          onChange={(inflowLitersPerHour) => controls.update({ inflowLitersPerHour })}
+          onChange={(inflowLitersPerHour) => void send({ settings: { inflowLitersPerHour } })}
         />
       </PanelGroup>
 
       <PanelGroup icon={<Gauge />} title="Definir nível do captador">
         <div className="grid grid-cols-5 gap-2">
           {LEVEL_PRESETS.map((ratio) => (
-            <Button key={ratio} variant="secondary" size="sm" className="px-0" onClick={() => setLevel(ratio)}>
+            <Button
+              key={ratio}
+              variant="secondary"
+              size="sm"
+              className="px-0"
+              onClick={() => void send({ action: { type: "set_level", ratio } })}
+            >
               {Math.round(ratio * 100)}%
             </Button>
           ))}
         </div>
-        {notice && <p className="text-xs text-ember-400">{notice}</p>}
       </PanelGroup>
 
       <PanelGroup icon={<TriangleAlert />} title="Falhas para testar">
@@ -86,24 +105,23 @@ function SimulationPanelBody({ controls }: { controls: SimulationControls }) {
           label="Válvula sem vazão"
           description="Válvula inadequada para baixa pressão: abre, mas a água não sai (NO_FLOW)."
           checked={settings.faultNoFlow}
-          onChange={(faultNoFlow) => controls.update({ faultNoFlow })}
+          onChange={(faultNoFlow) => void send({ settings: { faultNoFlow } })}
         />
         <SwitchRow
           label="Captador offline"
-          description="O dispositivo para de enviar leituras e não recebe comandos."
+          description="O dispositivo para de enviar leituras. A plataforma detecta a ausência em até 15 s."
           checked={settings.offline}
-          onChange={(offline) => controls.update({ offline })}
+          onChange={(offline) => void send({ settings: { offline } })}
         />
       </PanelGroup>
+
+      {notice && <p className="text-sm text-ember-400">{notice}</p>}
 
       <Button
         variant="ghost"
         className="w-full"
         icon={<RotateCcw className="size-4" />}
-        onClick={() => {
-          controls.reset();
-          setNotice(null);
-        }}
+        onClick={() => void send({ settings: DEFAULT_SIMULATION_SETTINGS, action: { type: "reset" } })}
       >
         Reiniciar simulação
       </Button>

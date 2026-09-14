@@ -100,7 +100,10 @@ export function ProfileScreen() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold text-mist-50">{mission?.title ?? record.missionId}</p>
                       <p className="text-xs text-mist-400">
-                        {completed ? `${formatLiters(record.deliveredLiters)} reutilizados` : "Não concluída"}
+                        {record.deliveredLiters > 0.01
+                          ? `${formatLiters(record.deliveredLiters)} reutilizados`
+                          : "Nenhuma água liberada"}
+                        {!completed && " · não concluída"}
                         {now !== null && ` · ${formatRelativeTime(record.finishedAt, now)}`}
                       </p>
                     </div>

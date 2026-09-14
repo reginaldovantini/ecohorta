@@ -37,6 +37,9 @@ yarn-error.log*
 # screenshots de verificação local
 /.screenshots
 
+# estado local do dispositivo virtual
+/.data
+
 # vercel
 .vercel
 

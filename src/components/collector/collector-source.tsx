@@ -16,7 +16,12 @@ export function useCollectorSource() {
   return source;
 }
 
-/** Captador principal do estudante. No MVP, o primeiro da escola; depois, o escaneado pelo QR. */
+export function useConnectionState() {
+  const source = useCollectorSource();
+  return useSyncExternalStore(source.subscribe, source.getConnectionState, () => "connecting" as const);
+}
+
+/** Captador principal do usuário. No MVP, o primeiro da escola; depois, o escaneado pelo QR. */
 export function usePrimaryCollectorCode(): string | null {
   const source = useCollectorSource();
   const codes = useSyncExternalStore(source.subscribe, source.getCollectorCodes, () => NO_CODES);

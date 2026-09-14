@@ -11,7 +11,7 @@ const executionRecordSchema = z.object({
   missionId: z.string(),
   commandId: z.string(),
   collectorCode: z.string(),
-  status: z.enum(["COMPLETED", "FAILED"]),
+  status: z.enum(["COMPLETED", "FAILED", "CANCELLED"]),
   targetLiters: z.number(),
   deliveredLiters: z.number(),
   xpAwarded: z.number().int().nonnegative(),
