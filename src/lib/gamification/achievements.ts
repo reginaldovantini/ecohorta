@@ -1,4 +1,4 @@
-import type { ExecutionRecord } from "@/lib/student/demo-profile";
+import type { ExecutionRecord } from "@/lib/missions/history";
 
 export type AchievementIcon = "droplets" | "sprout" | "siren" | "shield" | "target";
 

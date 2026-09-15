@@ -8,8 +8,7 @@ import { AVATAR_IDS } from "./avatars";
  *   DADOS DE EXIBIÇÃO  → apelido, avatar, perfil, turma/função.
  *                        Usados na experiência: saudação, timeline, ranking.
  *   DADOS CADASTRAIS   → nome, sobrenome, data de nascimento.
- *                        Protegidos; só na conta oficial (Supabase + RLS).
- *                        Nunca guardados no aparelho, nunca exibidos publicamente.
+ *                        Protegidos no banco (RLS); nunca exibidos publicamente.
  */
 
 export const USER_ROLES = ["student", "teacher", "staff", "admin"] as const;
@@ -83,11 +82,18 @@ export const nicknameSchema = z
   .regex(/^[\p{L}\p{N} ._-]+$/u, "Use letras, números, espaço, ponto, hífen ou sublinhado.");
 
 const jobTitleSchema = z.string().trim().min(2, "Informe a função.").max(40, "Use até 40 caracteres.");
-const avatarIdSchema = z.enum(AVATAR_IDS);
+export const avatarIdSchema = z.enum(AVATAR_IDS);
 
-/** Identidade de exibição. Administrador não entra pelo cadastro público. */
+/** Identidade de exibição completa, montada pelo servidor a partir do banco. */
 export const displayIdentitySchema = z.discriminatedUnion("role", [
-  z.object({ role: z.literal("student"), nickname: nicknameSchema, avatarId: avatarIdSchema, classId: z.string().min(1) }),
+  z.object({
+    role: z.literal("student"),
+    nickname: nicknameSchema,
+    avatarId: avatarIdSchema,
+    classId: z.string().min(1),
+    className: z.string().min(1),
+    educationLevel: z.enum(EDUCATION_LEVELS),
+  }),
   z.object({ role: z.literal("teacher"), nickname: nicknameSchema, avatarId: avatarIdSchema, jobTitle: jobTitleSchema }),
   z.object({
     role: z.literal("staff"),
@@ -96,12 +102,16 @@ export const displayIdentitySchema = z.discriminatedUnion("role", [
     jobTitle: jobTitleSchema,
     sector: z.enum(STAFF_SECTORS),
   }),
+  z.object({ role: z.literal("admin"), nickname: nicknameSchema, avatarId: avatarIdSchema, jobTitle: jobTitleSchema.nullable() }),
 ]);
 
 export type DisplayIdentity = z.infer<typeof displayIdentitySchema>;
 export type ParticipantRole = DisplayIdentity["role"];
 
-// ---------- Dados cadastrais (somente conta oficial) ----------
+/** O que o próprio usuário pode alterar: apelido e avatar. */
+export const identityUpdateSchema = z.object({ nickname: nicknameSchema, avatarId: avatarIdSchema });
+
+// ---------- Dados cadastrais (somente no banco, protegidos) ----------
 
 const nameSchema = z.string().trim().min(1).max(60);
 
@@ -123,6 +133,14 @@ export const teacherRecordSchema = z.object({
 
 export const staffRecordSchema = teacherRecordSchema.extend({ sector: z.enum(STAFF_SECTORS) });
 
+export const adminRecordSchema = z.object({
+  firstName: nameSchema,
+  lastName: nameSchema,
+  schoolId: z.string().min(1),
+  jobTitle: jobTitleSchema.nullable(),
+});
+
 export type StudentRecord = z.infer<typeof studentRecordSchema>;
 export type TeacherRecord = z.infer<typeof teacherRecordSchema>;
 export type StaffRecord = z.infer<typeof staffRecordSchema>;
+export type AdminRecord = z.infer<typeof adminRecordSchema>;

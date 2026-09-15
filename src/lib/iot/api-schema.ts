@@ -9,7 +9,7 @@ import { DEVICE_FAILURES, DEVICE_STATUSES, type SimulationSettings } from "./typ
 export const commandReportSchema = z.object({
   command_id: z.uuid(),
   status: z.enum(["EXECUTING", "MEASURING", "COMPLETED", "FAILED", "CANCELLED"]),
-  delivered_liters: z.number().min(0).max(1000),
+  delivered_liters: z.number().min(0).max(999),
   start_volume_liters: z.number().min(0).nullable(),
   end_volume_liters: z.number().min(0).nullable(),
   failure: z.enum(DEVICE_FAILURES).nullable(),
@@ -54,12 +54,16 @@ export interface TelemetryResponse {
   simulation: DeviceSimulationState | null;
 }
 
-/** App → plataforma: pedido de liberação. */
+/**
+ * App → plataforma: pedido de liberação.
+ * O volume é decidido pelo SERVIDOR a partir da missão; `target_liters` é aceito
+ * por compatibilidade, mas ignorado.
+ */
 export const dispenseRequestSchema = z.object({
   command_id: z.uuid(),
   execution_id: z.uuid(),
   mission_id: z.string().min(1).max(64),
-  target_liters: z.number().positive().max(50),
+  target_liters: z.number().positive().max(50).optional(),
 });
 
 /** App → plataforma: controle do dispositivo virtual. */

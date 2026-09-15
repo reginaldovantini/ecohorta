@@ -1,24 +1,13 @@
-import { SIMULATED_COLLECTOR, SIMULATED_DEVICE_ID } from "@/lib/iot/simulation-config";
-import { createCollectorService, type CollectorSeed, type CollectorService } from "./collector-service";
+import { createCollectorService } from "./collector-service";
+import { getDatabase } from "./db/pg";
+import { ConfigError } from "./errors";
 
 /**
- * Captadores cadastrados. Nos Dias 6–7 esta lista vem das tabelas collectors/devices.
- * O EC-001 começa como SIMULADO; quando o ESP32 chegar, entra um registro com
- * isSimulated = false e o token próprio do dispositivo.
+ * Serviço de captadores sobre o banco da aplicação. Sem estado em memória:
+ * pode ser criado a cada requisição (compatível com serverless).
  */
-const COLLECTOR_SEEDS: readonly CollectorSeed[] = [
-  {
-    info: SIMULATED_COLLECTOR,
-    deviceId: SIMULATED_DEVICE_ID,
-    isSimulated: true,
-    tokenEnvVar: "IOT_SIMULATED_DEVICE_TOKEN",
-  },
-];
-
-// Instância única que sobrevive ao recarregamento de módulos no desenvolvimento.
-const globalStore = globalThis as typeof globalThis & { __ecohortaCollectors?: CollectorService };
-
 export function getCollectorService() {
-  globalStore.__ecohortaCollectors ??= createCollectorService({ seeds: COLLECTOR_SEEDS });
-  return globalStore.__ecohortaCollectors;
+  const pepper = process.env.IOT_TOKEN_PEPPER;
+  if (!pepper) throw new ConfigError("IOT_TOKEN_PEPPER não configurado.");
+  return createCollectorService({ db: getDatabase(), pepper });
 }

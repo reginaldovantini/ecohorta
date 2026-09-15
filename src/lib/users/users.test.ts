@@ -43,19 +43,22 @@ describe("identidade de exibição", () => {
     expect(nicknameSchema.safeParse("x".repeat(21)).success).toBe(false);
   });
 
+  const student = { role: "student", nickname: "Jhow", avatarId: "broto", classId: "ef-6c", className: "6º Ano C", educationLevel: "elementary" };
+
   it("exige turma para estudante e setor para funcionário", () => {
-    expect(displayIdentitySchema.safeParse({ role: "student", nickname: "Jhow", avatarId: "broto", classId: "ef-6c" }).success).toBe(true);
+    expect(displayIdentitySchema.safeParse(student).success).toBe(true);
     expect(displayIdentitySchema.safeParse({ role: "student", nickname: "Jhow", avatarId: "broto" }).success).toBe(false);
     expect(
       displayIdentitySchema.safeParse({ role: "staff", nickname: "Rê", avatarId: "sensor", jobTitle: "Bibliotecária" }).success,
     ).toBe(false);
-    expect(displayIdentitySchema.safeParse({ role: "student", nickname: "Jhow", avatarId: "foto", classId: "ef-6c" }).success).toBe(false);
+    expect(displayIdentitySchema.safeParse({ ...student, avatarId: "foto" }).success).toBe(false);
   });
 
   it("descreve o perfil sem dados cadastrais", () => {
-    expect(describeIdentity({ role: "student", nickname: "Jhow", avatarId: "broto", classId: "ef-6c" })).toBe(
+    expect(describeIdentity({ role: "student", nickname: "Jhow", avatarId: "broto", classId: "ef-6c", className: "6º Ano C", educationLevel: "elementary" })).toBe(
       "Estudante · 6º Ano C — Ensino Fundamental",
     );
+    expect(describeIdentity({ role: "admin", nickname: "Direção", avatarId: "estrela", jobTitle: null })).toBe("Administrador(a)");
     expect(describeIdentity({ role: "staff", nickname: "Rê", avatarId: "sensor", jobTitle: "Técnica", sector: "laboratorio" })).toBe(
       "Laboratório · Técnica",
     );

@@ -1,18 +1,26 @@
 import { telemetryPayloadSchema } from "@/lib/iot/api-schema";
 import { getCollectorService } from "@/lib/server/collectors";
-import { jsonError, jsonOk, parseBody } from "@/lib/server/http";
+import { jsonError, jsonOk, readJson, validate, withErrors } from "@/lib/server/http";
 
 /**
- * Dispositivo → plataforma. Recebe a leitura e devolve, na mesma resposta,
- * o comando pendente (liberar/cancelar) e o próximo intervalo de envio.
+ * Dispositivo → plataforma. Autentica o dispositivo ANTES de validar o conteúdo,
+ * grava a leitura e devolve o comando pendente e o próximo intervalo de envio.
  */
 export async function POST(request: Request) {
-  const body = await parseBody(request, telemetryPayloadSchema);
-  if (body.error) return body.error;
+  return withErrors(async () => {
+    const body = await readJson(request);
+    if (!body.ok) return body.response;
 
-  const service = getCollectorService();
-  const code = service.authenticateDevice(request.headers.get("authorization"), body.data.device_id, body.data.collector_code);
-  if (!code) return jsonError(401, "Dispositivo não autorizado.");
+    const raw = (typeof body.value === "object" && body.value !== null ? body.value : {}) as Record<string, unknown>;
+    const deviceKey = typeof raw.device_id === "string" ? raw.device_id : "";
+    const collectorCode = typeof raw.collector_code === "string" ? raw.collector_code : undefined;
 
-  return jsonOk(service.ingestTelemetry(code, body.data));
+    const service = getCollectorService();
+    const device = await service.authenticateDevice(request.headers.get("authorization"), deviceKey, collectorCode);
+    if (!device) return jsonError(401, "Dispositivo não autorizado.");
+
+    const payload = validate(telemetryPayloadSchema, body.value);
+    if (payload.error) return payload.error;
+    return jsonOk(await service.ingestTelemetry(device, payload.data));
+  });
 }

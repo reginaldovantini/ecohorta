@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ExecutionRecord } from "@/lib/student/demo-profile";
+import type { ExecutionRecord } from "@/lib/missions/history";
 import { unlockedAchievements } from "./achievements";
 
 let counter = 0;
