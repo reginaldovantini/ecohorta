@@ -4,27 +4,30 @@ import { AnimatePresence, motion, MotionConfig } from "motion/react";
 import { WifiOff } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { useDemoProfile } from "@/hooks/use-demo-profile";
-import { useHydrated } from "@/hooks/use-hydrated";
+import { useProfile } from "@/hooks/use-profile";
 import { CollectorSourceProvider, useConnectionState } from "@/components/collector/collector-source";
 import { MissionRunnerProvider, useMissionBoard } from "@/components/missions/mission-runner";
 import { BottomNav } from "@/components/navigation/bottom-nav";
 import { SimulationPanelProvider } from "@/components/simulation/simulation-panel";
 import { createApiSource } from "@/lib/iot/api-source";
+import { profileStore } from "@/lib/student/profile-store";
 
 function Navigation() {
   const { availableCount } = useMissionBoard();
   return <BottomNav availableMissions={availableCount} />;
 }
 
-/** Sem perfil neste aparelho: leva ao cadastro inicial. */
-function OnboardingGuard() {
+/** Sem sessão: tela de entrada. Primeiro acesso: escolha de apelido e avatar. */
+function AuthGuard() {
   const router = useRouter();
-  const hydrated = useHydrated();
-  const { identity } = useDemoProfile();
+  const { status, identity } = useProfile();
   useEffect(() => {
-    if (hydrated && identity === null) router.replace("/boas-vindas");
-  }, [hydrated, identity, router]);
+    void profileStore.refresh();
+  }, []);
+  useEffect(() => {
+    if (status === "signed-out") router.replace("/entrar");
+    else if (status === "ready" && identity === null) router.replace("/boas-vindas");
+  }, [status, identity, router]);
   return null;
 }
 
@@ -56,16 +59,18 @@ function ConnectionBanner() {
  * dispositivo virtual — a interface identifica pela origem de cada leitura.
  */
 export function StudentShell({ children }: { children: ReactNode }) {
-  const [source] = useState(() => createApiSource());
+  const [source] = useState(() => createApiSource({ onUnauthorized: () => profileStore.markSignedOut() }));
+  const { role } = useProfile();
 
   useEffect(() => source.start(), [source]);
 
   return (
     <MotionConfig reducedMotion="user">
       <CollectorSourceProvider source={source}>
-        <SimulationPanelProvider>
+        {/* O painel da simulação é exclusivo de professores e administradores (a API também recusa). */}
+        <SimulationPanelProvider enabled={role === "teacher" || role === "admin"}>
           <MissionRunnerProvider>
-            <OnboardingGuard />
+            <AuthGuard />
             <ConnectionBanner />
             <div className="mx-auto min-h-dvh max-w-md px-5 pb-32 pt-safe">{children}</div>
             <Navigation />

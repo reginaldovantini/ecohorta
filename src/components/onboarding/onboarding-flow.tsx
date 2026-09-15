@@ -1,69 +1,55 @@
 "use client";
 
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
-import { ArrowLeft, BookOpen, Briefcase, Check, GraduationCap, Lock, ShieldCheck, Smartphone } from "lucide-react";
+import { ArrowLeft, Check, Lock, ShieldCheck, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { CollectorTank } from "@/components/collector/collector-tank";
 import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
 import { Avatar } from "@/components/users/avatar";
-import { demoProfileStore } from "@/lib/student/demo-profile";
+import { useProfile } from "@/hooks/use-profile";
+import { profileStore } from "@/lib/student/profile-store";
 import { AVATARS, DEFAULT_AVATAR_ID, type AvatarId } from "@/lib/users/avatars";
-import { classesByLevel, SCHOOL } from "@/lib/users/school";
-import {
-  displayIdentitySchema,
-  EDUCATION_LEVEL_LABEL,
-  nicknameSchema,
-  ROLE_LABEL,
-  STAFF_SECTOR_LABEL,
-  STAFF_SECTORS,
-  type ParticipantRole,
-  type StaffSector,
-} from "@/lib/users/types";
+import { nicknameSchema, ROLE_LABEL } from "@/lib/users/types";
 import { cn } from "@/lib/utils/cn";
 
-const STEPS = ["intro", "role", "identity", "details", "privacy"] as const;
+const STEPS = ["intro", "identity", "privacy"] as const;
 type Step = (typeof STEPS)[number];
-
-const ROLE_OPTIONS: { role: ParticipantRole; icon: typeof GraduationCap; description: string }[] = [
-  { role: "student", icon: GraduationCap, description: "Participe das missões e acompanhe seu impacto." },
-  { role: "teacher", icon: BookOpen, description: "Participe das missões e, em breve, acompanhe turmas." },
-  { role: "staff", icon: Briefcase, description: "Participe das missões com a comunidade escolar." },
-];
 
 const inputClass =
   "h-12 w-full rounded-control bg-white/[0.05] px-4 text-base text-mist-50 outline-none ring-1 ring-inset ring-white/10 transition-shadow placeholder:text-mist-500 focus:ring-2 focus:ring-aqua-400";
 
-/** Cadastro simples no aparelho: somente dados de exibição. */
+/**
+ * Primeiro acesso: o participante escolhe apelido e avatar.
+ * Perfil, escola, turma e função já vêm do cadastro da escola (banco de dados).
+ */
 export function OnboardingFlow() {
   const router = useRouter();
+  const profile = useProfile();
   const [stepIndex, setStepIndex] = useState(0);
   const [direction, setDirection] = useState(1);
-  const [role, setRole] = useState<ParticipantRole | null>(null);
   const [nickname, setNickname] = useState("");
   const [nicknameTouched, setNicknameTouched] = useState(false);
   const [avatarId, setAvatarId] = useState<AvatarId>(DEFAULT_AVATAR_ID);
-  const [classId, setClassId] = useState<string | null>(null);
-  const [jobTitle, setJobTitle] = useState("");
-  const [sector, setSector] = useState<StaffSector | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void profileStore.refresh();
+  }, []);
+  useEffect(() => {
+    if (profile.status === "signed-out") router.replace("/entrar");
+    else if (profile.status === "ready" && profile.identity !== null) router.replace("/");
+  }, [profile.status, profile.identity, router]);
 
   const step: Step = STEPS[stepIndex]!;
   const nicknameResult = nicknameSchema.safeParse(nickname);
-  const identity = displayIdentitySchema.safeParse(
-    role === "student"
-      ? { role, nickname, avatarId, classId }
-      : role === "teacher"
-        ? { role, nickname, avatarId, jobTitle }
-        : { role, nickname, avatarId, jobTitle, sector },
-  );
 
   const canAdvance: Record<Step, boolean> = {
-    intro: true,
-    role: role !== null,
+    intro: profile.status === "ready",
     identity: nicknameResult.success,
-    details: identity.success,
-    privacy: identity.success,
+    privacy: nicknameResult.success && !saving,
   };
 
   const go = (delta: number) => {
@@ -71,10 +57,14 @@ export function OnboardingFlow() {
     setStepIndex((index) => Math.min(STEPS.length - 1, Math.max(0, index + delta)));
   };
 
-  const finish = () => {
-    if (!identity.success) return;
-    demoProfileStore.setIdentity(identity.data);
-    router.replace("/");
+  const finish = async () => {
+    if (!nicknameResult.success) return;
+    setSaving(true);
+    setError(null);
+    const result = await profileStore.saveIdentity({ nickname: nicknameResult.data, avatarId });
+    setSaving(false);
+    // Sucesso: o perfil passa a ter identidade e o efeito acima leva à Home.
+    if (!result.ok) setError(result.message);
   };
 
   const greetingName = nicknameResult.success ? nicknameResult.data : "…";
@@ -131,32 +121,13 @@ export function OnboardingFlow() {
                     A água do ar-condicionado pode ganhar uma nova função. Ela é captada, medida por um sensor e liberada
                     em missões reais na escola.
                   </p>
-                  <div className="mt-6 flex gap-2">
-                    {["Descubra", "Participe", "Reutilize"].map((word) => (
-                      <span key={word} className="rounded-full bg-white/[0.06] px-3 py-1.5 text-sm font-semibold text-mist-100 ring-1 ring-inset ring-white/10">
-                        {word}
-                      </span>
-                    ))}
-                  </div>
+                  {profile.role && (
+                    <p className="mt-5 rounded-full bg-white/[0.06] px-3 py-1.5 text-sm font-semibold text-mist-100 ring-1 ring-inset ring-white/10">
+                      {ROLE_LABEL[profile.role]}
+                      {profile.schoolName && ` · ${profile.schoolName}`}
+                    </p>
+                  )}
                 </div>
-              )}
-
-              {step === "role" && (
-                <StepBody title="Como você participa da escola?" subtitle={SCHOOL.name}>
-                  <div role="radiogroup" aria-label="Perfil" className="space-y-3">
-                    {ROLE_OPTIONS.map(({ role: option, icon: Icon, description }) => (
-                      <ChoiceCard key={option} selected={role === option} onSelect={() => setRole(option)}>
-                        <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-leaf-400/15 text-leaf-300">
-                          <Icon className="size-6" aria-hidden />
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block font-display font-semibold text-mist-50">{ROLE_LABEL[option]}</span>
-                          <span className="block text-sm text-mist-400">{description}</span>
-                        </span>
-                      </ChoiceCard>
-                    ))}
-                  </div>
-                </StepBody>
               )}
 
               {step === "identity" && (
@@ -212,58 +183,14 @@ export function OnboardingFlow() {
                 </StepBody>
               )}
 
-              {step === "details" && role === "student" && (
-                <StepBody title="Qual é a sua turma?" subtitle="Lista de exemplo. A lista oficial vem do cadastro da escola.">
-                  {classesByLevel().map(([level, classes]) => (
-                    <div key={level} className="space-y-2">
-                      <p className="eyebrow">{EDUCATION_LEVEL_LABEL[level]}</p>
-                      <div role="radiogroup" aria-label={EDUCATION_LEVEL_LABEL[level]} className="grid grid-cols-2 gap-2">
-                        {classes.map((schoolClass) => (
-                          <ChoiceChip key={schoolClass.id} selected={classId === schoolClass.id} onSelect={() => setClassId(schoolClass.id)}>
-                            {schoolClass.name}
-                          </ChoiceChip>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </StepBody>
-              )}
-
-              {step === "details" && role !== "student" && (
-                <StepBody title="Qual é a sua função?" subtitle="Ajuda a organizar a participação da comunidade escolar.">
-                  {role === "staff" && (
-                    <div className="space-y-2">
-                      <p className="eyebrow">Setor</p>
-                      <div role="radiogroup" aria-label="Setor" className="grid grid-cols-2 gap-2">
-                        {STAFF_SECTORS.map((option) => (
-                          <ChoiceChip key={option} selected={sector === option} onSelect={() => setSector(option)}>
-                            {STAFF_SECTOR_LABEL[option]}
-                          </ChoiceChip>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <label className="block space-y-2">
-                    <span className="text-sm font-semibold text-mist-100">Função</span>
-                    <input
-                      className={inputClass}
-                      value={jobTitle}
-                      onChange={(event) => setJobTitle(event.target.value)}
-                      maxLength={40}
-                      placeholder={role === "teacher" ? "Ex.: Professor de Ciências" : "Ex.: Técnica de laboratório"}
-                    />
-                  </label>
-                </StepBody>
-              )}
-
               {step === "privacy" && (
                 <StepBody title="Seus dados" subtitle="Transparência sobre o que fica guardado.">
                   <Surface tone="leaf" className="space-y-3 p-4">
                     <p className="flex items-center gap-2 font-display font-semibold text-mist-50">
-                      <Smartphone className="size-5 text-leaf-300" aria-hidden /> Neste aparelho
+                      <Users className="size-5 text-leaf-300" aria-hidden /> Visível na escola
                     </p>
                     <ul className="space-y-1.5 text-sm text-mist-300">
-                      {["Apelido e avatar", "Perfil (estudante, professor ou funcionário)", "Turma ou função", "XP e histórico de missões"].map((item) => (
+                      {["Apelido e avatar", "Turma ou função, definida pela escola", "XP e missões concluídas"].map((item) => (
                         <li key={item} className="flex items-center gap-2">
                           <Check className="size-4 text-leaf-400" aria-hidden /> {item}
                         </li>
@@ -272,16 +199,16 @@ export function OnboardingFlow() {
                   </Surface>
                   <Surface className="space-y-2 p-4">
                     <p className="flex items-center gap-2 font-display font-semibold text-mist-50">
-                      <Lock className="size-5 text-aqua-300" aria-hidden /> Na conta oficial da escola (em breve)
+                      <Lock className="size-5 text-aqua-300" aria-hidden /> Protegido
                     </p>
                     <p className="text-sm leading-relaxed text-mist-300">
-                      Nome, sobrenome e data de nascimento. Ficam protegidos, servem para indicadores autorizados e nunca
-                      aparecem no ranking ou na timeline.
+                      Nome, sobrenome e data de nascimento são cadastrados pela escola, ficam protegidos no banco de dados e
+                      nunca aparecem no ranking ou na timeline.
                     </p>
                   </Surface>
                   <p className="flex items-start gap-2 text-xs leading-relaxed text-mist-500">
                     <ShieldCheck className="mt-0.5 size-4 shrink-0" aria-hidden />
-                    Enquanto o login oficial não está ativo, este é um perfil de demonstração deste aparelho.
+                    Seu XP e seu histórico ficam guardados na plataforma, não neste aparelho.
                   </p>
                 </StepBody>
               )}
@@ -290,14 +217,19 @@ export function OnboardingFlow() {
         </div>
 
         <div className="sticky bottom-0 bg-linear-to-t from-abyss-900 via-abyss-900/95 to-transparent pb-5 pt-4">
+          {error && (
+            <p role="alert" className="mb-3 text-center text-sm text-ember-400">
+              {error}
+            </p>
+          )}
           <Button
             size="lg"
             variant="leaf"
             className="w-full"
             disabled={!canAdvance[step]}
-            onClick={() => (step === "privacy" ? finish() : go(1))}
+            onClick={() => (step === "privacy" ? void finish() : go(1))}
           >
-            {step === "intro" ? "Começar" : step === "privacy" ? "Entrar na EcoHorta" : "Continuar"}
+            {step === "intro" ? "Começar" : step === "privacy" ? (saving ? "Salvando…" : "Entrar na EcoHorta") : "Continuar"}
           </Button>
         </div>
       </main>
@@ -314,48 +246,5 @@ function StepBody({ title, subtitle, children }: { title: string; subtitle: stri
       </div>
       {children}
     </div>
-  );
-}
-
-function ChoiceCard({ selected, onSelect, children }: { selected: boolean; onSelect: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onSelect}
-      className={cn(
-        "flex w-full items-center gap-4 rounded-card border p-4 text-left transition-colors active:scale-[0.99]",
-        selected ? "border-leaf-400/60 bg-leaf-400/10" : "border-white/[0.07] bg-abyss-800/80",
-      )}
-    >
-      {children}
-      <span
-        aria-hidden
-        className={cn(
-          "grid size-6 shrink-0 place-items-center rounded-full ring-1 ring-inset",
-          selected ? "bg-leaf-400 text-abyss-950 ring-leaf-400" : "ring-white/20",
-        )}
-      >
-        {selected && <Check className="size-4" strokeWidth={3} />}
-      </span>
-    </button>
-  );
-}
-
-function ChoiceChip({ selected, onSelect, children }: { selected: boolean; onSelect: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      role="radio"
-      aria-checked={selected}
-      onClick={onSelect}
-      className={cn(
-        "h-12 rounded-control px-3 text-sm font-semibold transition-colors",
-        selected ? "bg-leaf-400/15 text-leaf-300 ring-2 ring-inset ring-leaf-400/60" : "bg-white/[0.04] text-mist-200 ring-1 ring-inset ring-white/[0.08]",
-      )}
-    >
-      {children}
-    </button>
   );
 }

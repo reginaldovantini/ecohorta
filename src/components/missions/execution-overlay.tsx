@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { SimulationBadge } from "@/components/ui/simulation-badge";
 import { Surface } from "@/components/ui/surface";
-import { useDemoProfile } from "@/hooks/use-demo-profile";
+import { useProfile } from "@/hooks/use-profile";
 import { ACHIEVEMENTS, unlockedAchievements } from "@/lib/gamification/achievements";
 import { getLevelProgress } from "@/lib/gamification/levels";
 import type { DispenseProgress } from "@/lib/iot/types";
@@ -276,7 +276,7 @@ function ResultPanel({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const profile = useDemoProfile();
+  const profile = useProfile();
   const xp = xpForExecution(mission, progress);
   const before = getLevelProgress(xpBefore);
   const after = getLevelProgress(xpBefore + xp);

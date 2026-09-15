@@ -8,12 +8,11 @@ import { ProgressBar } from "@/components/ui/progress-bar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Surface } from "@/components/ui/surface";
 import { Avatar } from "@/components/users/avatar";
-import { useDemoProfile } from "@/hooks/use-demo-profile";
+import { useProfile } from "@/hooks/use-profile";
 import { reuseRate } from "@/lib/collector/water";
-import { summarizeProfile } from "@/lib/student/demo-profile";
+import { summarizeProfile } from "@/lib/student/profile-store";
 import { DEFAULT_AVATAR_ID } from "@/lib/users/avatars";
 import { describeIdentity } from "@/lib/users/display";
-import { SCHOOL } from "@/lib/users/school";
 import { formatDecimal, formatPercent } from "@/lib/utils/format";
 
 /**
@@ -22,7 +21,7 @@ import { formatDecimal, formatPercent } from "@/lib/utils/format";
  */
 export function RankingScreen() {
   const { collectorCode, snapshot } = useMissionBoard();
-  const profile = useDemoProfile();
+  const profile = useProfile();
 
   if (!collectorCode || !snapshot) {
     return (
@@ -37,7 +36,7 @@ export function RankingScreen() {
   const { totals } = snapshot;
   const rate = reuseRate(totals);
   const mine = summarizeProfile(profile);
-  // O balanço do captador pode recomeçar (servidor sem banco ainda): só mostra a fatia quando é coerente.
+  // O balanço do captador simulado pode ser reiniciado pelo professor: só mostra a fatia quando é coerente.
   const share =
     mine.litersReused > 0.01 && mine.litersReused <= totals.reusedLiters ? mine.litersReused / totals.reusedLiters : null;
   const { identity } = profile;
@@ -47,7 +46,7 @@ export function RankingScreen() {
       <ScreenHeader
         eyebrow="Impacto coletivo"
         title="Ranking"
-        subtitle={SCHOOL.name}
+        subtitle={profile.schoolName ?? "Carregando…"}
         isSimulation={snapshot.telemetry.origin === "simulation"}
       />
 

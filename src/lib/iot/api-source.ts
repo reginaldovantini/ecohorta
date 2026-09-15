@@ -3,13 +3,13 @@ import type { CollectorSnapshot, ConnectionState, DispenseCommand, DispenseProgr
 
 /*
  * Fonte de dados do app: conversa SOMENTE com a API da plataforma.
- * Leitura por polling adaptativo (1 s parado, 400 ms durante uma liberação,
- * pausa com a aba oculta). Nos Dias 6–7 pode ser trocada por Supabase Realtime
- * mantendo a mesma interface.
+ * Leitura por polling adaptativo (3 s parado, 1 s durante uma liberação,
+ * pausa com a aba oculta). Intervalos pensados para funções serverless;
+ * pode ser trocada por Supabase Realtime mantendo a mesma interface.
  */
 
-const IDLE_POLL_MS = 1000;
-const ACTIVE_POLL_MS = 400;
+const IDLE_POLL_MS = 3000;
+const ACTIVE_POLL_MS = 1000;
 const RETRY_POLL_MS = 3000;
 const POST_ATTEMPTS = 3;
 const TERMINAL = new Set<DispenseProgress["status"]>(["COMPLETED", "FAILED", "CANCELLED"]);
@@ -23,7 +23,8 @@ class ApiError extends Error {
   }
 }
 
-export function createApiSource(baseUrl = "") {
+/** `onUnauthorized`: a API respondeu 401 (sessão expirada ou encerrada). */
+export function createApiSource({ baseUrl = "", onUnauthorized }: { baseUrl?: string; onUnauthorized?: () => void } = {}) {
   const listeners = new Set<() => void>();
   let connection: ConnectionState = "connecting";
   let codes: readonly string[] = [];
@@ -49,6 +50,7 @@ export function createApiSource(baseUrl = "") {
       headers: { "Content-Type": "application/json", ...init?.headers },
     });
     const body = (await response.json().catch(() => ({}))) as { error?: string };
+    if (response.status === 401) onUnauthorized?.();
     if (!response.ok) throw new ApiError(response.status, body.error ?? `HTTP ${response.status}`);
     return body as T;
   }

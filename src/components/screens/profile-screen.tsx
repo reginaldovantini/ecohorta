@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleAlert, Droplets, History, RefreshCw, RotateCcw, Sparkles, Target } from "lucide-react";
+import { CircleAlert, Droplets, History, LogOut, Sparkles, Target } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AchievementBadge } from "@/components/gamification/achievement-badge";
@@ -12,19 +12,20 @@ import { Chip } from "@/components/ui/chip";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Surface } from "@/components/ui/surface";
 import { Avatar } from "@/components/users/avatar";
-import { useDemoProfile } from "@/hooks/use-demo-profile";
 import { useNow } from "@/hooks/use-now";
+import { useProfile } from "@/hooks/use-profile";
 import { getLevelProgress, LEVELS } from "@/lib/gamification/levels";
 import { findMission } from "@/lib/missions/catalog";
-import { demoProfileStore, summarizeProfile } from "@/lib/student/demo-profile";
+import { profileStore, summarizeProfile } from "@/lib/student/profile-store";
 import { DEFAULT_AVATAR_ID } from "@/lib/users/avatars";
 import { describeIdentity } from "@/lib/users/display";
+import { ROLE_LABEL } from "@/lib/users/types";
 import { cn } from "@/lib/utils/cn";
 import { formatDecimal, formatLiters, formatRelativeTime } from "@/lib/utils/format";
 
 export function ProfileScreen() {
   const router = useRouter();
-  const profile = useDemoProfile();
+  const profile = useProfile();
   const now = useNow(30_000);
   const level = getLevelProgress(profile.xp);
   const summary = summarizeProfile(profile);
@@ -41,10 +42,10 @@ export function ProfileScreen() {
   return (
     <div className="space-y-6 pt-6">
       <ScreenHeader
-        eyebrow="Perfil de demonstração"
+        eyebrow={profile.role ? ROLE_LABEL[profile.role] : "Perfil"}
         title="Meu impacto"
-        subtitle="Salvo apenas neste aparelho até o login oficial."
-        isSimulation
+        subtitle={profile.schoolName ?? "Carregando…"}
+        isSimulation={profile.history.some((record) => record.origin === "simulation")}
       />
 
       <Surface tone="aqua" className="flex flex-col items-center px-5 py-6 text-center">
@@ -143,20 +144,12 @@ export function ProfileScreen() {
       </section>
 
       <div className="grid gap-2">
-        {profile.history.length > 0 && (
-          <Button variant="ghost" icon={<RotateCcw className="size-4" />} onClick={() => demoProfileStore.resetProgress()}>
-            Zerar XP e histórico
-          </Button>
-        )}
         <Button
           variant="ghost"
-          icon={<RefreshCw className="size-4" />}
-          onClick={() => {
-            demoProfileStore.clear();
-            router.replace("/boas-vindas");
-          }}
+          icon={<LogOut className="size-4" />}
+          onClick={() => void profileStore.signOut().then(() => router.replace("/entrar"))}
         >
-          Trocar de perfil neste aparelho
+          Sair
         </Button>
       </div>
     </div>

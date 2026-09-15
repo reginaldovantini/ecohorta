@@ -13,8 +13,8 @@ import { ScreenHeader } from "@/components/student/screen-header";
 import { Chip } from "@/components/ui/chip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Surface } from "@/components/ui/surface";
-import { useDemoProfile } from "@/hooks/use-demo-profile";
 import { useNow } from "@/hooks/use-now";
+import { useProfile } from "@/hooks/use-profile";
 import { availableLiters } from "@/lib/collector/water";
 import type { MissionAvailability } from "@/lib/missions/availability";
 import { findMission, type MissionDefinition } from "@/lib/missions/catalog";
@@ -38,7 +38,7 @@ interface BoardItem {
 export function MissionsScreen() {
   const { collectorCode, snapshot, items, availableCount } = useMissionBoard();
   const { start } = useMissionRunner();
-  const profile = useDemoProfile();
+  const profile = useProfile();
   const now = useNow(30_000);
   const [tab, setTab] = useState<Tab>("available");
 

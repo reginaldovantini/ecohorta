@@ -18,22 +18,25 @@ import { SimulationPanelContext } from "./simulation-panel-context";
 const LEVEL_PRESETS = [0.1, 0.5, 0.9, 0.97, 1] as const;
 const INFLOW_PRESETS = [0.6, 1.2, 3] as const;
 
-export function SimulationPanelProvider({ children }: { children: ReactNode }) {
+/** `enabled` só para professores e administradores; para os demais, o selo SIMULAÇÃO não abre o painel. */
+export function SimulationPanelProvider({ enabled, children }: { enabled: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(false);
-  const api = useMemo(() => ({ open: () => setOpen(true) }), []);
+  const api = useMemo(() => (enabled ? { open: () => setOpen(true) } : null), [enabled]);
   const close = useCallback(() => setOpen(false), []);
 
   return (
     <SimulationPanelContext value={api}>
       {children}
-      <BottomSheet
-        open={open}
-        onClose={close}
-        title="Painel da simulação"
-        description="Controla o dispositivo virtual EC-001, que fala com a plataforma pela mesma API do ESP32. Nada aqui é dado real."
-      >
-        <SimulationPanelBody />
-      </BottomSheet>
+      {enabled && (
+        <BottomSheet
+          open={open}
+          onClose={close}
+          title="Painel da simulação"
+          description="Controla o dispositivo virtual EC-001, que fala com a plataforma pela mesma API do ESP32. Nada aqui é dado real."
+        >
+          <SimulationPanelBody />
+        </BottomSheet>
+      )}
     </SimulationPanelContext>
   );
 }

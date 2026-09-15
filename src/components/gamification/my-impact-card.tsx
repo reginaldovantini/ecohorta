@@ -5,12 +5,12 @@ import { AnimatedNumber } from "@/components/ui/animated-number";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Surface } from "@/components/ui/surface";
 import { getLevelProgress, LEVELS } from "@/lib/gamification/levels";
-import { summarizeProfile, type DemoProfile } from "@/lib/student/demo-profile";
+import { summarizeProfile, type ProfileState } from "@/lib/student/profile-store";
 import { formatDecimal } from "@/lib/utils/format";
 import { LevelBadge } from "./level-badge";
 
 /** Meu impacto: progresso de nível e o que as ações do usuário já geraram. */
-export function MyImpactCard({ profile }: { profile: DemoProfile }) {
+export function MyImpactCard({ profile }: { profile: Pick<ProfileState, "xp" | "history"> }) {
   const level = getLevelProgress(profile.xp);
   const summary = summarizeProfile(profile);
   const nextTitle = LEVELS[level.level]?.title;

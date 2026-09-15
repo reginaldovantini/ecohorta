@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence } from "motion/react";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   useCollectorSnapshot,
   useCollectorSource,
@@ -11,8 +11,8 @@ import {
 import { unlockedAchievements } from "@/lib/gamification/achievements";
 import { getMissionAvailability } from "@/lib/missions/availability";
 import { MISSION_CATALOG, type MissionDefinition } from "@/lib/missions/catalog";
-import { isTerminal, xpForExecution } from "@/lib/missions/execution";
-import { demoProfileStore } from "@/lib/student/demo-profile";
+import { isTerminal } from "@/lib/missions/execution";
+import { profileStore } from "@/lib/student/profile-store";
 import { createId } from "@/lib/utils/id";
 import { ExecutionOverlay } from "./execution-overlay";
 
@@ -42,7 +42,7 @@ export function MissionRunnerProvider({ children }: { children: ReactNode }) {
   const start = useCallback(
     (mission: MissionDefinition, collectorCode: string) => {
       if (mission.liters === null) return;
-      const profile = demoProfileStore.getSnapshot();
+      const profile = profileStore.getSnapshot();
       const execution: ActiveExecution = {
         executionId: createId(),
         commandId: createId(),
@@ -63,22 +63,12 @@ export function MissionRunnerProvider({ children }: { children: ReactNode }) {
     [source],
   );
 
-  // Registra o resultado medido uma única vez (o store ignora execuções repetidas).
+  // O servidor registra o resultado e o XP ao receber a confirmação do sensor; aqui só recarregamos o perfil.
+  const refreshedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (!active || !isTerminal(progress)) return;
-    demoProfileStore.record({
-      executionId: active.executionId,
-      missionId: active.mission.id,
-      commandId: active.commandId,
-      collectorCode: active.collectorCode,
-      status: progress.status,
-      targetLiters: progress.targetLiters,
-      deliveredLiters: progress.deliveredLiters,
-      xpAwarded: xpForExecution(active.mission, progress),
-      startedAt: progress.startedAt ?? progress.queuedAt,
-      finishedAt: progress.finishedAt ?? progress.queuedAt,
-      origin: progress.origin,
-    });
+    if (!active || !isTerminal(progress) || refreshedFor.current === active.executionId) return;
+    refreshedFor.current = active.executionId;
+    void profileStore.refresh();
   }, [active, progress]);
 
   const value = useMemo(() => ({ isRunning, start }), [isRunning, start]);

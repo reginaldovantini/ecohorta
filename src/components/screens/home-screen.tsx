@@ -13,7 +13,7 @@ import { RescueCard } from "@/components/missions/rescue-card";
 import { SimulationBadge } from "@/components/ui/simulation-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/users/avatar";
-import { useDemoProfile } from "@/hooks/use-demo-profile";
+import { useProfile } from "@/hooks/use-profile";
 import { getCollectorAlert } from "@/lib/collector/alerts";
 import { fillRatio } from "@/lib/collector/level-state";
 import { getLevelProgress } from "@/lib/gamification/levels";
@@ -30,7 +30,7 @@ const item = {
 export function HomeScreen() {
   const { collectorCode, snapshot, items, availableCount } = useMissionBoard();
   const { start } = useMissionRunner();
-  const profile = useDemoProfile();
+  const profile = useProfile();
 
   if (!collectorCode || !snapshot) return <HomeSkeleton />;
 
