@@ -1,0 +1,3 @@
+# Credenciais do dispositivo (Wi-Fi, token) — nunca versionar
+include/secrets.h
+.pio/
