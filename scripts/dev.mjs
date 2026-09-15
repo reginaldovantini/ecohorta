@@ -1,10 +1,7 @@
 // Sobe a plataforma (next dev) e o dispositivo virtual EC-001 juntos.
-// Gera um token aleatório para o dispositivo a cada execução — nenhuma credencial no código.
+// Credenciais vêm do .env.local (o token do dispositivo é gerado por `npm run db:seed`) — nenhuma no código.
 import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
 
-const token = process.env.IOT_SIMULATED_DEVICE_TOKEN || randomBytes(24).toString("hex");
-const env = { ...process.env, IOT_SIMULATED_DEVICE_TOKEN: token };
 const isWindows = process.platform === "win32";
 const children = [];
 let stopping = false;
@@ -23,8 +20,8 @@ function stop(code) {
 function run(name, args) {
   // No Windows o npx precisa do shell; o comando vai como texto único (argumentos fixos, sem entrada do usuário).
   const child = isWindows
-    ? spawn(`npx ${args.join(" ")}`, { env, stdio: "inherit", shell: true })
-    : spawn("npx", args, { env, stdio: "inherit" });
+    ? spawn(`npx ${args.join(" ")}`, { stdio: "inherit", shell: true })
+    : spawn("npx", args, { stdio: "inherit" });
   child.on("exit", (code) => {
     if (!stopping) {
       console.log(`[dev] ${name} encerrou (código ${code ?? 0}).`);

@@ -29,10 +29,10 @@ const STATE_FILE = path.join(process.cwd(), ".data", `virtual-${SIMULATED_COLLEC
 try {
   process.loadEnvFile(".env.local");
 } catch {
-  // .env.local é opcional: `npm run dev` fornece o token pelo ambiente.
+  // .env.local é opcional quando as variáveis vêm do ambiente (ex.: CI).
 }
 
-const API_URL = (process.env.ECOHORTA_API_URL ?? "http://localhost:3000").replace(/\/$/, "");
+const API_URL = (process.env.ECOHORTA_API_URL || "http://localhost:3000").replace(/\/$/, "");
 const TOKEN = process.env.IOT_SIMULATED_DEVICE_TOKEN;
 
 const log = (message: string) => console.log(`\x1b[35m[dispositivo virtual]\x1b[0m ${message}`);
@@ -55,7 +55,7 @@ async function loadVolume() {
 
 async function main() {
   if (!TOKEN) {
-    log("IOT_SIMULATED_DEVICE_TOKEN não definido. Use `npm run dev` (gera o token) ou defina-o no .env.local.");
+    log("IOT_SIMULATED_DEVICE_TOKEN não definido. Rode `npm run db:seed` (gera o token no .env.local e registra o hash no banco).");
     process.exit(1);
   }
 
@@ -164,7 +164,8 @@ async function main() {
         lastReportKey = reportKey;
         log(`comando ${current.command_id.slice(0, 8)} -> ${current.status} | ${current.delivered_liters.toFixed(2)} L${current.failure ? ` (${current.failure})` : ""}`);
       }
-      nextPollMs = device.isBusy() ? 250 : body.next_poll_ms;
+      // Mesmo comportamento esperado do ESP32: o servidor define o intervalo (mais curto durante uma liberação).
+      nextPollMs = body.next_poll_ms;
     } catch {
       if (connected) log("plataforma indisponível, tentando novamente…");
       connected = false;
