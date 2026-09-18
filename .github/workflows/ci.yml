@@ -1,0 +1,56 @@
+# Verificação automática a cada push e pull request na main:
+# - plataforma: typecheck, lint, testes (PostgreSQL real via PGlite) e build;
+# - firmware ESP32: testes do núcleo de sensores e compilação real para o ESP32 DevKit V1.
+# Não usa segredos: o firmware compila com o secrets.h de EXEMPLO (sem credenciais).
+# A publicação de firmware para OTA fica para a Fase C.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  app:
+    name: Plataforma (npm run check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+
+  firmware:
+    name: Firmware ESP32 (testes + compilação)
+    runs-on: ubuntu-latest
+    env:
+      # O platformio.ini aponta para C:/pio-build (caminho do Windows com acentos); no CI, pastas locais.
+      PLATFORMIO_BUILD_DIR: ${{ github.workspace }}/.pio-build
+      PLATFORMIO_LIBDEPS_DIR: ${{ github.workspace }}/.pio-libdeps
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: platformio-${{ runner.os }}-${{ hashFiles('firmware/platformio.ini') }}
+      - run: pip install platformio
+      - name: secrets.h de exemplo (sem credenciais reais)
+        run: cp firmware/include/secrets.example.h firmware/include/secrets.h
+      - name: Testes do núcleo de sensores
+        run: pio test -d firmware -e native_test
+      - name: Compilação para o ESP32 DevKit V1
+        run: pio run -d firmware -e esp32dev

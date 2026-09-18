@@ -118,7 +118,7 @@ Abra http://localhost:3000 e entre em `/entrar`.
 | `npm run typecheck` | Gera os tipos de rotas e verifica o TypeScript |
 | `npm run lint` | ESLint |
 | `npm run test` | Testes (Vitest; banco e RLS com PostgreSQL real via PGlite) |
-| `npm run check` | typecheck + lint + test + build. Rode antes de cada commit |
+| `npm run check` | typecheck + lint + test + build. Rode antes de cada commit (o GitHub Actions roda o mesmo a cada push) |
 | `npm run screenshot -- /rota` | Captura telas em 360/390/412 px (requer `npm run dev` e Edge ou Chrome) |
 | `npm run icons` | Gera os ícones PNG do PWA a partir de `src/app/icon.svg` |
 | `pio run -d firmware` | Compila o firmware do ESP32 DevKit V1 (PlatformIO; `-t upload` grava na placa) |
@@ -176,6 +176,7 @@ scripts/            administração e teste de ponta a ponta
 tools/              dispositivo virtual
 firmware/           ESP32 DevKit V1 (PlatformIO): drivers VL53L0X e VL53L1X, testes do núcleo
 docs/               ARCHITECTURE.md · BANCO_DE_DADOS.md · HARDWARE.md · CALIBRACAO.md
+.github/workflows/  CI: npm run check + testes e compilação do firmware a cada push
 ```
 
 Veja os detalhes em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
