@@ -1,4 +1,4 @@
-// Sobe a plataforma (next dev) e o dispositivo virtual EC-001 juntos.
+// Sobe a plataforma (next dev) e o dispositivo virtual (captador SIM-001) juntos.
 // Credenciais vêm do .env.local (o token do dispositivo é gerado por `npm run db:seed`) — nenhuma no código.
 import { spawn } from "node:child_process";
 

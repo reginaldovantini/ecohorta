@@ -2,34 +2,41 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "esp32-0.1.0"
+#define FW_VERSION "esp32-0.4.0"
+
+// ---------- Sensor de distância ----------
+// O MODELO (VL53L0X ou VL53L1X) NÃO é definido aqui: vem da plataforma (Administração →
+// Captadores → Ligações), na resposta de cada telemetria, e fica guardado na memória não volátil.
+// Os dois drivers estão no firmware; a ligação física é a mesma para os dois.
 
 // ---------- Pinagem (CONFIRMAR na placa antes de ligar) ----------
-// ESP32-C3 Super Mini: I2C padrão do Arduino em GPIO8 (SDA) e GPIO9 (SCL).
-// Atenção: na maioria das Super Mini o GPIO8 também aciona o LED azul e o GPIO9 é o botão BOOT.
-static const int PIN_I2C_SDA = 8;
-static const int PIN_I2C_SCL = 9;
+// ESP32 DevKit V1 (ESP32 clássico, ESP32-WROOM-32): I2C padrão do Arduino em GPIO21 (SDA) e GPIO22 (SCL),
+// marcados D21/D22 (ou G21/G22, IO21/IO22) na placa. Não são pinos de strapping nem do flash.
+// Nunca use GPIO6–11 (flash interno); evite os pinos de strapping GPIO0, 2, 5, 12 e 15.
+// Cabo de 4 vias (~50 cm instalado): VCC, GND, SDA, SCL. XSHUT e GPIO1 do módulo não são usados.
+static const int PIN_I2C_SDA = 21;
+static const int PIN_I2C_SCL = 22;
+// 100 kHz, comum aos dois sensores, para o cabo de ~50 cm até a tampa.
+// NÃO aumentar para 400 kHz sem validação física (registrar o ensaio em docs/HARDWARE.md).
+static const uint32_t I2C_CLOCK_HZ = 100000;
 
-// ---------- Sensor ----------
+// ---------- Leitura ----------
+// Orçamento de tempo por amostra (os dois sensores): maior = menos ruído, leitura mais lenta.
 static const uint16_t SENSOR_TIMING_BUDGET_MS = 50;
-static const uint8_t SAMPLES_PER_READING = 9;   // mediana de N leituras
-static const uint16_t MIN_VALID_MM = 30;        // faixa física do captador (ajustar após medir)
-static const uint16_t MAX_VALID_MM = 2000;
+static const uint8_t SAMPLES_PER_READING = 9;  // mediana de N amostras por telemetria
+// Faixa aceita: 40 mm até o fundo do tubo com folga (tubo de ~1,80 m). O firmware também
+// descarta o que passar do alcance documentado do sensor em uso (VL53L0X: 2000 mm).
+static const uint16_t MIN_VALID_MM = 40;
+static const uint16_t MAX_VALID_MM = 3000;
+// Somente VL53L1X — região de interesse (ROI): 16x16 = campo de visão completo (~27°). Um ROI menor
+// (mínimo 4x4) estreita o cone dentro do tubo. É um PARÂMETRO DE ENSAIO, enviado em cada leitura
+// para análise — não uma correção. Só altere registrando o ensaio (docs/HARDWARE.md, protocolo).
+static const uint8_t SENSOR_ROI_WIDTH = 16;
+static const uint8_t SENSOR_ROI_HEIGHT = 16;
 
-// ---------- Calibração distância → volume ----------
-// SUBSTITUIR pelos pares medidos no captador (docs/HARDWARE.md §4), em ordem de distância CRESCENTE.
-// Com menos de 2 pontos, o firmware envia apenas a distância e o status CALIBRATING (volume 0):
-// nenhum volume inventado é apresentado como real.
-struct CalibrationPoint {
-  float distanceMm;
-  float volumeLiters;
-};
-static const CalibrationPoint CALIBRATION[] = {
-  // {60.0f, 12.0f},   // exemplo: cheio
-  // {1589.0f, 0.0f},  // exemplo: vazio
-  {0.0f, 0.0f},
-};
-static const size_t CALIBRATION_COUNT = 0;  // atualizar para o número de pontos reais
+// ---------- Volume ----------
+// O firmware NÃO converte distância em volume. A calibração experimental é feita no app
+// (Administração → Captadores → Calibração de volume) e o servidor calcula os litros.
 
 // ---------- Comunicação ----------
 static const uint32_t DEFAULT_POLL_MS = 3000;

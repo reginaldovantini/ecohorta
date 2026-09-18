@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils/cn";
  * Representação do captador físico: TUBO VERTICAL de vidro, em perspectiva leve.
  *
  * Tudo que se move corresponde a um estado real da telemetria:
- *   nível da água      ← volume medido pelo VL53L1X
+ *   nível da água      ← volume medido pelo sensor de distância
  *   feixe do sensor    ← distância até a superfície
  *   gotas na entrada   ← nível subindo (ar-condicionado produzindo condensado)
  *   fluxo na saída     ← válvula aberta
@@ -244,7 +244,7 @@ export function CollectorTank({
       <rect x="31" y="48" width="4" height="152" rx="2" fill="#ffffff" opacity="0.16" />
       <rect x="38" y="56" width="1.6" height="110" rx="0.8" fill="#ffffff" opacity="0.1" />
 
-      {/* Sensor VL53L1X e feixe até a superfície */}
+      {/* Sensor de distância e feixe até a superfície */}
       <motion.line
         x1={CENTER_X}
         x2={CENTER_X}

@@ -56,7 +56,8 @@ export async function createTestDatabase() {
 export async function resetTestDatabase(db: Queryable) {
   await db.query(
     `truncate table public.xp_transactions, public.mission_executions, public.device_commands, public.telemetry,
-     public.collector_state, public.devices, public.collectors, public.guardian_consents, public.person_records,
+     public.calibration_validations, public.sensor_observations, public.collector_hardware_changes,
+     public.collector_state, public.collector_calibrations, public.devices, public.collectors, public.guardian_consents, public.person_records,
      public.profiles, public.school_classes, public.schools, auth.users restart identity cascade`,
   );
   await seedTestSchool(db);
@@ -121,8 +122,8 @@ export async function seedTestSchool(db: Queryable) {
     [IDS.student, IDS.student2, IDS.teacher, IDS.staff, IDS.otherStudent],
   );
   await db.query(
-    `insert into collectors (id, school_id, code, name, location, capacity_liters, reserve_liters) values
-     ($1, $2, 'EC-001', 'EcoCaptador', 'Horta', 12, 0.5), ($3, $4, 'EC-900', 'Captador Externo', 'Pátio', 12, 0.5)`,
+    `insert into collectors (id, school_id, code, name, location, capacity_liters, reserve_liters, nominal_diameter_mm, nominal_useful_height_mm) values
+     ($1, $2, 'EC-001', 'EcoCaptador', 'Horta', 12, 0.5, 100, 1500), ($3, $4, 'EC-900', 'Captador Externo', 'Pátio', 12, 0.5, null, null)`,
     [IDS.collector, IDS.school, IDS.otherCollector, IDS.otherSchool],
   );
   await db.query(

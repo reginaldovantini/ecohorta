@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleAlert, Droplets, History, LogOut, Sparkles, Target } from "lucide-react";
+import { ChevronRight, CircleAlert, Droplets, History, LogOut, Ruler, Sparkles, Target } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AchievementBadge } from "@/components/gamification/achievement-badge";
@@ -142,6 +142,21 @@ export function ProfileScreen() {
           </ul>
         )}
       </section>
+
+      {(profile.role === "teacher" || profile.role === "admin") && (
+        <Link href="/admin/captadores" className="block rounded-card active:scale-[0.99] transition-transform">
+          <Surface className="flex items-center gap-3 p-4">
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-aqua-400/15 text-aqua-300">
+              <Ruler className="size-5" aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-display font-semibold text-mist-50">Administração</span>
+              <span className="block text-xs text-mist-400">Captadores e calibração de volume</span>
+            </span>
+            <ChevronRight className="size-5 shrink-0 text-mist-400" aria-hidden />
+          </Surface>
+        </Link>
+      )}
 
       <div className="grid gap-2">
         <Button

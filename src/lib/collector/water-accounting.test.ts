@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { createAccountingState, getTotals, getTrend, ingestReading, registerReuse } from "./water-accounting";
+import {
+  accountingFromJson,
+  createAccountingState,
+  getTotals,
+  getTrend,
+  ingestReading,
+  rebaseVolume,
+  registerReuse,
+} from "./water-accounting";
 
 const CAPACITY = 12;
 
@@ -70,6 +78,21 @@ describe("contabilidade hídrica", () => {
     const before = getTotals(state, volume).capturedLiters;
     ingestReading(state, { uptimeMs: 60 * 60_000 + 5_000, volumeLiters: 2, capacityLiters: CAPACITY, dispensing: false });
     expect(getTotals(state, 2).capturedLiters).toBeCloseTo(before, 2);
+  });
+
+  it("troca de calibração não cria nem apaga água captada", () => {
+    const { state, volume } = feed(undefined, { durationMs: 30 * 60_000, stepMs: 5_000, startLiters: 6, rateLph: 1 });
+    registerReuse(state, 1);
+    const before = getTotals(state, volume - 1);
+
+    // Nova calibração: o mesmo nível físico passa a valer 0,4 L a menos.
+    rebaseVolume(state, volume - 1, volume - 1.4);
+    const after = getTotals(state, volume - 1.4);
+    expect(after.capturedLiters).toBeCloseTo(before.capturedLiters, 9);
+    expect(after.reusedLiters).toBe(1);
+    expect(state.samples).toEqual([]);
+    expect(accountingFromJson(JSON.stringify(state))).toEqual(state);
+    expect(accountingFromJson(null).reusedLiters).toBe(0);
   });
 
   it("recomeça a tendência quando o dispositivo reinicia", () => {

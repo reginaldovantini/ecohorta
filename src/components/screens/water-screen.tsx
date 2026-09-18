@@ -3,6 +3,7 @@
 import { CollectorLiveCard } from "@/components/collector/collector-live-card";
 import { usePrimaryCollectorCode, useCollectorSnapshot } from "@/components/collector/collector-source";
 import { WaterBalance } from "@/components/collector/water-balance";
+import { CollectorSwitcher } from "@/components/collector/collector-switcher";
 import { ScreenHeader } from "@/components/student/screen-header";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Surface } from "@/components/ui/surface";
@@ -36,7 +37,11 @@ export function WaterScreen() {
 
   const { info, telemetry, totals } = snapshot;
   const rows = [
-    { label: "Distância do sensor", value: telemetry.distanceMm === null ? "—" : `${telemetry.distanceMm} mm`, mono: true },
+    {
+      label: "Distância do sensor",
+      value: telemetry.distanceMm === null ? "—" : `${formatDecimal(telemetry.distanceMm, 0)} mm`,
+      mono: true,
+    },
     { label: "Livre para missões", value: formatLiters(availableLiters(telemetry.volumeLiters, info.reserveLiters)) },
     { label: "Reserva mínima", value: formatLiters(info.reserveLiters) },
     {
@@ -50,6 +55,22 @@ export function WaterScreen() {
     },
     { label: "Dispositivo", value: telemetry.deviceId, mono: true },
     { label: "Tipo de válvula", value: VALVE_KIND[info.valveKind] },
+    {
+      label: "Altura da água",
+      value: telemetry.heightMm === null || telemetry.heightMm === undefined ? "—" : `${formatDecimal(telemetry.heightMm, 0)} mm`,
+      mono: true,
+    },
+    {
+      label: "Volume calculado por",
+      value:
+        snapshot.calibration?.appliesToDevice
+          ? `Calibração v${snapshot.calibration.version}`
+          : snapshot.calibration
+            ? "Recalibrar (outro dispositivo)"
+            : telemetry.volumeSource === "none"
+              ? "Sem calibração"
+              : "Dispositivo",
+    },
   ];
 
   return (
@@ -59,7 +80,17 @@ export function WaterScreen() {
         title={info.code}
         subtitle="Leituras do sensor de nível em tempo real"
         isSimulation={telemetry.origin === "simulation"}
+        isReal={telemetry.origin === "device"}
       />
+
+      <CollectorSwitcher />
+
+      {snapshot.benchMode && (
+        <Surface tone="ember" className="p-4 text-sm leading-relaxed text-mist-300" role="status">
+          <p className="font-display font-semibold text-mist-50">Ensaio de bancada em andamento</p>
+          A equipe está testando o sensor. As missões voltam ao final do ensaio e a água colocada à mão não entra no balanço.
+        </Surface>
+      )}
 
       <CollectorLiveCard snapshot={snapshot} />
 

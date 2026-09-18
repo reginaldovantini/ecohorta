@@ -30,7 +30,7 @@ export function createVolumeConverter(points: readonly CalibrationPoint[]) {
   };
 }
 
-/** Mediana — o mesmo filtro que o firmware aplica às leituras do VL53L1X. */
+/** Mediana — o mesmo filtro que o firmware aplica às leituras do sensor de distância. */
 export function median(values: readonly number[]): number {
   if (values.length === 0) return Number.NaN;
   const sorted = [...values].sort((a, b) => a - b);

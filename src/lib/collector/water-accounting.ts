@@ -127,6 +127,24 @@ export function ingestReading(state: AccountingState, reading: Reading): Account
   return state;
 }
 
+/** Restaura o estado salvo no banco (JSON); estado novo se ausente ou inválido. */
+export function accountingFromJson(value: unknown): AccountingState {
+  const parsed = (typeof value === "string" ? JSON.parse(value) : value) as Partial<AccountingState> | null | undefined;
+  return parsed && typeof parsed.reusedLiters === "number" ? (parsed as AccountingState) : createAccountingState();
+}
+
+/**
+ * Troca de calibração: o mesmo nível físico passa a valer outro volume.
+ * A base acompanha a diferença para que a mudança de conversão não crie nem
+ * apague água captada; a tendência recomeça.
+ */
+export function rebaseVolume(state: AccountingState, previousVolumeLiters: number, newVolumeLiters: number) {
+  state.baselineLiters += newVolumeLiters - previousVolumeLiters;
+  state.samples = [];
+  state.lastVolumeLiters = newVolumeLiters;
+  return state;
+}
+
 /** Registra reúso medido e confirmado de uma liberação. */
 export function registerReuse(state: AccountingState, liters: number) {
   state.reusedLiters += Math.max(0, liters);

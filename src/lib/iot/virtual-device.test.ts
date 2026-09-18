@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceCommand } from "./api-schema";
+import { distanceFromVolume, measuredReuse, volumeFromDistance } from "@/lib/collector/volume-calibration";
 import { createVolumeConverter, median } from "./calibration";
-import { createVirtualDevice, type PhysicsSettings, type VirtualDeviceConfig } from "./virtual-device";
+import { createVirtualDevice, virtualVolumeModel, type PhysicsSettings, type VirtualDeviceConfig } from "./virtual-device";
 
 function mulberry32(seed: number) {
   let state = seed;
@@ -143,6 +144,62 @@ describe("firmware virtual — sensor", () => {
   });
 });
 
+describe("firmware virtual — distância e conversão compartilhada", () => {
+  const model = virtualVolumeModel(config);
+
+  it("converte a distância medida com a mesma função do servidor", () => {
+    const { device } = setup(7.42);
+    const reading = device.reading();
+    expect(reading.volumeLiters).toBeCloseTo(volumeFromDistance(model, reading.distanceMm)!.volumeLiters, 1);
+    expect(model.constantLitersPerMm).toBeCloseTo(12 / 1529, 12);
+  });
+
+  it("ajusta volume e distância para testar a calibração", () => {
+    const { device, run } = setup(5);
+    expect(device.setVolume(1)).toBe(true);
+    run(2000);
+    expect(Math.abs(device.reading().distanceMm - distanceFromVolume(model, 1))).toBeLessThanOrEqual(3);
+
+    expect(device.setDistance(1236)).toBe(true);
+    run(2000);
+    expect(Math.abs(device.reading().distanceMm - 1236)).toBeLessThanOrEqual(3);
+    expect(device.reading().volumeLiters).toBeCloseTo((1589 - 1236) * (12 / 1529), 1);
+
+    // Fora da faixa física do tubo: limitado ao vazio e ao dreno.
+    device.setDistance(5000);
+    run(2000);
+    expect(device.reading().volumeLiters).toBeLessThan(0.05);
+  });
+
+  it("informa as distâncias inicial e final da liberação", () => {
+    const { device, runUntilDone } = setup(8);
+    device.receive(dispense("a", 2));
+    runUntilDone();
+    const report = device.commandReport()!;
+    expect(report.start_distance_mm).toBeCloseTo(distanceFromVolume(model, 8), -1);
+    const reuse = measuredReuse(model, report.start_distance_mm, report.end_distance_mm)!;
+    expect(Math.abs(reuse.reusedLiters - report.delivered_liters)).toBeLessThan(0.05);
+  });
+
+  it("envia diagnóstico da leitura no mesmo formato do firmware", () => {
+    const { device } = setup(6);
+    const { diagnostics } = device.reading();
+    expect(diagnostics.samples).toBe(9);
+    expect(diagnostics.valid_samples).toBeLessThanOrEqual(diagnostics.samples!);
+    expect(diagnostics.min_mm!).toBeLessThanOrEqual(diagnostics.max_mm!);
+    const counted = Object.values(diagnostics.status_counts!).reduce((sum, count) => sum + count, 0);
+    expect(counted).toBe(diagnostics.samples);
+    expect(diagnostics.signal_rate_mcps).toBeNull(); // não simulado: não se inventa sinal
+  });
+
+  it("recusa ajustes durante uma liberação", () => {
+    const { device } = setup(8);
+    device.receive(dispense("a", 2));
+    expect(device.setVolume(1)).toBe(false);
+    expect(device.setDistance(900)).toBe(false);
+  });
+});
+
 describe("calibração", () => {
   const convert = createVolumeConverter([
     { distanceMm: 1589, volumeLiters: 0 },
@@ -168,5 +225,43 @@ describe("calibração", () => {
   it("calcula a mediana", () => {
     expect(median([5, 1, 900, 3, 4])).toBe(4);
     expect(median([1, 2, 3, 4])).toBe(2.5);
+  });
+});
+
+describe("firmware virtual — sensor configurado na plataforma", () => {
+  it("usa o driver do sensor configurado (VL53L1X ou VL53L0X), como o ESP32", () => {
+    const { device, run } = setup(6);
+    expect(device.sensorModel()).toBe("VL53L1X");
+    expect(device.reading().diagnostics).toMatchObject({
+      sensor_state: "ready",
+      model_id: "0xEACC",
+      i2c_ack: true,
+      i2c_clock_hz: 100_000,
+      distance_mode: "long",
+      roi: "16x16",
+    });
+
+    expect(device.setSensorModel("VL53L0X")).toBe(true);
+    expect(device.setSensorModel("VL53L0X")).toBe(false); // mesmo driver: nada muda
+    run(2000);
+    const { diagnostics, distanceMm } = device.reading();
+    expect(device.sensorModel()).toBe("VL53L0X");
+    expect(diagnostics).toMatchObject({ sensor_state: "ready", model_id: "0xEE", distance_mode: "long_range" });
+    expect(diagnostics.roi).toBeUndefined(); // o VL53L0X não tem ROI
+    expect(Object.keys(diagnostics.status_counts!)).toEqual(["Measured", "OutOfConfiguredRange"]);
+    // A superfície física é a mesma: só o driver mudou.
+    expect(distanceMm).toBeCloseTo(distanceFromVolume(virtualVolumeModel(config), 6), -1);
+  });
+
+  it("com o VL53L0X, leituras além do alcance documentado (2 m) são descartadas", () => {
+    const deep: VirtualDeviceConfig = { ...config, sensorToFullMm: 600, usableHeightMm: 1600 }; // tubo vazio a 2,2 m
+    const l0x = createVirtualDevice(deep, { volumeLiters: 0, settings: baseSettings, sensorModel: "VL53L0X" }, { random: mulberry32(3) });
+    const l1x = createVirtualDevice(deep, { volumeLiters: 0, settings: baseSettings, sensorModel: "VL53L1X" }, { random: mulberry32(3) });
+    for (let i = 0; i < 20; i++) {
+      l0x.advance(100, 100);
+      l1x.advance(100, 100);
+    }
+    expect(l0x.reading().diagnostics.valid_samples).toBe(0);
+    expect(l1x.reading().diagnostics.valid_samples).toBeGreaterThan(0);
   });
 });

@@ -1,6 +1,8 @@
+import { DEFAULT_DISTANCE_SENSOR, DISTANCE_SENSORS, SENSOR_WIRING, type DistanceSensorModel } from "@/lib/collector/distance-sensors";
+import { distanceFromVolume, modelFromGeometry, volumeFromDistance } from "@/lib/collector/volume-calibration";
 import { availableLiters } from "@/lib/collector/water";
-import type { CommandReport, DeviceCommand } from "./api-schema";
-import { createVolumeConverter, median } from "./calibration";
+import type { CommandReport, DeviceCommand, SensorDiagnostics } from "./api-schema";
+import { median } from "./calibration";
 import type { DeviceFailure, DeviceStatus, ValveState } from "./types";
 
 /*
@@ -12,12 +14,17 @@ import type { DeviceFailure, DeviceStatus, ValveState } from "./types";
  * Física: entrada de condensado (L/h); saída por gravidade com vazão ∝ √altura
  * (Torricelli); acima da capacidade a água sai pelo dreno de segurança.
  *
- * Firmware: leituras ruidosas → faixa física → mediana → calibração → volume;
+ * Firmware: driver do sensor configurado na plataforma (VL53L0X ou VL53L1X, recebido na
+ * resposta da telemetria, como no ESP32) → leituras ruidosas → faixa física e alcance
+ * documentado do sensor → mediana → volume pela MESMA conversão distância → volume do
+ * servidor (V = k × H, src/lib/collector/volume-calibration.ts);
  * válvula fechada pelo volume MEDIDO com antecipação da latência; NO_FLOW,
  * TIMEOUT, cancelamento e comandos idempotentes por command_id.
  *
  * Tempo simulado (física) pode ser acelerado; a estabilização da superfície
  * usa tempo real para que a etapa de medição seja perceptível.
+ *
+ * Na simulação, o sensor "instalado" é sempre o configurado: a troca física é instantânea.
  */
 
 export interface VirtualDeviceConfig {
@@ -54,6 +61,8 @@ export interface DeviceReading {
   volumeLiters: number;
   valve: ValveState;
   status: DeviceStatus;
+  /** Diagnóstico da leitura no mesmo formato do firmware (amostras válidas, dispersão, status). */
+  diagnostics: SensorDiagnostics;
 }
 
 interface ActiveDispense {
@@ -74,19 +83,33 @@ const NO_FLOW_MIN_LITERS = 0.05;
 const MS_PER_HOUR = 3_600_000;
 const MAX_REMEMBERED_COMMANDS = 50;
 
+const round1 = (value: number) => Math.round(value * 10) / 10;
 const round3 = (value: number) => Math.round(value * 1000) / 1000;
+
+/** Sensor simulado até a plataforma informar a configuração do captador. */
+export const VIRTUAL_SENSOR_MODEL: DistanceSensorModel = DEFAULT_DISTANCE_SENSOR;
+
+/** Identificação que cada driver lê no registrador do sensor (a mesma conferida pelo firmware). */
+const MODEL_ID: Record<DistanceSensorModel, string> = { VL53L0X: "0xEE", VL53L1X: "0xEACC" };
+
+/** Geometria "verdadeira" do captador virtual: zero no fundo útil, máximo no dreno. */
+export function virtualVolumeModel(config: VirtualDeviceConfig) {
+  return modelFromGeometry({
+    zeroDistanceMm: config.sensorToFullMm + config.usableHeightMm,
+    maximumDistanceMm: config.sensorToFullMm,
+    capacityLiters: config.capacityLiters,
+  });
+}
 
 export function createVirtualDevice(
   config: VirtualDeviceConfig,
-  initial: { volumeLiters: number; settings: PhysicsSettings },
+  initial: { volumeLiters: number; settings: PhysicsSettings; sensorModel?: DistanceSensorModel },
   deps: { random?: () => number } = {},
 ) {
   const random = deps.random ?? Math.random;
+  let sensorModel: DistanceSensorModel = initial.sensorModel ?? VIRTUAL_SENSOR_MODEL;
   const capacity = config.capacityLiters;
-  const toVolume = createVolumeConverter([
-    { distanceMm: config.sensorToFullMm, volumeLiters: capacity },
-    { distanceMm: config.sensorToFullMm + config.usableHeightMm, volumeLiters: 0 },
-  ]);
+  const model = virtualVolumeModel(config);
   const minDistance = config.sensorToFullMm - 30;
   const maxDistance = config.sensorToFullMm + config.usableHeightMm + 30;
 
@@ -97,6 +120,8 @@ export function createVirtualDevice(
   let valveOpen = false;
   let valveCloseAt: number | null = null;
   let readings: number[] = [];
+  /** Últimas tentativas de leitura do sensor: `true` = dentro da faixa física. */
+  let attempts: boolean[] = [];
   let distanceMm = distanceFor(trueVolume);
   let measured = trueVolume;
   let active: ActiveDispense | null = null;
@@ -105,7 +130,7 @@ export function createVirtualDevice(
   const executed: string[] = [];
 
   function distanceFor(volume: number) {
-    return config.sensorToFullMm + (1 - volume / capacity) * config.usableHeightMm;
+    return distanceFromVolume(model, volume);
   }
 
   function gaussian() {
@@ -117,11 +142,15 @@ export function createVirtualDevice(
   function readSensor() {
     let raw = distanceFor(trueVolume) + gaussian() * config.sensorNoiseMm;
     if (random() < 0.005) raw += 200 + random() * 900; // reflexo espúrio na superfície
-    if (raw < minDistance || raw > maxDistance) return; // fora da faixa física: descartada
+    // Faixa física do tubo e alcance documentado do sensor em uso (VL53L0X: 2 m).
+    const valid = raw >= minDistance && raw <= maxDistance && raw <= DISTANCE_SENSORS[sensorModel].documentedMaxRangeMm;
+    attempts.push(valid);
+    if (attempts.length > SENSOR_WINDOW) attempts.shift();
+    if (!valid) return; // fora da faixa física: descartada
     readings.push(raw);
     if (readings.length > SENSOR_WINDOW) readings.shift();
     distanceMm = median(readings);
-    measured = toVolume(distanceMm);
+    measured = volumeFromDistance(model, distanceMm)?.volumeLiters ?? measured;
   }
 
   function closeValve() {
@@ -135,6 +164,7 @@ export function createVirtualDevice(
       status,
       delivered_liters: round3(delivered),
       end_volume_liters: round3(measured),
+      end_distance_mm: round1(distanceMm),
       failure,
       finished_uptime_ms: Math.round(simClock),
     };
@@ -176,6 +206,38 @@ export function createVirtualDevice(
     finish(active.cancelled ? "CANCELLED" : "COMPLETED", delivered, null);
   }
 
+  function setVolume(liters: number) {
+    if (active) return false;
+    trueVolume = Math.min(capacity, Math.max(0, liters));
+    readings = [];
+    attempts = [];
+    for (let i = 0; i < SENSOR_WINDOW; i++) readSensor();
+    return true;
+  }
+
+  function diagnostics(): SensorDiagnostics {
+    const validSamples = attempts.filter(Boolean).length;
+    // Mesmos nomes de status que cada driver do firmware informa.
+    const [ok, rejected] = sensorModel === "VL53L1X" ? ["RangeValid", "OutOfBoundsFail"] : ["Measured", "OutOfConfiguredRange"];
+    return {
+      sensor_state: "ready",
+      model_id: MODEL_ID[sensorModel],
+      i2c_ack: true,
+      i2c_clock_hz: SENSOR_WIRING.i2cClockHz,
+      samples: attempts.length,
+      valid_samples: validSamples,
+      min_mm: readings.length ? Math.round(Math.min(...readings)) : null,
+      max_mm: readings.length ? Math.round(Math.max(...readings)) : null,
+      signal_rate_mcps: null, // não simulado
+      ambient_rate_mcps: null,
+      status_counts: { [ok]: validSamples, [rejected]: attempts.length - validSamples },
+      last_status: attempts.length === 0 ? null : attempts[attempts.length - 1] ? ok : rejected,
+      timing_budget_ms: 50,
+      distance_mode: sensorModel === "VL53L1X" ? "long" : "long_range",
+      ...(sensorModel === "VL53L1X" ? { roi: "16x16" } : {}),
+    };
+  }
+
   function step(requestedSimMs: number, realMs: number) {
     // A estabilização da superfície acontece em tempo real, mesmo com a simulação
     // acelerada: senão o condensado de minutos simulados distorceria a medição final.
@@ -213,6 +275,7 @@ export function createVirtualDevice(
         volumeLiters: round3(measured),
         valve: valveOpen ? "open" : "closed",
         status: active ? "DISPENSING" : "READY",
+        diagnostics: diagnostics(),
       };
     },
 
@@ -239,6 +302,8 @@ export function createVirtualDevice(
           delivered_liters: 0,
           start_volume_liters: round3(measured),
           end_volume_liters: round3(measured),
+          start_distance_mm: round1(distanceMm),
+          end_distance_mm: round1(distanceMm),
           failure: "INSUFFICIENT_WATER",
           started_uptime_ms: null,
           finished_uptime_ms: Math.round(simClock),
@@ -266,23 +331,44 @@ export function createVirtualDevice(
         delivered_liters: 0,
         start_volume_liters: round3(measured),
         end_volume_liters: null,
+        start_distance_mm: round1(distanceMm),
+        end_distance_mm: null,
         failure: null,
         started_uptime_ms: Math.round(simClock),
         finished_uptime_ms: null,
       };
     },
 
-    /** Ajuste de nível pelo painel da simulação. Recusado durante uma liberação. */
+    /** Ajuste de volume pelo painel da simulação (ex.: etapas da calibração). Recusado durante uma liberação. */
+    setVolume,
+
+    /** Ajuste de nível em fração da capacidade. */
     setLevel(ratio: number) {
-      if (active) return false;
-      trueVolume = Math.min(1, Math.max(0, ratio)) * capacity;
-      readings = [];
-      for (let i = 0; i < SENSOR_WINDOW; i++) readSensor();
-      return true;
+      return setVolume(Math.min(1, Math.max(0, ratio)) * capacity);
+    },
+
+    /** Coloca a superfície na distância pedida do sensor (limitada à faixa física do tubo). */
+    setDistance(distanceMm: number) {
+      return setVolume((model.zeroDistanceMm - distanceMm) * model.constantLitersPerMm);
     },
 
     updateSettings(patch: Partial<PhysicsSettings>) {
       settings = { ...settings, ...patch };
+    },
+
+    /** Driver em uso (o que o firmware informa em `sensor_model`). */
+    sensorModel() {
+      return sensorModel;
+    },
+
+    /** Aplica o sensor configurado na plataforma. Trocar de driver recomeça as leituras. */
+    setSensorModel(model: DistanceSensorModel) {
+      if (model === sensorModel) return false;
+      sensorModel = model;
+      readings = [];
+      attempts = [];
+      for (let i = 0; i < SENSOR_WINDOW; i++) readSensor();
+      return true;
     },
 
     isBusy() {

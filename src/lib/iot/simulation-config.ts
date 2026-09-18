@@ -2,7 +2,8 @@ import type { CollectorInfo, SimulationSettings } from "./types";
 import type { VirtualDeviceConfig } from "./virtual-device";
 
 /*
- * Captador EC-001 em modo SIMULAÇÃO (is_simulated = true).
+ * Captador SIM-001 em modo SIMULAÇÃO (is_simulated = true).
+ * EC-001 é o captador FÍSICO (ESP32 + VL53L0X ou VL53L1X); SIM-001 existe só para testes e demonstração.
  *
  * Os valores são plausíveis para um tubo vertical estreito (DN100 ≈ 78,5 cm²
  * de seção: 12 L ≈ 1,53 m de coluna), mas NÃO são medições. Substituir pela
@@ -10,10 +11,10 @@ import type { VirtualDeviceConfig } from "./virtual-device";
  */
 
 export const SIMULATED_COLLECTOR: CollectorInfo = {
-  id: "sim-ec-001",
-  code: "EC-001",
-  name: "EcoCaptador",
-  location: "Horta",
+  id: "sim-001",
+  code: "SIM-001",
+  name: "Captador virtual",
+  location: "Simulação",
   capacityLiters: 12,
   reserveLiters: 0.5,
   valveKind: "undefined",

@@ -9,6 +9,7 @@ import { MissionArt } from "@/components/missions/mission-art";
 import { MissionCard } from "@/components/missions/mission-card";
 import { useMissionBoard, useMissionRunner } from "@/components/missions/mission-runner";
 import { RescueCard } from "@/components/missions/rescue-card";
+import { CollectorSwitcher } from "@/components/collector/collector-switcher";
 import { ScreenHeader } from "@/components/student/screen-header";
 import { Chip } from "@/components/ui/chip";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -87,7 +88,10 @@ export function MissionsScreen() {
         title="Missões"
         subtitle={`${availableCount + (plan ? 1 : 0)} disponíveis · ${formatLiters(free)} livres para uso`}
         isSimulation={snapshot.telemetry.origin === "simulation"}
+        isReal={snapshot.telemetry.origin === "device"}
       />
+
+      <CollectorSwitcher />
 
       <div role="tablist" aria-label="Situação das missões" className="grid grid-cols-3 gap-1 rounded-2xl bg-white/[0.05] p-1">
         {TABS.map((item) => {

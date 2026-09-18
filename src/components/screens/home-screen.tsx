@@ -10,7 +10,8 @@ import { MyImpactCard } from "@/components/gamification/my-impact-card";
 import { MissionCard } from "@/components/missions/mission-card";
 import { useMissionBoard, useMissionRunner } from "@/components/missions/mission-runner";
 import { RescueCard } from "@/components/missions/rescue-card";
-import { SimulationBadge } from "@/components/ui/simulation-badge";
+import { CollectorSwitcher } from "@/components/collector/collector-switcher";
+import { OriginBadge } from "@/components/ui/real-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/users/avatar";
 import { useProfile } from "@/hooks/use-profile";
@@ -61,8 +62,10 @@ export function HomeScreen() {
             {identity && identity.role !== "student" ? ` · ${ROLE_LABEL[identity.role]}` : ""}
           </p>
         </div>
-        {snapshot.telemetry.origin === "simulation" && <SimulationBadge />}
+        <OriginBadge origin={snapshot.telemetry.origin} />
       </motion.header>
+
+      <CollectorSwitcher />
 
       <motion.div variants={item}>
         <CollectorHero snapshot={snapshot} href="/agua" />

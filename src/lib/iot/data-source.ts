@@ -6,7 +6,11 @@ import type {
   SimulationSettings,
 } from "./types";
 
-export type SimulationAction = { type: "set_level"; ratio: number } | { type: "reset" };
+export type SimulationAction =
+  | { type: "set_level"; ratio: number }
+  | { type: "set_volume"; liters: number }
+  | { type: "set_distance"; distance_mm: number }
+  | { type: "reset" };
 
 export interface SimulationRequest {
   settings?: Partial<SimulationSettings>;

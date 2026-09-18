@@ -9,7 +9,16 @@
  *   npm run admin -- create-user --role teacher --first Ana --last Lima --job "Professora de Ciências" --email ana@escola.exemplo
  *   npm run admin -- create-user --role staff --first Rita --last Alves --job "Secretária" --sector secretaria --email rita@escola.exemplo
  *   npm run admin -- create-user --role admin --first Rê --last Vantini --email admin@escola.exemplo
- *   npm run admin -- register-device --collector EC-002 --name "Captador de bancada" --location "Laboratório" --capacity 12 --reserve 0.5 --key ESP32-001
+ *   npm run admin -- register-device --collector EC-001 --name "EcoCaptador" --location "Horta" --capacity 11.8 --reserve 0.5 --diameter 100 --height 1500 --key ESP32-001 [--sensor VL53L1X]
+ *
+ * Convenção: EC-001 = captador FÍSICO (ESP32-001). SIM-001 = captador da SIMULAÇÃO (VIRTUAL-001), criado pelo seed.
+ *
+ * --diameter e --height: diâmetro nominal (mm) e altura útil aproximada (mm) do tubo. Servem de
+ * referência para validar a calibração de volume feita no app (Administração → Captadores).
+ *
+ * --sensor: sensor de distância (VL53L0X ou VL53L1X; padrão VL53L1X) de um captador NOVO. Em um
+ * captador existente o sensor não muda por aqui: a troca é feita na plataforma (Administração →
+ * Captadores → {código} → Ligações), com confirmação e histórico.
  *
  * PINs, senhas e tokens gerados aparecem UMA única vez no terminal e não são salvos,
  * exceto o token do dispositivo virtual, gravado apenas no .env.local deste computador.
@@ -18,6 +27,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
+import { DEFAULT_DISTANCE_SENSOR, DISTANCE_SENSOR_MODELS, isDistanceSensorModel } from "@/lib/collector/distance-sensors";
 import { SIMULATED_COLLECTOR, SIMULATED_DEVICE_ID } from "@/lib/iot/simulation-config";
 import { openScriptDatabase } from "@/lib/server/db/pg";
 import type { Queryable } from "@/lib/server/db/types";
@@ -63,7 +73,10 @@ const { values } = parseArgs({
     location: { type: "string" },
     capacity: { type: "string" },
     reserve: { type: "string" },
+    diameter: { type: "string" },
+    height: { type: "string" },
     key: { type: "string" },
+    sensor: { type: "string" },
   },
 });
 
@@ -165,6 +178,9 @@ async function seed() {
       location: SIMULATED_COLLECTOR.location,
       capacityLiters: SIMULATED_COLLECTOR.capacityLiters,
       reserveLiters: SIMULATED_COLLECTOR.reserveLiters,
+      // Geometria de referência do tubo simulado (DN100, ~1,50 m úteis).
+      nominalDiameterMm: 100,
+      nominalUsefulHeightMm: 1500,
       device: { deviceKey: SIMULATED_DEVICE_ID, isSimulated: true, token, pepper: devicePepper },
     });
     console.log(`Captador ${SIMULATED_COLLECTOR.code} + dispositivo ${SIMULATED_DEVICE_ID} (SIMULAÇÃO) registrados.`);
@@ -237,6 +253,8 @@ async function registerDevice() {
   const devicePepper = pepper();
   const code = need("--collector", values.collector);
   const deviceKey = need("--key", values.key);
+  const sensor = (values.sensor ?? DEFAULT_DISTANCE_SENSOR).toUpperCase();
+  if (!isDistanceSensorModel(sensor)) throw new Error(`Sensor inválido "${values.sensor}". Use ${DISTANCE_SENSOR_MODELS.join(" ou ")}.`);
   const token = randomBytes(32).toString("hex");
 
   await withDatabase(async (db) => {
@@ -246,7 +264,7 @@ async function registerDevice() {
       [code.toUpperCase()],
     );
     if (rows[0] && rows[0].device_key !== deviceKey) {
-      throw new Error(`O captador ${code} já tem o dispositivo ${rows[0].device_key}. Use outro código de captador (ex.: EC-002).`);
+      throw new Error(`O captador ${code} já tem o dispositivo ${rows[0].device_key}. Desative-o ou use outro código de captador.`);
     }
     await ensureCollector(db, {
       schoolId,
@@ -255,10 +273,24 @@ async function registerDevice() {
       location: need("--location", values.location),
       capacityLiters: Number(need("--capacity", values.capacity)),
       reserveLiters: Number(values.reserve ?? "0"),
+      nominalDiameterMm: values.diameter ? Number(values.diameter) : null,
+      nominalUsefulHeightMm: values.height ? Number(values.height) : null,
+      distanceSensor: sensor,
       device: { deviceKey, isSimulated: false, token, pepper: devicePepper },
     });
+    const configured = await db.query<{ distance_sensor: string; hardware_revision: number }>(
+      "select distance_sensor, hardware_revision from public.collectors where code = $1",
+      [code.toUpperCase()],
+    );
+    const current = configured.rows[0];
+    if (current) {
+      console.log(`Sensor de distância configurado: ${current.distance_sensor} (revisão ${current.hardware_revision}).`);
+      if (current.distance_sensor !== sensor) {
+        console.log(`O captador já existia: o sensor NÃO foi trocado. Para trocar, use Administração → Captadores → ${code.toUpperCase()} → Ligações.`);
+      }
+    }
   });
-  console.log(`\nDispositivo ${deviceKey} registrado no captador ${code}.`);
+  console.log(`\nDispositivo ${deviceKey} (REAL) registrado no captador ${code}.`);
   console.log(`Token (aparece só agora; grave em firmware/include/secrets.h, que não vai para o Git):\n  ${token}\n`);
 }
 

@@ -96,9 +96,20 @@ async function main() {
   );
   check("POST cancel sem login → 401", (await anon.call("POST", `/api/collectors/EC-001/commands/${fakeId}/cancel`)).status === 401);
   check("POST simulation sem login → 401", (await anon.call("POST", "/api/collectors/EC-001/simulation", { settings: { timeScale: 1 } })).status === 401);
+  check("GET calibração sem login → 401", (await anon.call("GET", "/api/admin/collectors/EC-001/calibration")).status === 401);
+  check("GET bancada sem login → 401", (await anon.call("GET", "/api/admin/collectors/EC-001/bench")).status === 401);
+  check("GET ligações sem login → 401", (await anon.call("GET", "/api/admin/collectors/EC-001/hardware")).status === 401);
+  check(
+    "PUT troca de sensor sem login → 401",
+    (await anon.call("PUT", "/api/admin/collectors/EC-001/hardware", { distance_sensor: "VL53L0X", confirm_physical_match: true })).status === 401,
+  );
+  check(
+    "POST validação sem login → 401",
+    (await anon.call("POST", "/api/admin/collectors/EC-001/bench/validations", { known_volume_liters: 5, measurement_method: "balanca" })).status === 401,
+  );
   check(
     "Telemetria com token inválido → 401",
-    (await anon.call("POST", "/api/iot/telemetry", { device_id: "VIRTUAL-001", collector_code: "EC-001" }, { Authorization: "Bearer token-invalido" })).status === 401,
+    (await anon.call("POST", "/api/iot/telemetry", { device_id: "VIRTUAL-001", collector_code: "SIM-001" }, { Authorization: "Bearer token-invalido" })).status === 401,
   );
   check("Canal da simulação com token inválido → 401", (await anon.call("GET", "/api/iot/simulation?device_id=VIRTUAL-001", undefined, { Authorization: "Bearer x" })).status === 401);
   check("Login do estudante com PIN errado → 401", (await anon.call("POST", "/api/auth/student", { code: student.code, pin: "000000" })).status === 401);
@@ -116,11 +127,34 @@ async function main() {
   const xpBefore = profile.body.xp;
 
   const list = await me.call<{ collectors: { code: string }[] }>("GET", "/api/collectors");
-  const code = list.body.collectors?.[0]?.code;
-  check("Lista de captadores da escola", list.status === 200 && Boolean(code), code);
+  const codes = list.body.collectors?.map((item) => item.code) ?? [];
+  check("Lista de captadores da escola", list.status === 200 && codes.length > 0, codes.join(", "));
+
+  // Missões são testadas no captador da SIMULAÇÃO (a válvula do EC-001 físico ainda não está integrada).
+  let code = process.env.SMOKE_COLLECTOR_CODE || undefined;
+  for (const candidate of codes) {
+    if (code) break;
+    const probe = await me.call<CollectorSnapshot>("GET", `/api/collectors/${candidate}`);
+    if (probe.body.telemetry?.origin === "simulation") code = candidate;
+  }
+  code ??= codes[0];
   if (!code) return;
+  for (const candidate of codes) {
+    const probe = await me.call<CollectorSnapshot>("GET", `/api/collectors/${candidate}`);
+    console.log(`  · ${candidate}: ${probe.body.telemetry?.origin === "simulation" ? "SIMULAÇÃO" : "REAL"} · ${probe.body.telemetry?.status}`);
+  }
+  check("Estudante não abre a bancada → 403", (await me.call("GET", `/api/admin/collectors/${code}/bench`)).status === 403);
+  check(
+    "Estudante não troca o sensor → 403",
+    (await me.call("PUT", `/api/admin/collectors/${code}/hardware`, { distance_sensor: "VL53L0X", confirm_physical_match: true })).status === 403,
+  );
 
   check("Estudante não controla a simulação → 403", (await me.call("POST", `/api/collectors/${code}/simulation`, { settings: { timeScale: 1 } })).status === 403);
+  check("Estudante não acessa a calibração → 403", (await me.call("GET", `/api/admin/collectors/${code}/calibration`)).status === 403);
+  check(
+    "Estudante não registra ponto de calibração → 403",
+    (await me.call("POST", `/api/admin/collectors/${code}/calibration/session/points`, { step: "zero" })).status === 403,
+  );
 
   const snapshot = await me.call<CollectorSnapshot>("GET", `/api/collectors/${code}`);
   const telemetry = snapshot.body.telemetry;
@@ -138,6 +172,28 @@ async function main() {
   const prof = new Session();
   const teacherLogin = await prof.call("POST", "/api/auth/login", teacher);
   check("Login do professor (e-mail + senha)", teacherLogin.status === 200, `HTTP ${teacherLogin.status}`);
+
+  const calibration = await prof.call<{ live?: { stability?: { state: string } } }>("GET", `/api/admin/collectors/${code}/calibration`);
+  check("Professor abre a calibração com leitura ao vivo", calibration.status === 200 && Boolean(calibration.body.live?.stability), calibration.body.live?.stability?.state);
+  const bench = await prof.call<{ bench?: { active: boolean }; live?: { stability?: { averageIntervalMs: number | null } } }>(
+    "GET",
+    `/api/admin/collectors/${code}/bench`,
+  );
+  check("Professor abre a bancada (sem iniciar ensaio)", bench.status === 200 && bench.body.bench?.active === false, `intervalo médio ${bench.body.live?.stability?.averageIntervalMs ?? "—"} ms`);
+  // Somente leitura: o teste nunca troca o sensor (isso substituiria a calibração ativa).
+  const wiring = await prof.call<{ configuration?: { distanceSensor: string; revision: number }; compatibility?: { state: string } }>(
+    "GET",
+    `/api/admin/collectors/${code}/hardware`,
+  );
+  check(
+    "Professor abre Ligações (sensor configurado × firmware)",
+    wiring.status === 200 && Boolean(wiring.body.configuration?.distanceSensor),
+    `${wiring.body.configuration?.distanceSensor ?? "—"} r${wiring.body.configuration?.revision ?? "—"} · ${wiring.body.compatibility?.state ?? "—"}`,
+  );
+  check(
+    "Troca de sensor sem confirmação → 422",
+    (await prof.call("PUT", `/api/admin/collectors/${code}/hardware`, { distance_sensor: "VL53L0X", confirm_physical_match: false })).status === 422,
+  );
 
   if (snapshot.body.simulation) {
     const free = telemetry.volumeLiters - snapshot.body.info.reserveLiters;

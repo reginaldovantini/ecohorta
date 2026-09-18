@@ -50,8 +50,8 @@ export function CollectorLiveCard({ snapshot }: { snapshot: CollectorSnapshot })
         </div>
         <dl className="flex min-w-0 flex-1 flex-col justify-between py-2">
           <Annotation
-            label="Sensor VL53L1X"
-            value={telemetry.distanceMm === null ? "Sem leitura" : `${telemetry.distanceMm} mm até a água`}
+            label={`Sensor ${snapshot.hardware?.distanceSensor ?? "de distância"}`}
+            value={telemetry.distanceMm === null ? "Sem leitura" : `${formatDecimal(telemetry.distanceMm, 0)} mm até a água`}
           />
           <Annotation
             label="Dreno de segurança"

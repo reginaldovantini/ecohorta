@@ -211,3 +211,253 @@ describe("Row Level Security", () => {
     expect(student.rows.map((row) => row.profile_id)).toEqual([IDS.student]);
   });
 });
+
+describe("calibrações de volume", () => {
+  const CALIBRATION = "80000000-0000-4000-8000-000000000001";
+
+  /** Calibração ativa completa, versão 1, inserida direto no banco. */
+  const insertActive = (id = CALIBRATION, version = 1) =>
+    db.query(
+      `insert into collector_calibrations
+       (id, collector_id, device_id, is_simulated, status, version, completed_at, activated_at,
+        zero_distance_mm, one_liter_distance_mm, two_liter_distance_mm, three_liter_distance_mm, maximum_distance_mm,
+        calibration_constant, effective_diameter_mm, effective_height_mm, effective_capacity_liters, quality, quality_report)
+       values ($1, $2, $3, true, 'active', $4, now(), now(), 1700, 1564, 1428, 1292, 200, 0.0073593, 96.8, 1500, 11.04, 'good', '{}')`,
+      [id, IDS.collector, IDS.device, version],
+    );
+
+  it("existem com RLS ativo", async () => {
+    const { rows } = await db.query<{ relrowsecurity: boolean }>(
+      "select relrowsecurity from pg_class where relname = 'collector_calibrations' and relnamespace = 'public'::regnamespace",
+    );
+    expect(rows).toEqual([{ relrowsecurity: true }]);
+  });
+
+  it("guardam o histórico: calibração concluída nunca é apagada nem alterada", async () => {
+    await insertActive();
+    await rejects(db.query("delete from collector_calibrations where id = $1", [CALIBRATION]), /nunca são apagadas/);
+    await rejects(db.query("update collector_calibrations set zero_distance_mm = 1690 where id = $1", [CALIBRATION]), /não podem ser alteradas/);
+    await rejects(db.query("update collector_calibrations set status = 'rejected' where id = $1", [CALIBRATION]), /Transição/);
+    await rejects(db.query("delete from collectors where id = $1", [IDS.collector]), /foreign key constraint/);
+
+    // Única mudança permitida: ativa → substituída.
+    await db.query("update collector_calibrations set status = 'superseded', superseded_at = now() where id = $1", [CALIBRATION]);
+    await rejects(db.query("update collector_calibrations set superseded_at = now() + interval '1 day' where id = $1", [CALIBRATION]), /não podem ser alteradas/);
+  });
+
+  it("permitem uma ativa e um procedimento em andamento por captador, com versão única", async () => {
+    await insertActive();
+    await rejects(insertActive("80000000-0000-4000-8000-000000000002", 2), /collector_calibrations_one_active/);
+    await rejects(
+      db.query("insert into collector_calibrations (collector_id, is_simulated, status, version) values ($1, true, 'cancelled', 1)", [IDS.collector]),
+      /collector_calibrations_version_unique/,
+    );
+    const draft = () => db.query("insert into collector_calibrations (collector_id, is_simulated) values ($1, true)", [IDS.collector]);
+    await draft();
+    await rejects(draft(), /collector_calibrations_one_draft/);
+  });
+
+  it("não ativam calibração incompleta ou inconsistente", async () => {
+    await rejects(
+      db.query("insert into collector_calibrations (collector_id, is_simulated, status, version, completed_at) values ($1, true, 'active', 1, now())", [IDS.collector]),
+      /completed_calibration_is_complete/,
+    );
+    await rejects(
+      db.query(
+        `insert into collector_calibrations (collector_id, is_simulated, status, version, completed_at, activated_at, quality, quality_report,
+          zero_distance_mm, one_liter_distance_mm, two_liter_distance_mm, three_liter_distance_mm, maximum_distance_mm,
+          calibration_constant, effective_diameter_mm, effective_height_mm, effective_capacity_liters)
+         values ($1, true, 'active', 1, now(), now(), 'inconsistent', '{}', 1700, 1564, 1428, 1292, 200, 0.007, 96, 1500, 11)`,
+        [IDS.collector],
+      ),
+      /usable_calibration_has_model/,
+    );
+  });
+
+  it("telemetria e estado exigem coerência entre volume e origem", async () => {
+    await rejects(
+      db.query(
+        `insert into telemetry (collector_id, device_id, recorded_at, uptime_ms, seq, distance_mm, volume_liters, fill_ratio, level_state, valve, status, overflowing, is_simulated, volume_source)
+         values ($1, $2, now(), 1, 1, 1236, null, null, null, 'closed', 'READY', false, true, 'device')`,
+        [IDS.collector, IDS.device],
+      ),
+      /telemetry_volume_matches_source/,
+    );
+    await rejects(
+      db.query("update collector_state set volume_liters = 3, volume_source = 'calibration' where collector_id = $1", [IDS.collector]),
+      /collector_state_volume_matches_source/,
+    );
+  });
+
+  it("ficam visíveis só para a escola do captador e ninguém escreve pelo Supabase", async () => {
+    await insertActive();
+    const mine = await asUser(pg, IDS.student, (q) => q.query<{ id: string }>("select id from collector_calibrations"));
+    expect(mine.rows).toEqual([{ id: CALIBRATION }]);
+    const other = await asUser(pg, IDS.otherStudent, (q) => q.query("select id from collector_calibrations"));
+    expect(other.rows).toEqual([]);
+    await rejects(
+      asUser(pg, IDS.teacher, (q) => q.query("insert into collector_calibrations (collector_id, is_simulated) values ($1, true)", [IDS.collector])),
+      /permission denied/,
+    );
+    await rejects(asUser(pg, null, (q) => q.query("select id from collector_calibrations")), /permission denied/);
+  });
+});
+
+describe("validação física: observações e validações", () => {
+  const CALIBRATION = "80000000-0000-4000-8000-000000000011";
+
+  const insertCalibration = () =>
+    db.query(
+      `insert into collector_calibrations
+       (id, collector_id, device_id, is_simulated, status, version, completed_at, activated_at,
+        zero_distance_mm, one_liter_distance_mm, two_liter_distance_mm, three_liter_distance_mm, maximum_distance_mm,
+        calibration_constant, effective_diameter_mm, effective_height_mm, effective_capacity_liters, quality, quality_report)
+       values ($1, $2, $3, false, 'active', 1, now(), now(), 1700, 1564, 1428, 1292, 200, 0.0073593, 96.8, 1500, 11.04, 'good', '{}')`,
+      [CALIBRATION, IDS.collector, IDS.device],
+    );
+
+  const insertValidation = (patch: Partial<Record<string, number | null>> = {}) => {
+    const values = { known: 5, error: -0.08, absolute: 0.08, percent: -1.6, absolutePercent: 1.6, ...patch };
+    return db.query<{ id: string }>(
+      `insert into calibration_validations
+       (collector_id, calibration_id, device_id, sensor_model, is_simulated, known_volume_liters, measurement_method,
+        distance_mm, readings, height_mm, calculated_volume_liters, raw_volume_liters, below_zero, above_maximum,
+        error_liters, absolute_error_liters, percent_error, absolute_percent_error)
+       values ($1, $2, $3, 'VL53L1X', false, $4, 'balanca', 1031.4, 20, 668.6, 4.92, 4.92, false, false, $5, $6, $7, $8)
+       returning id`,
+      [IDS.collector, CALIBRATION, IDS.device, values.known, values.error, values.absolute, values.percent, values.absolutePercent],
+    );
+  };
+
+  it("existem com RLS ativo", async () => {
+    const { rows } = await db.query<{ relname: string; relrowsecurity: boolean }>(
+      "select relname, relrowsecurity from pg_class where relname in ('sensor_observations', 'calibration_validations') order by relname",
+    );
+    expect(rows).toEqual([
+      { relname: "calibration_validations", relrowsecurity: true },
+      { relname: "sensor_observations", relrowsecurity: true },
+    ]);
+  });
+
+  it("validações exigem erro coerente e percentual só com volume conhecido maior que zero", async () => {
+    await insertCalibration();
+    await rejects(insertValidation({ absolute: 0.5 }), /validation_absolute_error/);
+    await rejects(insertValidation({ known: 0 }), /validation_percent_needs_volume/);
+    await insertValidation({ known: 0, error: 0.03, absolute: 0.03, percent: null, absolutePercent: null });
+    await rejects(
+      db.query("insert into calibration_validations (collector_id, calibration_id, sensor_model, is_simulated, known_volume_liters, measurement_method, distance_mm, readings, height_mm, calculated_volume_liters, raw_volume_liters, below_zero, above_maximum, error_liters, absolute_error_liters) values ($1, $2, 'VL53L1X', false, 1, 'palpite', 1000, 1, 700, 1, 1, false, false, 0, 0)", [
+        IDS.collector,
+        CALIBRATION,
+      ]),
+      /measurement_method/,
+    );
+  });
+
+  it("registros experimentais nunca são apagados nem alterados", async () => {
+    await insertCalibration();
+    const { rows } = await insertValidation();
+    const id = rows[0]!.id;
+    await rejects(db.query("delete from calibration_validations where id = $1", [id]), /nunca são apagados/);
+    await rejects(db.query("update calibration_validations set known_volume_liters = 4.92, error_liters = 0, absolute_error_liters = 0 where id = $1", [id]), /não podem ser alterados/);
+    // A calibração validada também não pode sumir.
+    await rejects(db.query("delete from collector_calibrations where id = $1", [CALIBRATION]), /nunca são apagadas|foreign key/);
+
+    const observation = await db.query<{ id: string }>(
+      `insert into sensor_observations (collector_id, device_id, sensor_model, is_simulated, condition, stability_state, readings, outliers, invalid, total)
+       values ($1, $2, 'VL53L1X', false, 'sem_agua', 'invalid', 0, 0, 15, 15) returning id`,
+      [IDS.collector, IDS.device],
+    );
+    await rejects(db.query("update sensor_observations set stability_state = 'stable' where id = $1", [observation.rows[0]!.id]), /não podem ser alterados/);
+    await rejects(db.query("delete from sensor_observations where id = $1", [observation.rows[0]!.id]), /nunca são apagados/);
+    // Remover a conta de quem registrou só anula a referência.
+    await db.query("update calibration_validations set created_by = $2 where id = $1", [id, null]);
+  });
+
+  it("ficam visíveis só para a escola do captador e ninguém escreve pelo Supabase", async () => {
+    await insertCalibration();
+    await insertValidation();
+    const mine = await asUser(pg, IDS.student, (q) => q.query("select id from calibration_validations"));
+    expect(mine.rows).toHaveLength(1);
+    const other = await asUser(pg, IDS.otherStudent, (q) => q.query("select id from calibration_validations"));
+    expect(other.rows).toEqual([]);
+    await rejects(
+      asUser(pg, IDS.teacher, (q) =>
+        q.query("insert into sensor_observations (collector_id, sensor_model, is_simulated, condition, stability_state, readings, outliers, invalid, total) values ($1, 'VL53L1X', false, 'outro', 'stable', 1, 0, 0, 1)", [IDS.collector]),
+      ),
+      /permission denied/,
+    );
+    await rejects(asUser(pg, null, (q) => q.query("select id from sensor_observations")), /permission denied/);
+  });
+});
+
+describe("configuração de hardware do captador", () => {
+  const CALIBRATION = "80000000-0000-4000-8000-000000000009";
+  const insertChange = (patch: { previous?: string; next?: string; confirmed?: boolean; revision?: number } = {}) =>
+    db.query<{ id: string }>(
+      `insert into collector_hardware_changes (collector_id, revision, previous_sensor, new_sensor, changed_by, physical_match_confirmed, is_simulated)
+       values ($1, $2, $3, $4, $5, $6, true) returning id`,
+      [IDS.collector, patch.revision ?? 2, patch.previous ?? "VL53L1X", patch.next ?? "VL53L0X", IDS.teacher, patch.confirmed ?? true],
+    );
+
+  it("existe com RLS ativo e o VL53L1X, revisão 1, como padrão", async () => {
+    const { rows } = await db.query<{ relrowsecurity: boolean }>(
+      "select relrowsecurity from pg_class where relname = 'collector_hardware_changes' and relnamespace = 'public'::regnamespace",
+    );
+    expect(rows).toEqual([{ relrowsecurity: true }]);
+    const collector = await db.query("select distance_sensor, hardware_revision from collectors where id = $1", [IDS.collector]);
+    expect(collector.rows).toEqual([{ distance_sensor: "VL53L1X", hardware_revision: 1 }]);
+  });
+
+  it("a troca do sensor exige a próxima revisão, e a revisão nunca volta", async () => {
+    await rejects(db.query("update collectors set distance_sensor = 'VL53L0X' where id = $1", [IDS.collector]), /nova revisão de hardware/);
+    await rejects(db.query("update collectors set distance_sensor = 'VL53L0X', hardware_revision = 5 where id = $1", [IDS.collector]), /nova revisão de hardware/);
+    await db.query("update collectors set distance_sensor = 'VL53L0X', hardware_revision = 2 where id = $1", [IDS.collector]);
+    await rejects(db.query("update collectors set hardware_revision = 1 where id = $1", [IDS.collector]), /nunca diminui/);
+    await rejects(db.query("update collectors set distance_sensor = 'HC-SR04', hardware_revision = 3 where id = $1", [IDS.collector]), /invalid input value/);
+  });
+
+  it("o histórico exige a confirmação do sensor físico e uma troca de fato, e nunca muda", async () => {
+    await rejects(insertChange({ confirmed: false }), /physical_match_confirmed/);
+    await rejects(insertChange({ next: "VL53L1X" }), /hardware_change_changes_sensor/);
+    const { rows } = await insertChange();
+    await rejects(insertChange(), /collector_hardware_changes_revision_unique/);
+    const id = rows[0]!.id;
+    await rejects(db.query("update collector_hardware_changes set new_sensor = 'VL53L1X', previous_sensor = 'VL53L0X' where id = $1", [id]), /não pode ser alterado/);
+    await rejects(db.query("delete from collector_hardware_changes where id = $1", [id]), /nunca é apagado/);
+    // Remover a conta de quem trocou só anula a referência.
+    await db.query("update collector_hardware_changes set changed_by = null where id = $1", [id]);
+  });
+
+  it("a calibração concluída guarda o sensor e a revisão de hardware, sem alteração", async () => {
+    await db.query(
+      `insert into collector_calibrations
+       (id, collector_id, device_id, is_simulated, status, version, completed_at, activated_at, sensor_model, hardware_revision,
+        zero_distance_mm, one_liter_distance_mm, two_liter_distance_mm, three_liter_distance_mm, maximum_distance_mm,
+        calibration_constant, effective_diameter_mm, effective_height_mm, effective_capacity_liters, quality, quality_report)
+       values ($1, $2, $3, true, 'active', 1, now(), now(), 'VL53L1X', 1, 1700, 1564, 1428, 1292, 200, 0.0073593, 96.8, 1500, 11.04, 'good', '{}')`,
+      [CALIBRATION, IDS.collector, IDS.device],
+    );
+    await rejects(db.query("update collector_calibrations set hardware_revision = 2 where id = $1", [CALIBRATION]), /não podem ser alteradas/);
+    await rejects(db.query("update collector_calibrations set sensor_model = 'VL53L0X' where id = $1", [CALIBRATION]), /não podem ser alteradas/);
+    await db.query("update collector_calibrations set status = 'superseded', superseded_at = now() where id = $1", [CALIBRATION]);
+  });
+
+  it("fica visível só para a escola do captador e ninguém escreve pelo Supabase", async () => {
+    await insertChange();
+    const mine = await asUser(pg, IDS.student, (q) => q.query("select revision from collector_hardware_changes"));
+    expect(mine.rows).toEqual([{ revision: 2 }]);
+    const other = await asUser(pg, IDS.otherStudent, (q) => q.query("select revision from collector_hardware_changes"));
+    expect(other.rows).toEqual([]);
+    await rejects(
+      asUser(pg, IDS.teacher, (q) =>
+        q.query(
+          "insert into collector_hardware_changes (collector_id, revision, previous_sensor, new_sensor, physical_match_confirmed, is_simulated) values ($1, 3, 'VL53L0X', 'VL53L1X', true, true)",
+          [IDS.collector],
+        ),
+      ),
+      /permission denied/,
+    );
+    await rejects(asUser(pg, IDS.teacher, (q) => q.query("update collectors set distance_sensor = 'VL53L0X', hardware_revision = 2 where id = $1", [IDS.collector])), /permission denied/);
+    await rejects(asUser(pg, null, (q) => q.query("select revision from collector_hardware_changes")), /permission denied/);
+  });
+});

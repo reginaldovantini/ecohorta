@@ -48,6 +48,7 @@ export function RankingScreen() {
         title="Ranking"
         subtitle={profile.schoolName ?? "Carregando…"}
         isSimulation={snapshot.telemetry.origin === "simulation"}
+        isReal={snapshot.telemetry.origin === "device"}
       />
 
       <section className="space-y-3">

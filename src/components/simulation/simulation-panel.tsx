@@ -1,6 +1,6 @@
 "use client";
 
-import { Droplets, Gauge, RotateCcw, Timer, TriangleAlert } from "lucide-react";
+import { Droplets, Gauge, RotateCcw, Ruler, Timer, TriangleAlert } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import {
   useCollectorSnapshot,
@@ -32,7 +32,7 @@ export function SimulationPanelProvider({ enabled, children }: { enabled: boolea
           open={open}
           onClose={close}
           title="Painel da simulação"
-          description="Controla o dispositivo virtual EC-001, que fala com a plataforma pela mesma API do ESP32. Nada aqui é dado real."
+          description="Controla o dispositivo virtual, que fala com a plataforma pela mesma API do ESP32. Nada aqui é dado real."
         >
           <SimulationPanelBody />
         </BottomSheet>
@@ -103,6 +103,11 @@ function SimulationPanelBody() {
         </div>
       </PanelGroup>
 
+      <DistanceControl
+        sensor={snapshot?.hardware?.distanceSensor ?? null}
+        onApply={(distance_mm) => void send({ action: { type: "set_distance", distance_mm } })}
+      />
+
       <PanelGroup icon={<TriangleAlert />} title="Falhas para testar">
         <SwitchRow
           label="Válvula sem vazão"
@@ -129,6 +134,43 @@ function SimulationPanelBody() {
         Reiniciar simulação
       </Button>
     </div>
+  );
+}
+
+/** Coloca a superfície simulada a uma distância do sensor para testar a conversão em litros. */
+function DistanceControl({ sensor, onApply }: { sensor: string | null; onApply: (distanceMm: number) => void }) {
+  const [value, setValue] = useState("1236");
+  const distance = Number(value);
+  const valid = value.trim() !== "" && Number.isFinite(distance) && distance >= 0 && distance <= 10_000;
+
+  return (
+    <PanelGroup
+      icon={<Ruler />}
+      title={`Distância do sensor${sensor ? ` ${sensor}` : ""}`}
+      hint="Posiciona a água simulada a esta distância do sensor. Com calibração ativa, a plataforma converte em litros."
+    >
+      <form
+        className="flex gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (valid) onApply(distance);
+        }}
+      >
+        <label className="relative flex-1">
+          <span className="sr-only">Distância em milímetros</span>
+          <input
+            inputMode="numeric"
+            value={value}
+            onChange={(event) => setValue(event.target.value.replace(/[^\d]/g, "").slice(0, 5))}
+            className="h-10 w-full rounded-xl bg-white/[0.05] pl-3 pr-10 font-mono text-sm text-mist-50 outline-none ring-1 ring-inset ring-white/10 focus:ring-2 focus:ring-sim-400"
+          />
+          <span className="pointer-events-none absolute inset-y-0 right-3 grid place-items-center text-xs text-mist-400">mm</span>
+        </label>
+        <Button type="submit" variant="secondary" size="sm" className="h-10" disabled={!valid}>
+          Aplicar
+        </Button>
+      </form>
+    </PanelGroup>
   );
 }
 

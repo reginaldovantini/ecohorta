@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import { normalizeCollectorCode } from "@/lib/collector/code";
+import { DEFAULT_DISTANCE_SENSOR, type DistanceSensorModel } from "@/lib/collector/distance-sensors";
 import { DEFAULT_SIMULATION_SETTINGS } from "@/lib/iot/simulation-config";
 import { ACCESS_CODE_ALPHABET, accessCodePrefix, studentEmail } from "@/lib/users/access";
 import {
@@ -71,6 +72,14 @@ export async function ensureCollector(
     location: string;
     capacityLiters: number;
     reserveLiters: number;
+    /** Dimensões de projeto do tubo (ex.: DN100 e 1.500 mm), referência da calibração. */
+    nominalDiameterMm?: number | null;
+    nominalUsefulHeightMm?: number | null;
+    /**
+     * Sensor de distância de um captador NOVO. Em um captador existente não é alterado aqui:
+     * a troca é feita na plataforma (Ligações), com confirmação e histórico.
+     */
+    distanceSensor?: DistanceSensorModel;
     device: { deviceKey: string; isSimulated: boolean; token: string; pepper: string };
   },
 ) {
@@ -78,14 +87,33 @@ export async function ensureCollector(
   if (!code) throw new Error(`Código de captador inválido: ${input.code}`);
   return db.transaction(async (tx) => {
     const collector = await tx.query<{ id: string }>(
-      `insert into public.collectors (school_id, code, name, location, capacity_liters, reserve_liters)
-       values ($1, $2, $3, $4, $5, $6)
+      `insert into public.collectors (school_id, code, name, location, capacity_liters, reserve_liters, nominal_diameter_mm, nominal_useful_height_mm,
+         distance_sensor)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        on conflict (code) do update set name = excluded.name, location = excluded.location,
-         capacity_liters = excluded.capacity_liters, reserve_liters = excluded.reserve_liters
+         capacity_liters = excluded.capacity_liters, reserve_liters = excluded.reserve_liters,
+         nominal_diameter_mm = coalesce(excluded.nominal_diameter_mm, public.collectors.nominal_diameter_mm),
+         nominal_useful_height_mm = coalesce(excluded.nominal_useful_height_mm, public.collectors.nominal_useful_height_mm)
        returning id`,
-      [input.schoolId, code, input.name, input.location, input.capacityLiters, input.reserveLiters],
+      [
+        input.schoolId,
+        code,
+        input.name,
+        input.location,
+        input.capacityLiters,
+        input.reserveLiters,
+        input.nominalDiameterMm ?? null,
+        input.nominalUsefulHeightMm ?? null,
+        input.distanceSensor ?? DEFAULT_DISTANCE_SENSOR,
+      ],
     );
     const collectorId = collector.rows[0]!.id;
+    // Tipo do dispositivo que alimentava este captador até agora (REAL ou SIMULAÇÃO).
+    const previous = await tx.query<{ is_simulated: boolean | null }>(
+      `select d.is_simulated from public.collector_state s left join public.devices d on d.id = s.device_id where s.collector_id = $1`,
+      [collectorId],
+    );
+    const previousKind = previous.rows[0]?.is_simulated ?? null;
     const device = await tx.query<{ id: string }>(
       `insert into public.devices (collector_id, device_key, is_simulated, token_hash)
        values ($1, $2, $3, $4)
@@ -101,9 +129,30 @@ export async function ensureCollector(
     await tx.query(
       `insert into public.collector_state (collector_id, device_id, simulation) values ($1, $2, $3::jsonb)
        on conflict (collector_id) do update set device_id = excluded.device_id,
-         simulation = coalesce(public.collector_state.simulation, excluded.simulation)`,
-      [collectorId, deviceId, simulation],
+         simulation = case when $4 then coalesce(public.collector_state.simulation, excluded.simulation) else null end`,
+      [collectorId, deviceId, simulation, input.device.isSimulated],
     );
+
+    if (previousKind !== null && previousKind !== input.device.isSimulated) {
+      // Troca entre SIMULAÇÃO e REAL: nada do outro tipo continua valendo neste captador.
+      // Estado, leituras e balanço recomeçam; a calibração ativa é substituída (o histórico fica).
+      await tx.query(
+        `update public.collector_state
+         set accounting = '{}'::jsonb, volume_liters = null, volume_source = 'none', calibration_id = null, height_mm = null,
+             distance_mm = null, distance_samples = '[]'::jsonb, sensor_diagnostics = null, sensor_model = null,
+             reported_hardware_revision = null,
+             last_seen_at = null, uptime_ms = null, seq = null, status = 'OFFLINE', valve = 'unknown',
+             last_telemetry_at = null, last_telemetry_volume = null,
+             bench_mode_until = null, bench_started_at = null, bench_started_by = null, calibration_mode_until = null
+         where collector_id = $1`,
+        [collectorId],
+      );
+      await tx.query(
+        "update public.collector_calibrations set status = 'superseded', superseded_at = now() where collector_id = $1 and status = 'active'",
+        [collectorId],
+      );
+      await tx.query("update public.collector_calibrations set status = 'cancelled' where collector_id = $1 and status = 'draft'", [collectorId]);
+    }
     return { collectorId, deviceId };
   });
 }

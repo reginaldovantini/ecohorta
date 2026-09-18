@@ -1,16 +1,18 @@
 /*
- * DISPOSITIVO VIRTUAL EC-001 (is_simulated = true)
+ * DISPOSITIVO VIRTUAL do captador SIM-001 (is_simulated = true). EC-001 é o captador físico.
  *
  * Processo separado que se comporta como o ESP32: lê o "sensor", controla a
  * "válvula" e conversa com a plataforma SOMENTE pela API IoT:
  *   POST /api/iot/telemetry  → envia leitura + relatório do comando
- *                            ← recebe comando pendente e parâmetros da simulação
+ *                            ← recebe comando pendente, parâmetros da simulação e a
+ *                              configuração de hardware (sensor VL53L0X ou VL53L1X)
  *
  * Uso: `npm run dev` (sobe plataforma + dispositivo) ou `npm run device:virtual`.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { DeviceSimulationState, TelemetryPayload, TelemetryResponse } from "@/lib/iot/api-schema";
+import { isDistanceSensorModel, type DistanceSensorModel } from "@/lib/collector/distance-sensors";
+import type { DeviceSimulationState, HardwareConfig, TelemetryPayload, TelemetryResponse } from "@/lib/iot/api-schema";
 import {
   DEFAULT_SIMULATION_SETTINGS,
   SIMULATED_COLLECTOR,
@@ -20,7 +22,7 @@ import {
 import type { SimulationSettings } from "@/lib/iot/types";
 import { createVirtualDevice } from "@/lib/iot/virtual-device";
 
-const FW_VERSION = "virtual-0.2.0";
+const FW_VERSION = "virtual-0.3.0";
 const TICK_MS = 100;
 const INITIAL_VOLUME_LITERS = 6.6;
 const SAVE_EVERY_MS = 10_000;
@@ -44,12 +46,17 @@ const physicsOf = (settings: SimulationSettings) => ({
   faultNoFlow: settings.faultNoFlow,
 });
 
-async function loadVolume() {
+/** Estado salvo: nível físico do tubo virtual e a configuração de hardware recebida (como a NVS do ESP32). */
+async function loadState(): Promise<{ volumeLiters: number; sensorModel?: DistanceSensorModel; hardwareRevision: number | null }> {
   try {
-    const saved = JSON.parse(await readFile(STATE_FILE, "utf8")) as { volumeLiters?: unknown };
-    return typeof saved.volumeLiters === "number" ? saved.volumeLiters : INITIAL_VOLUME_LITERS;
+    const saved = JSON.parse(await readFile(STATE_FILE, "utf8")) as { volumeLiters?: unknown; sensorModel?: unknown; hardwareRevision?: unknown };
+    return {
+      volumeLiters: typeof saved.volumeLiters === "number" ? saved.volumeLiters : INITIAL_VOLUME_LITERS,
+      sensorModel: isDistanceSensorModel(saved.sensorModel) ? saved.sensorModel : undefined,
+      hardwareRevision: typeof saved.hardwareRevision === "number" ? saved.hardwareRevision : null,
+    };
   } catch {
-    return INITIAL_VOLUME_LITERS;
+    return { volumeLiters: INITIAL_VOLUME_LITERS, hardwareRevision: null };
   }
 }
 
@@ -64,14 +71,32 @@ async function main() {
   let seq = 0;
   let connected = false;
   let lastReportKey = "";
+  const saved = await loadState();
+  let hardwareRevision = saved.hardwareRevision;
   const device = createVirtualDevice(VIRTUAL_DEVICE_CONFIG, {
-    volumeLiters: await loadVolume(),
+    volumeLiters: saved.volumeLiters,
     settings: physicsOf(settings),
+    sensorModel: saved.sensorModel,
   });
 
   const save = async () => {
     await mkdir(path.dirname(STATE_FILE), { recursive: true });
-    await writeFile(STATE_FILE, JSON.stringify({ volumeLiters: device.exportState().volumeLiters }));
+    await writeFile(
+      STATE_FILE,
+      JSON.stringify({ volumeLiters: device.exportState().volumeLiters, sensorModel: device.sensorModel(), hardwareRevision }),
+    );
+  };
+
+  // Mesmo comportamento do firmware: a plataforma define o sensor; troca o driver e guarda a configuração.
+  const applyHardware = (hardware: HardwareConfig | undefined) => {
+    if (!hardware || !isDistanceSensorModel(hardware.distance_sensor)) return;
+    if (device.setSensorModel(hardware.distance_sensor)) {
+      log(`sensor configurado na plataforma: ${hardware.distance_sensor} (revisão ${hardware.revision}) — driver trocado`);
+    }
+    if (hardware.revision !== hardwareRevision) {
+      hardwareRevision = hardware.revision;
+      void save().catch(() => undefined);
+    }
   };
 
   const applySimulation = (state: DeviceSimulationState | null) => {
@@ -83,10 +108,29 @@ async function main() {
 
     const { action } = state;
     if (action && action.id > appliedActionId) {
-      const ratio = action.type === "set_level" ? action.ratio : INITIAL_VOLUME_LITERS / VIRTUAL_DEVICE_CONFIG.capacityLiters;
-      if (device.setLevel(ratio)) {
+      let applied: boolean;
+      let message: string;
+      switch (action.type) {
+        case "set_level":
+          applied = device.setLevel(action.ratio);
+          message = `nível ajustado para ${Math.round(action.ratio * 100)}%`;
+          break;
+        case "set_volume":
+          applied = device.setVolume(action.liters);
+          message = `volume ajustado para ${action.liters.toFixed(2)} L`;
+          break;
+        case "set_distance":
+          applied = device.setDistance(action.distance_mm);
+          message = `superfície a ${Math.round(action.distance_mm)} mm do sensor`;
+          break;
+        case "reset":
+          applied = device.setVolume(INITIAL_VOLUME_LITERS);
+          message = "simulação reiniciada";
+          break;
+      }
+      if (applied) {
         appliedActionId = action.id;
-        log(action.type === "set_level" ? `nível ajustado para ${Math.round(ratio * 100)}%` : "simulação reiniciada");
+        log(message);
       }
     }
   };
@@ -129,8 +173,12 @@ async function main() {
         collector_code: SIMULATED_COLLECTOR.code,
         seq: ++seq,
         uptime_ms: reading.uptimeMs,
+        // Dado primário: distância. O volume enviado só vale enquanto o captador não tem calibração na plataforma.
         distance_mm: reading.distanceMm,
         volume_liters: reading.volumeLiters,
+        sensor_model: device.sensorModel(),
+        hardware_revision: hardwareRevision,
+        sensor_diagnostics: reading.diagnostics,
         valve: reading.valve,
         status: reading.status,
         fw_version: FW_VERSION,
@@ -155,6 +203,7 @@ async function main() {
       }
 
       const body = (await response.json()) as TelemetryResponse;
+      applyHardware(body.hardware);
       if (body.command) device.receive(body.command);
       applySimulation(body.simulation);
 

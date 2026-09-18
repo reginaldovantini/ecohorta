@@ -21,7 +21,10 @@ A água de condensação dos aparelhos de ar-condicionado costuma ser descartada
 | PWA (manifest, ícones, service worker) | ✅ |
 | Supabase: schema, RLS, persistência de estado, telemetria, comandos, execuções e XP | ✅ (Fase 1) |
 | Login (estudante por código + PIN; equipe por e-mail) e autorização | ✅ (Fase 1) |
-| Firmware ESP32 etapa 1 (medição + telemetria, sem válvula) | 🧪 validação física |
+| Calibração experimental de volume, versionada e vinculada ao sensor | ✅ (Fase 2) · falta executar no EC-001 |
+| Integração física: bancada, diagnóstico do sensor, validação experimental, REAL × SIMULAÇÃO | ✅ (Fase 3) · falta o primeiro teste físico |
+| Sensores de distância VL53L0X e VL53L1X: escolha na plataforma, manual de ligações, compatibilidade com o firmware | ✅ · falta o primeiro teste físico |
+| Firmware ESP32 etapa 1 (dois drivers de sensor, distância + telemetria, sem válvula) | 🧪 compila e tem testes; falta gravar na placa |
 | Válvula e lógica de liberação no ESP32 | ⏳ após checklist da válvula |
 
 ## Stack
@@ -31,7 +34,7 @@ A água de condensação dos aparelhos de ar-condicionado costuma ser descartada
 - **Dados e identidade:** Supabase (Postgres + RLS, Auth), plano gratuito
 - **Hospedagem:** Vercel (região `gru1`)
 - **App:** PWA instalável (Android, iPhone e desktop)
-- **Hardware:** ESP32-C3 Super Mini + VL53L1X + válvula esférica motorizada (em validação, veja [docs/HARDWARE.md](docs/HARDWARE.md))
+- **Hardware:** ESP32 DevKit V1 (ESP32 clássico) + um sensor de distância dentro da tampa, **VL53L0X ou VL53L1X** (um por captador, escolhido na plataforma; no EC-001, módulo CJMCU-531 = VL53L1X), ligado por cabo de 4 vias de ~50 cm (VCC, GND, SDA→GPIO21, SCL→GPIO22, I²C a 100 kHz) + válvula esférica motorizada (em validação, veja [docs/HARDWARE.md](docs/HARDWARE.md)).
 
 ## Como rodar
 
@@ -52,7 +55,8 @@ Requisitos: Node.js 20.9+ (testado com 24) e npm.
 ```bash
 npm install
 npm run db:migrate                                   # aplica supabase/migrations
-npm run db:seed -- --class "6º Ano C:elementary:6:C"  # escola, turmas, EC-001 + dispositivo virtual
+npm run db:seed -- --class "6º Ano C:elementary:6:C"  # escola, turmas, SIM-001 + dispositivo virtual
+npm run admin -- register-device --collector EC-001 --name "EcoCaptador" --location "Horta" --capacity 11.8 --reserve 0.5 --diameter 100 --height 1500 --key ESP32-001 --sensor VL53L1X
 npm run admin -- create-user --role admin --first Nome --last Sobrenome --email voce@escola.exemplo
 npm run admin -- create-user --role student --class "6º Ano C" --first Nome --last Sobrenome --birth 2013-05-20 --consent termo_impresso
 ```
@@ -82,7 +86,7 @@ Abra http://localhost:3000 e entre em `/entrar`.
 
 ## Modo simulação (sem hardware)
 
-Enquanto o ESP32 não está conectado, os dados vêm do **dispositivo virtual EC-001**. É um processo separado que emula o captador e o firmware e conversa com a plataforma **pela mesma API que o ESP32 usa**. O app nunca fala com o dispositivo, só com a API. `npm run dev` sobe a plataforma e o dispositivo.
+**EC-001** é o captador físico (ESP32 + sensor VL53L0X ou VL53L1X, selo **REAL**). **SIM-001** é o captador da simulação (selo **SIMULAÇÃO**), alimentado pelo **dispositivo virtual**. É um processo separado que emula o captador e o firmware e conversa com a plataforma **pela mesma API que o ESP32 usa**. O app nunca fala com o dispositivo, só com a API. `npm run dev` sobe a plataforma e o dispositivo.
 
 - **O que ele emula:**
   - entrada de condensado e saída por gravidade (vazão ∝ √altura);
@@ -90,7 +94,8 @@ Enquanto o ESP32 não está conectado, os dados vêm do **dispositivo virtual EC
   - fechamento da válvula pelo volume **medido**;
   - falha por falta de vazão (`NO_FLOW`), timeout e comandos idempotentes;
   - transbordamento com descarte estimado.
-- **Painel da simulação** (somente professor/admin): toque no selo **SIMULAÇÃO**. Controla velocidade do tempo (1×, 30×, 120×), condensado, nível do captador e falhas (válvula sem vazão, captador offline).
+- **Painel da simulação** (somente professor/admin): toque no selo **SIMULAÇÃO**. Controla velocidade do tempo (1×, 30×, 120×), condensado, nível do captador, distância do sensor e falhas (válvula sem vazão, captador offline).
+- **Calibração de volume na simulação:** Perfil → Administração → Captadores → SIM-001. Cada etapa tem um botão para colocar o volume no captador virtual; a calibração resultante fica marcada como SIMULAÇÃO.
 - **Dica para demonstrar:** use **30×**. Uma liberação de 3 L leva cerca de 2 min simulados, ou 4 s na tela.
 - **Estado salvo:**
   - estado do captador, balanço, comandos, execuções e XP ficam no **Supabase** e sobrevivem a reinícios;
@@ -102,11 +107,11 @@ Enquanto o ESP32 não está conectado, os dados vêm do **dispositivo virtual EC
 
 | Comando | O que faz |
 |---|---|
-| `npm run dev` | Plataforma + dispositivo virtual EC-001 |
+| `npm run dev` | Plataforma + dispositivo virtual (captador SIM-001) |
 | `npm run dev:app` | Só a plataforma |
 | `npm run device:virtual` | Só o dispositivo virtual (usa `IOT_SIMULATED_DEVICE_TOKEN` e `ECOHORTA_API_URL`) |
 | `npm run db:migrate` | Aplica as migrations no Supabase (`DATABASE_MIGRATION_URL`) |
-| `npm run db:seed` | Escola, turmas, captador EC-001 e dispositivo virtual (gera o token no `.env.local`) |
+| `npm run db:seed` | Escola, turmas, captador SIM-001 e dispositivo virtual (gera o token no `.env.local`) |
 | `npm run admin -- <comando>` | `create-user`, `list-classes`, `register-device` |
 | `npm run smoke` | Teste de ponta a ponta da API (local ou `SMOKE_BASE_URL`) |
 | `npm run build` | Build de produção |
@@ -116,6 +121,29 @@ Enquanto o ESP32 não está conectado, os dados vêm do **dispositivo virtual EC
 | `npm run check` | typecheck + lint + test + build. Rode antes de cada commit |
 | `npm run screenshot -- /rota` | Captura telas em 360/390/412 px (requer `npm run dev` e Edge ou Chrome) |
 | `npm run icons` | Gera os ícones PNG do PWA a partir de `src/app/icon.svg` |
+| `pio run -d firmware` | Compila o firmware do ESP32 DevKit V1 (PlatformIO; `-t upload` grava na placa) |
+| `pio test -d firmware -e windows_test` | Testes do núcleo de sensores do firmware no computador, sem placa |
+
+## Sensores de distância e ligações
+
+O projeto suporta **dois sensores de distância**, **VL53L0X** e **VL53L1X**, mas **cada captador usa um**. A plataforma é a fonte da configuração do hardware:
+
+```text
+CONFIGURAR NA PLATAFORMA → CONSULTAR O MANUAL DE LIGAÇÕES → MONTAR → FIRMWARE USA O DRIVER DO SENSOR
+→ TESTAR O SENSOR (Bancada) → CALIBRAR → MEDIR VOLUME
+```
+
+- **Onde:** Perfil → Administração → Captadores → {código} → **Ligações** (professor/admin). A área **Sensores e Ligações** mostra:
+  - o sensor configurado e o firmware esperado;
+  - o sensor que o firmware informa estar usando e o estado do sensor;
+  - o manual de ligações do sensor: ilustração, especificações documentadas, diagrama, tabela de vias, alimentação, cabo, posição, umidade, janela óptica, teste e calibração.
+- **EC-001:** módulo **CJMCU-531, baseado no VL53L1X** → configurado como **VL53L1X**. O VL53L0X é para outro módulo compatível.
+- **Endereço × identificação:** os dois sensores usam o mesmo endereço I²C, **0x29**. O firmware os distingue pela identificação lida de um registrador: **0xEE** (VL53L0X, registrador 0xC0) ou **0xEACC** (VL53L1X, registrador 0x010F). Esses valores não são endereços.
+- **Mesma ligação para os dois:** cabo de 4 vias (~50 cm): VCC → alimentação adequada ao módulo (3V3 na maioria; **não assuma 5 V**), GND → GND, SDA → GPIO21, SCL → GPIO22. XSHUT e GPIO1 não são usados. I²C a 100 kHz.
+- **Troca do sensor:** exige confirmar que o sensor físico instalado corresponde ao selecionado. Cria uma nova revisão de hardware (histórico imutável), substitui a calibração ativa e inicia um ensaio de bancada. O firmware recebe o novo sensor na resposta da telemetria e troca o driver sozinho, sem regravar.
+- **Incompatibilidade:** se o firmware informar outro sensor, a plataforma mostra **⚠️ INCOMPATIBILIDADE DE HARDWARE** e não calcula volume.
+
+Detalhes em [docs/HARDWARE.md](docs/HARDWARE.md) (§3.1, §6 e §8.3) e [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (§12).
 
 ## Variáveis de ambiente
 
@@ -146,7 +174,7 @@ src/
 supabase/           migrations (schema + RLS)
 scripts/            administração e teste de ponta a ponta
 tools/              dispositivo virtual
-firmware/           ESP32-C3 (PlatformIO)
+firmware/           ESP32 DevKit V1 (PlatformIO): drivers VL53L0X e VL53L1X, testes do núcleo
 docs/               ARCHITECTURE.md · HARDWARE.md
 ```
 
@@ -155,7 +183,9 @@ Veja os detalhes em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ## Documentação
 
 - [Arquitetura](docs/ARCHITECTURE.md): persistência, autenticação, autorização, XP, contrato IoT, estados e privacidade
-- [Hardware](docs/HARDWARE.md): **válvula de 3 fios e relés (checklist)**, VL53L1X, calibração e firmware
+- [Hardware](docs/HARDWARE.md): **válvula de 3 fios e relés (checklist)**, sensores VL53L0X e VL53L1X e firmware
+- [Calibração de volume](docs/CALIBRACAO.md): procedimento físico, ZERO físico, estabilização, modelo V = k × H, qualidade, versões e validação experimental
+- [Protocolo de validação física do EC-001](docs/HARDWARE.md): montagem, sensor na tampa, cabo de 4 vias até o ESP32, alimentação do módulo, testes sem e com água, calibração, validação e análise de erro (§8)
 
 ## Convenções
 
