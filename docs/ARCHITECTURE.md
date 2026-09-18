@@ -208,7 +208,7 @@ QUEUED → EXECUTING → MEASURING → COMPLETED
 
 ## 9. Schema aplicado
 
-Migrations em `supabase/migrations/` (aplicar com `npm run db:migrate`), validadas nos testes com PostgreSQL real (PGlite) e as mesmas regras de RLS.
+Migrations em `supabase/migrations/` (aplicar com `npm run db:migrate`), validadas nos testes com PostgreSQL real (PGlite) e as mesmas regras de RLS. Mapa completo das relações, regras ao apagar, índices e auditoria: [BANCO_DE_DADOS.md](./BANCO_DE_DADOS.md).
 
 | Grupo | Tabelas |
 |---|---|

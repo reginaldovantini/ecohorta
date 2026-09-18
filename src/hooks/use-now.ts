@@ -24,9 +24,3 @@ export function useNow(intervalMs = 1000): number | null {
     () => null,
   );
 }
-
-/** Hora local (0–23) para saudações. `null` no servidor. */
-export function useHour(): number | null {
-  const now = useNow(60_000);
-  return now === null ? null : new Date(now).getHours();
-}

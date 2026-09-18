@@ -461,3 +461,46 @@ describe("configuração de hardware do captador", () => {
     await rejects(asUser(pg, null, (q) => q.query("select revision from collector_hardware_changes")), /permission denied/);
   });
 });
+
+describe("auditoria do schema", () => {
+  it("toda chave estrangeira tem índice", async () => {
+    const { rows } = await db.query<{ fk: string }>(`
+      select c.conrelid::regclass::text || '.' || c.conname as fk
+      from pg_constraint c
+      where c.contype = 'f' and c.connamespace = 'public'::regnamespace
+        and not exists (
+          select 1 from pg_index i
+          where i.indrelid = c.conrelid and (i.indkey::int2[])[0] = c.conkey[1]
+        )`);
+    expect(rows).toEqual([]);
+  });
+
+  it("apagar um dispositivo nunca apaga a telemetria dele: dispositivos são desativados", async () => {
+    await db.query(
+      `insert into telemetry (collector_id, device_id, recorded_at, uptime_ms, seq, distance_mm, volume_liters, fill_ratio, level_state, valve, status, overflowing, is_simulated, volume_source)
+       values ($1, $2, now(), 1, 1, 1236, null, null, null, 'closed', 'READY', false, true, 'none')`,
+      [IDS.collector, IDS.device],
+    );
+    await rejects(db.query("delete from devices where id = $1", [IDS.device]), /foreign key constraint/);
+    await db.query("update devices set active = false where id = $1", [IDS.device]);
+    const { rows } = await db.query("select 1 from telemetry where device_id = $1", [IDS.device]);
+    expect(rows).toHaveLength(1);
+  });
+
+  it("usuários do Supabase não têm TRUNCATE nem escrita pelas views", async () => {
+    const { rows } = await db.query<{ table_name: string; privilege_type: string }>(
+      `select table_name, privilege_type from information_schema.role_table_grants
+       where table_schema = 'public' and grantee in ('anon', 'authenticated')
+         and privilege_type in ('TRUNCATE', 'TRIGGER', 'REFERENCES', 'INSERT', 'DELETE')`,
+    );
+    expect(rows).toEqual([]);
+    await rejects(asUser(pg, IDS.teacher, (q) => q.query("truncate telemetry")), /permission denied/);
+  });
+
+  it("funções têm search_path fixo", async () => {
+    const { rows } = await db.query<{ proname: string }>(
+      "select proname from pg_proc where pronamespace = 'public'::regnamespace and (proconfig is null or not exists (select 1 from unnest(proconfig) c where c like 'search_path=%'))",
+    );
+    expect(rows).toEqual([]);
+  });
+});

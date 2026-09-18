@@ -175,7 +175,7 @@ supabase/           migrations (schema + RLS)
 scripts/            administração e teste de ponta a ponta
 tools/              dispositivo virtual
 firmware/           ESP32 DevKit V1 (PlatformIO): drivers VL53L0X e VL53L1X, testes do núcleo
-docs/               ARCHITECTURE.md · HARDWARE.md
+docs/               ARCHITECTURE.md · BANCO_DE_DADOS.md · HARDWARE.md · CALIBRACAO.md
 ```
 
 Veja os detalhes em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -183,6 +183,7 @@ Veja os detalhes em [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 ## Documentação
 
 - [Arquitetura](docs/ARCHITECTURE.md): persistência, autenticação, autorização, XP, contrato IoT, estados e privacidade
+- [Banco de dados](docs/BANCO_DE_DADOS.md): relações, regras ao apagar, RLS, índices e auditoria do schema
 - [Hardware](docs/HARDWARE.md): **válvula de 3 fios e relés (checklist)**, sensores VL53L0X e VL53L1X e firmware
 - [Calibração de volume](docs/CALIBRACAO.md): procedimento físico, ZERO físico, estabilização, modelo V = k × H, qualidade, versões e validação experimental
 - [Protocolo de validação física do EC-001](docs/HARDWARE.md): montagem, sensor na tampa, cabo de 4 vias até o ESP32, alimentação do módulo, testes sem e com água, calibração, validação e análise de erro (§8)
