@@ -1,6 +1,6 @@
 "use client";
 
-import { Cable, Microscope, Ruler } from "lucide-react";
+import { Cable, Microscope, QrCode, Ruler } from "lucide-react";
 import Link from "next/link";
 import { useCollectorCodes, useCollectorSnapshot } from "@/components/collector/collector-source";
 import { ScreenHeader } from "@/components/student/screen-header";
@@ -12,6 +12,7 @@ import { Surface } from "@/components/ui/surface";
 import { useProfile } from "@/hooks/use-profile";
 import { formatLiters } from "@/lib/utils/format";
 import { RestrictedNotice } from "./calibration-screen";
+import { StickerLink } from "./collector-sticker-card";
 
 /** Administração → Captadores: REAL ou SIMULAÇÃO, estado, sensor, calibração e acesso a bancada, calibração e ligações. */
 export function CollectorsAdminScreen() {
@@ -76,7 +77,14 @@ function CollectorRow({ code }: { code: string }) {
           </div>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-2">
+      {!calibration?.appliesToDevice && (
+        <p className="flex items-start gap-2 rounded-2xl bg-sun-400/10 px-3 py-2 text-xs leading-relaxed text-sun-300">
+          <QrCode className="mt-0.5 size-4 shrink-0" aria-hidden />
+          Cole o adesivo no tubo e calibre: até lá este captador não entrega litros nem aparece em missão.
+        </p>
+      )}
+      <div className="grid grid-cols-4 gap-2">
+        <StickerLink code={info.code} />
         {[
           { href: `${base}/ligacoes`, label: "Ligações", icon: Cable },
           { href: `${base}/bancada`, label: "Bancada", icon: Microscope },

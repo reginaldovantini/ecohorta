@@ -4,7 +4,7 @@ import { ACTORS, createTestDatabase, IDS, makeCollectorReal, resetTestDatabase, 
 import type { Database } from "./db/types";
 import { collectiveImpact, getRanking, participantRanking, schoolRanking } from "./ranking-service";
 
-const { otherStudent, student, student2, teacher } = ACTORS;
+const { otherStudent, student, teacher } = ACTORS;
 
 let db: Database;
 let missao = 0;
