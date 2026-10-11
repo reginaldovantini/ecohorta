@@ -18,6 +18,15 @@ import { canRelease, releaseBlockedReason, type ReleaseCheckId } from "./release
  * sair. Teste de interface é lento e frágil; esta regra precisa ser barata de provar.
  */
 
+/**
+ * Quanto tempo o botão fica pressionado até a válvula abrir.
+ *
+ * Três segundos é tempo de pensar: longo o bastante para que um toque no bolso
+ * ou um esbarrão não molhem o chão, e curto o bastante para não irritar quem
+ * está ali com o regador na mão. O anel de progresso mostra a contagem.
+ */
+export const VALVE_HOLD_MS = 3000;
+
 export type ReleaseState =
   /** Câmera aberta, procurando o QR colado no tubo. */
   | { stage: "scanning" }

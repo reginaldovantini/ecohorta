@@ -532,7 +532,11 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
         if (!row || row.school_id !== actor.schoolId) return null;
         const nowMs = now();
         await expireQueued(tx, row.id, nowMs);
-        return buildSnapshot(row, await activeCommand(tx, row.id), nowMs);
+        const { rows } = await tx.query(
+          "select 1 from public.collector_scans where collector_id = $1 and profile_id = $2 limit 1",
+          [row.id, actor.profileId],
+        );
+        return { ...buildSnapshot(row, await activeCommand(tx, row.id), nowMs), verified: rows.length > 0 };
       });
     },
 

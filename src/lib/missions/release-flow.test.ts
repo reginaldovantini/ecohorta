@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RELEASE_CHECK_IDS } from "./release-checklist";
-import { releaseAction, requestRelease, restartScan, scanAccepted, scanRejected, toggleCheck, type ReleaseState } from "./release-flow";
+import { releaseAction, requestRelease, restartScan, scanAccepted, scanRejected, toggleCheck, VALVE_HOLD_MS, type ReleaseState } from "./release-flow";
 
 /** Percorre a conferência inteira, marcando item por item. */
 const marcarTudo = (state: ReleaseState) => RELEASE_CHECK_IDS.reduce<ReleaseState>((current, id) => toggleCheck(current, id), state);
@@ -112,5 +112,11 @@ describe("o botão de baixo também é curto", () => {
     expect(releaseAction({ stage: "verifying" }).hint).toBeNull();
     expect(releaseAction({ stage: "releasing" }).hint).toBeNull();
     expect(releaseAction(scanAccepted()).hint).not.toBeNull();
+  });
+});
+
+describe("pressão para abrir a válvula", () => {
+  it("são 3 segundos: um toque acidental não molha o chão", () => {
+    expect(VALVE_HOLD_MS).toBe(3000);
   });
 });

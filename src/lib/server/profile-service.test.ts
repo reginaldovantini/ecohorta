@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createCollectorService } from "./collector-service";
 import { ACTORS, createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER } from "./db/test-db";
 import type { Database } from "./db/types";
-import { completeOnboarding, ensureProfile, findActor, getMe, switchSchool, updateIdentity } from "./profile-service";
+import { addSchoolMember, completeOnboarding, ensureProfile, findActor, getMe, switchSchool, updateIdentity } from "./profile-service";
 
 let db: Database;
 const { student } = ACTORS;
@@ -258,5 +258,67 @@ describe("captador apagado até a verificação", () => {
     await db.query("update collectors set active = false where id = $1", [IDS.collector]);
     const service = createCollectorService({ db, pepper: TEST_PEPPER });
     expect(await service.listCollectors(student)).toEqual([]);
+  });
+});
+
+describe("vínculo criado pela administração", () => {
+  const ADMIN = "80000000-0000-4000-8000-0000000000aa";
+
+  async function criarAdmin({ platform = false, schoolId = IDS.school as string | null } = {}) {
+    await db.query("insert into auth.users (id, email) values ($1, 'adm@escola.exemplo')", [ADMIN]);
+    await db.query(
+      "insert into profiles (id, school_id, role, nickname, avatar_id, platform_admin, onboarded_at) values ($1, $2, 'admin', 'Adm', 'estrela', $3, now())",
+      [ADMIN, schoolId, platform],
+    );
+    if (schoolId) await db.query("insert into school_members (profile_id, school_id) values ($1, $2)", [ADMIN, schoolId]);
+    return (await findActor(db, ADMIN))!;
+  }
+
+  it("vincula quem se transferiu, antes de a pessoa pisar na escola nova", async () => {
+    const admin = await criarAdmin({ platform: true, schoolId: null });
+    const result = await addSchoolMember(db, admin, { profileId: IDS.student, schoolId: IDS.otherSchool });
+    expect(result.ok).toBe(true);
+
+    const me = await getMe(db, (await findActor(db, IDS.student))!);
+    expect(me.schools.map((s) => s.name).sort()).toEqual(["Escola de Teste", "Outra Escola"]);
+  });
+
+  it("o vínculo dá a escola, não o captador: ele continua apagado até a primeira leitura", async () => {
+    const admin = await criarAdmin({ platform: true, schoolId: null });
+    await addSchoolMember(db, admin, { profileId: IDS.student, schoolId: IDS.otherSchool });
+    await switchSchool(db, student, IDS.otherSchool);
+
+    const service = createCollectorService({ db, pepper: TEST_PEPPER });
+    const lista = await service.listCollectors((await findActor(db, IDS.student))!);
+    expect(lista).toEqual([expect.objectContaining({ code: "EC-900", verified: false })]);
+  });
+
+  it("quem não é administração não vincula ninguém", async () => {
+    expect((await addSchoolMember(db, student, { profileId: IDS.student2, schoolId: IDS.otherSchool })).ok).toBe(false);
+    // Nem quem é responsável por captador: isso é poder sobre o tubo, não sobre a escola.
+    expect((await addSchoolMember(db, ACTORS.teacher, { profileId: IDS.student, schoolId: IDS.otherSchool })).ok).toBe(false);
+  });
+
+  it("administração de escola só mexe na própria", async () => {
+    const admin = await criarAdmin();
+    expect((await addSchoolMember(db, admin, { profileId: IDS.student, schoolId: IDS.otherSchool })).ok).toBe(false);
+    expect((await addSchoolMember(db, admin, { profileId: IDS.otherStudent, schoolId: IDS.school })).ok).toBe(true);
+  });
+
+  it("recusa escola e pessoa inexistentes", async () => {
+    const admin = await criarAdmin({ platform: true, schoolId: null });
+    const inexistente = "00000000-0000-4000-8000-000000000000";
+    const semEscola = await addSchoolMember(db, admin, { profileId: IDS.student, schoolId: inexistente });
+    const semPessoa = await addSchoolMember(db, admin, { profileId: inexistente, schoolId: IDS.school });
+    expect(semEscola.ok === false && semEscola.status).toBe(404);
+    expect(semPessoa.ok === false && semPessoa.status).toBe(404);
+  });
+
+  it("vincular duas vezes não duplica", async () => {
+    const admin = await criarAdmin({ platform: true, schoolId: null });
+    await addSchoolMember(db, admin, { profileId: IDS.student, schoolId: IDS.otherSchool });
+    await addSchoolMember(db, admin, { profileId: IDS.student, schoolId: IDS.otherSchool });
+    const { rows } = await db.query("select 1 from school_members where profile_id = $1 and school_id = $2", [IDS.student, IDS.otherSchool]);
+    expect(rows).toHaveLength(1);
   });
 });

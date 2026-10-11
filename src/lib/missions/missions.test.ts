@@ -85,3 +85,24 @@ describe("execução", () => {
     }
   });
 });
+
+describe("captador apagado até a primeira leitura", () => {
+  it("sem nunca ter lido o QR, a missão não aparece disponível", () => {
+    const naoVerificado = { ...snapshot(10, "READY"), verified: false };
+    expect(getMissionAvailability(mission, naoVerificado, false).status).toBe("needs_verification");
+  });
+
+  it("depois da primeira leitura, a missão aparece normalmente", () => {
+    const verificado = { ...snapshot(10, "READY"), verified: true };
+    expect(getMissionAvailability(mission, verificado, false).status).toBe("available");
+  });
+
+  it("captador antigo, sem o campo, continua funcionando (nem todo snapshot traz verificação)", () => {
+    expect(getMissionAvailability(mission, snapshot(10, "READY"), false).status).toBe("available");
+  });
+
+  it("falta de água e captador fora do ar continuam tendo prioridade na explicação", () => {
+    expect(getMissionAvailability(mission, { ...snapshot(10, "OFFLINE"), verified: false }, false).status).toBe("device_unavailable");
+    expect(getMissionAvailability(mission, { ...snapshot(10, "READY"), verified: false }, true).status).toBe("busy");
+  });
+});

@@ -141,6 +141,9 @@ export async function seedTestSchool(db: Queryable) {
   );
   // O poder de calibrar vem daqui, não do papel declarado no cadastro.
   await db.query("insert into collector_stewards (collector_id, profile_id) values ($1, $2)", [IDS.collector, IDS.teacher]);
+  // Quem é responsável pelo tubo esteve na frente dele: o captador está verificado
+  // para o professor, e continua apagado para os estudantes até cada um ler o QR.
+  await db.query("insert into collector_scans (collector_id, profile_id) values ($1, $2)", [IDS.collector, IDS.teacher]);
   await db.query(
     `insert into devices (id, collector_id, device_key, is_simulated, token_hash) values
      ($1, $2, 'VIRTUAL-001', true, $3), ($4, $5, 'ESP32-900', false, $6)`,

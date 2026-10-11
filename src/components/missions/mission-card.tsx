@@ -9,6 +9,7 @@ import type { MissionAvailability } from "@/lib/missions/availability";
 import { CATEGORY_LABEL, DIFFICULTY_LABEL, type MissionDefinition } from "@/lib/missions/catalog";
 import { cn } from "@/lib/utils/cn";
 import { formatLiters } from "@/lib/utils/format";
+import { VALVE_HOLD_MS } from "@/lib/missions/release-flow";
 import { HoldToConfirm } from "./hold-to-confirm";
 import { MissionArt } from "./mission-art";
 
@@ -35,6 +36,8 @@ function availabilityText(availability: MissionAvailability) {
       return { text: "Outra missão está liberando água", className: "text-aqua-300", dot: "bg-aqua-400" };
     case "device_unavailable":
       return { text: "Captador indisponível", className: "text-ember-400", dot: "bg-ember-400" };
+    case "needs_verification":
+      return { text: "Leia o QR do captador", className: "text-aqua-300", dot: "bg-aqua-400" };
   }
 }
 
@@ -163,6 +166,7 @@ export function MissionCard({ mission, availability, collectorCode, onConfirm }:
                       antes de confirmar.
                     </p>
                     <HoldToConfirm
+                      durationMs={VALVE_HOLD_MS}
                       label={`Segure para liberar ${formatLiters(liters, 1)}`}
                       holdingLabel="Continue segurando…"
                       icon={<Droplets className="size-5" />}

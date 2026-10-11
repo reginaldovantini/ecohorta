@@ -161,6 +161,12 @@ export interface CollectorSnapshot {
   calibration?: CollectorCalibrationSummary | null;
   /** Ensaio de bancada em andamento: leituras de diagnóstico, balanço pausado, missões bloqueadas. */
   benchMode?: boolean;
+  /**
+   * Esta pessoa já leu o QR DESTE captador alguma vez.
+   * Antes da primeira leitura o captador aparece apagado: sem nível em tempo real
+   * e sem missões. É o que torna a exigência de presença visível desde o começo.
+   */
+  verified?: boolean;
   hardware?: CollectorHardwareStatus;
 }
 

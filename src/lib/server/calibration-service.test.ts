@@ -17,7 +17,7 @@ import {
   type AuthenticatedDevice,
   type CollectorService,
 } from "./collector-service";
-import {createTestDatabase, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, ACTORS } from "./db/test-db";
+import {createTestDatabase, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, ACTORS, IDS } from "./db/test-db";
 import type { Database } from "./db/types";
 
 const { otherSchoolTeacher, staff, student, teacher } = ACTORS;
@@ -103,6 +103,10 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await resetTestDatabase(db);
+  // Estes testes olham o captador pelos olhos do estudante, e o que eles medem é a
+  // conversão distância → litros. A verificação de presença tem testes próprios,
+  // então aqui o estudante já leu o QR uma vez.
+  await db.query("insert into collector_scans (collector_id, profile_id) values ($1, $2)", [IDS.collector, IDS.student]);
   clock = 1_000_000;
   seq = 0;
   collectors = createCollectorService({ db, pepper: TEST_PEPPER, now: () => clock });

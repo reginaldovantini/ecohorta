@@ -7,7 +7,7 @@ import {
   type StaffSector,
   type UserRole,
 } from "@/lib/users/types";
-import type { Actor } from "./actor";
+import { isAdministrator, type Actor } from "./actor";
 import { millis, num, type Database, type Queryable } from "./db/types";
 import { fail, type ServiceResult } from "./errors";
 
@@ -148,6 +148,39 @@ export async function switchSchool(db: Queryable, actor: Actor, schoolId: unknow
     return fail(403, "Você ainda não pertence a esta escola. Leia o QR Code de um captador dela.");
   }
   await db.query("update public.profiles set school_id = $2 where id = $1", [actor.profileId, schoolId]);
+  return { ok: true, value: undefined };
+}
+
+/**
+ * Vínculo criado pela administração, para o caso que a leitura do QR não cobre:
+ * a pessoa que se transfere e precisa de acesso ANTES de pisar na escola nova.
+ *
+ * Isto dá acesso à escola, não ao captador. O captador continua apagado — sem
+ * nível em tempo real e sem missões — até ela ler o QR dele pela primeira vez.
+ * Nenhum atalho administrativo substitui estar na frente do tubo.
+ */
+export async function addSchoolMember(
+  db: Queryable,
+  actor: Actor,
+  input: { profileId: string; schoolId: string },
+): Promise<ServiceResult<void>> {
+  if (!isAdministrator(actor)) return fail(403, "Somente a administração vincula alguém a uma escola.");
+  // Administração de escola só mexe na própria; a da plataforma, em qualquer uma.
+  if (!actor.platformAdmin && actor.schoolId !== input.schoolId) {
+    return fail(403, "Você administra outra escola.");
+  }
+  const existe = await db.query("select 1 from public.schools where id = $1", [input.schoolId]);
+  if (existe.rows.length === 0) return fail(404, "Escola não encontrada.");
+  const pessoa = await db.query("select 1 from public.profiles where id = $1", [input.profileId]);
+  if (pessoa.rows.length === 0) return fail(404, "Pessoa não encontrada.");
+
+  await db.query(
+    `insert into public.school_members (profile_id, school_id) values ($1, $2)
+     on conflict (profile_id, school_id) do nothing`,
+    [input.profileId, input.schoolId],
+  );
+  // Sem escola nenhuma até agora: esta passa a ser a que ela vê.
+  await db.query("update public.profiles set school_id = $2 where id = $1 and school_id is null", [input.profileId, input.schoolId]);
   return { ok: true, value: undefined };
 }
 
