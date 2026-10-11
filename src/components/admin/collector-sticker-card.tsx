@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { Download, Printer, QrCode, Ruler } from "lucide-react";
+import { Download, Droplets, Printer, QrCode, Ruler } from "lucide-react";
 import { Surface } from "@/components/ui/surface";
 import { STICKER, stickerSize } from "@/lib/collector/qr-sticker";
 
@@ -32,8 +32,9 @@ export function CollectorStickerCard({ code, location }: { code: string; locatio
 
       <ol className="space-y-2.5">
         {[
-          { icon: Download, texto: "Baixe o PDF e leve à gráfica, ou imprima em adesivo A4." },
-          { icon: Printer, texto: "Imprima em tamanho real (100%). Nunca em “ajustar à página”." },
+          { icon: Download, texto: "Baixe o PDF e leve à gráfica — as instruções vão impressas nele." },
+          { icon: Droplets, texto: "Peça adesivo VINIL com laminação: o tubo molha, e papel comum apaga o QR." },
+          { icon: Printer, texto: "Tamanho real (100%). Nunca em “ajustar à página”." },
           { icon: Ruler, texto: `Confira com uma régua: o QR precisa medir ${STICKER.qrMm / 10} cm de lado.` },
         ].map(({ icon: Icon, texto }, index) => (
           <li key={index} className="flex gap-3 text-sm text-mist-300">

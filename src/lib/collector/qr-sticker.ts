@@ -240,27 +240,43 @@ export function buildStickerPdf(input: StickerInput): Uint8Array {
   content.push("Q");
 
   // ---- Identificação e instrução, fora da área colável ----
-  const legenda = [
-    `${input.code} · ${input.location}`,
-    input.schoolName,
-    "",
-    `Adesivo ${num(widthMm)} × ${num(heightMm)} mm · QR ${STICKER.qrMm} × ${STICKER.qrMm} mm`,
-    "Imprima em TAMANHO REAL (100%), sem ajustar à página.",
-    "Confira com uma régua: o QR precisa medir 3 cm de lado.",
-    "Cole no tubo, à altura dos olhos, protegido da chuva direta.",
+  /*
+   * Instruções separadas por quem executa. Quem leva o arquivo à gráfica não é
+   * quem cola no tubo, e misturar as duas coisas numa lista só faz cada um ler
+   * a metade errada.
+   *
+   * O material é a instrução que mais importa: o captador fica ao ar livre,
+   * recebendo respingo e sol. Papel comum encharca e o QR para de ler em
+   * semanas — e um QR que não lê significa missão que não acontece.
+   */
+  type Linha = { text: string; bold?: boolean; space?: boolean };
+  const legenda: Linha[] = [
+    { text: `${input.code} · ${input.location}`, bold: true },
+    { text: input.schoolName },
+    { text: "", space: true },
+    { text: "PARA A GRÁFICA", bold: true },
+    { text: "Imprimir em ADESIVO VINIL branco, próprio para molhar." },
+    { text: "Com laminação, contra sol e umidade. Papel comum não serve:" },
+    { text: "encharca e o QR Code para de ser lido." },
+    { text: `Tamanho real (100%), sem ajustar à página. Cortar nas marcas.` },
+    { text: "", space: true },
+    { text: "NA ESCOLA", bold: true },
+    { text: `Conferir com régua: o QR precisa medir ${STICKER.qrMm / 10} cm de lado.` },
+    { text: "Colar no tubo, à altura dos olhos, protegido da chuva direta." },
+    { text: "", space: true },
+    { text: `Adesivo ${num(widthMm)} × ${num(heightMm)} mm · QR ${STICKER.qrMm} × ${STICKER.qrMm} mm` },
   ];
   const legendaSize = mm(3.2);
-  let legendaY = y0 - mm(16);
+  let legendaY = y0 - mm(14);
   content.push("q 0.1 0.1 0.1 rg BT");
-  for (const [index, line] of legenda.entries()) {
-    if (!line) {
-      legendaY -= legendaSize * 0.8;
+  for (const linha of legenda) {
+    if (linha.space) {
+      legendaY -= legendaSize * 0.9;
       continue;
     }
-    const fonte = index === 0 ? "/F1" : "/F2";
-    content.push(`${fonte} ${num(legendaSize)} Tf`);
-    content.push(`1 0 0 1 ${num(x0)} ${num(legendaY)} Tm (${pdfText(line)}) Tj`);
-    legendaY -= legendaSize * 1.5;
+    content.push(`${linha.bold ? "/F1" : "/F2"} ${num(legendaSize)} Tf`);
+    content.push(`1 0 0 1 ${num(x0)} ${num(legendaY)} Tm (${pdfText(linha.text)}) Tj`);
+    legendaY -= legendaSize * 1.45;
   }
   content.push("ET Q");
 

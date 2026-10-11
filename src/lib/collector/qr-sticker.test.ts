@@ -153,7 +153,27 @@ describe("o que o adesivo diz", () => {
   it("identifica o captador FORA da área colável, para quem vai colar", () => {
     const texto = asText(sticker());
     expect(texto).toContain("EC-001 \\267 Horta dos fundos");
-    expect(texto).toContain("TAMANHO REAL");
+    expect(texto).toContain("EE Prof.");
+  });
+
+  it("manda imprimir em material que pode molhar: o tubo fica ao ar livre", () => {
+    const texto = asText(sticker());
+    expect(texto).toContain("ADESIVO VINIL");
+    expect(texto).toContain("pr\\363prio para molhar"); // próprio
+    expect(texto).toContain("lamina\\347\\343o"); // laminação
+    // E diz o que acontece se ignorarem, em vez de só proibir.
+    expect(texto).toContain("encharca e o QR Code para de ser lido");
+  });
+
+  it("separa o que a gráfica faz do que a escola faz", () => {
+    const texto = asText(sticker());
+    const graficaEm = texto.indexOf("PARA A GR");
+    const escolaEm = texto.indexOf("NA ESCOLA");
+    expect(graficaEm).toBeGreaterThan(0);
+    expect(escolaEm).toBeGreaterThan(graficaEm);
+    // Tamanho real é instrução de impressão; régua é conferência de quem recebe.
+    expect(texto.indexOf("Tamanho real")).toBeLessThan(escolaEm);
+    expect(texto.indexOf("Conferir com r")).toBeGreaterThan(escolaEm);
   });
 
   it("não imprime o token em lugar nenhum legível: ele existe só dentro do QR", () => {
