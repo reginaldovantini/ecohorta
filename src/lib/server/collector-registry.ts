@@ -22,8 +22,14 @@ import type { Queryable } from "./db/types";
  * missão até ser calibrado.
  */
 
-/** Prefixo do código dos captadores. A sequência é por escola. */
-const CODE_PREFIX = "EC";
+/**
+ * Prefixo do código. Cada um tem a PRÓPRIA sequência dentro da escola, para que o
+ * captador da simulação não ocupe o número do físico:
+ *   EC-nnn  → captador físico (ESP32 + sensor)
+ *   SIM-nnn → captador da simulação (dispositivo virtual)
+ */
+export const COLLECTOR_PREFIXES = ["EC", "SIM"] as const;
+export type CollectorPrefix = (typeof COLLECTOR_PREFIXES)[number];
 const MAX_SEQ = 999;
 
 /** Sem 0/O e 1/I: o código é lido de um papel dentro da caixa, muitas vezes com pouca luz. */
@@ -31,7 +37,7 @@ const STEWARD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const STEWARD_GROUPS = 3;
 const STEWARD_GROUP_SIZE = 4;
 
-export const formatCollectorCode = (seq: number) => `${CODE_PREFIX}-${String(seq).padStart(3, "0")}`;
+export const formatCollectorCode = (seq: number, prefix: CollectorPrefix = "EC") => `${prefix}-${String(seq).padStart(3, "0")}`;
 
 export const hashStewardCode = (code: string, pepper: string) => createHash("sha256").update(`steward:${pepper}:${normalizeStewardCode(code) ?? code}`).digest("hex");
 
@@ -60,11 +66,11 @@ export function normalizeStewardCode(input: string): string | null {
  * Próximo número da escola. Trava a linha da escola para que dois cadastros
  * simultâneos não recebam o mesmo número; a unique (school_id, seq) é a rede de segurança.
  */
-export async function nextCollectorSeq(tx: Queryable, schoolId: string): Promise<number> {
+export async function nextCollectorSeq(tx: Queryable, schoolId: string, prefix: CollectorPrefix = "EC"): Promise<number> {
   await tx.query("select 1 from public.schools where id = $1 for update", [schoolId]);
   const { rows } = await tx.query<{ next: number | string | null }>(
-    "select max(seq) + 1 as next from public.collectors where school_id = $1",
-    [schoolId],
+    "select max(seq) + 1 as next from public.collectors where school_id = $1 and prefix = $2",
+    [schoolId, prefix],
   );
   const next = Number(rows[0]?.next ?? 1) || 1;
   if (next > MAX_SEQ) throw new Error(`Esta escola já tem ${MAX_SEQ} captadores cadastrados.`);
@@ -80,6 +86,8 @@ export interface CollectorRegistrationInput {
   nominalDiameterMm: number;
   nominalUsefulHeightMm: number;
   reserveLiters: number;
+  /** "EC" (físico, padrão) ou "SIM" (simulação). Cada um numera por conta própria. */
+  prefix?: CollectorPrefix;
   distanceSensor?: DistanceSensorModel | string | null;
   createdBy: string | null;
   /** Segredo do ambiente usado no hash do código de responsável. */
@@ -88,6 +96,7 @@ export interface CollectorRegistrationInput {
 
 export interface CollectorRegistration {
   id: string;
+  prefix: CollectorPrefix;
   seq: number;
   code: string;
   name: string;
@@ -117,19 +126,21 @@ export async function registerCollector(tx: Queryable, input: CollectorRegistrat
   }
 
   const sensor = isDistanceSensorModel(input.distanceSensor) ? input.distanceSensor : DEFAULT_DISTANCE_SENSOR;
-  const seq = await nextCollectorSeq(tx, input.schoolId);
-  const code = formatCollectorCode(seq);
+  const prefix = input.prefix ?? "EC";
+  const seq = await nextCollectorSeq(tx, input.schoolId, prefix);
+  const code = formatCollectorCode(seq, prefix);
   const qrToken = generateQrToken();
   const stewardCode = generateStewardCode();
 
   const { rows } = await tx.query<{ id: string }>(
     `insert into public.collectors
-       (school_id, seq, code, name, location, capacity_liters, reserve_liters, nominal_diameter_mm,
+       (school_id, prefix, seq, code, name, location, capacity_liters, reserve_liters, nominal_diameter_mm,
         nominal_useful_height_mm, distance_sensor, qr_token, steward_code_hash, created_by)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      returning id`,
     [
       input.schoolId,
+      prefix,
       seq,
       code,
       name,
@@ -150,6 +161,7 @@ export async function registerCollector(tx: Queryable, input: CollectorRegistrat
 
   return {
     id,
+    prefix,
     seq,
     code,
     name,

@@ -309,3 +309,37 @@ describe("presença física: a leitura que autoriza a válvula", () => {
     expect(recusa).toBe("not_found");
   });
 });
+
+describe("prefixo: EC é físico, SIM é simulação", () => {
+  it("cada prefixo numera por conta própria — a simulação não ocupa o número do físico", async () => {
+    const escola = (await db.query<{ id: string }>("insert into public.schools (name) values ('Escola Prefixo') returning id")).rows[0]!.id;
+
+    const simulado = await db.transaction((tx) =>
+      registerCollector(tx, { schoolId: escola, location: "Simulação", ...TUBO, prefix: "SIM", createdBy: null, pepper: PEPPER }),
+    );
+    const fisico = await db.transaction((tx) =>
+      registerCollector(tx, { schoolId: escola, location: "Horta", ...TUBO, createdBy: null, pepper: PEPPER }),
+    );
+
+    expect(simulado.code).toBe("SIM-001");
+    expect(fisico.code).toBe("EC-001"); // e não EC-002
+    expect([simulado.seq, fisico.seq]).toEqual([1, 1]);
+  });
+
+  it("segue sequencial dentro de cada prefixo", async () => {
+    const escola = (await db.query<{ id: string }>("insert into public.schools (name) values ('Escola Duas Faixas') returning id")).rows[0]!.id;
+    const codigos: string[] = [];
+    for (const prefix of ["EC", "EC", "SIM", "EC", "SIM"] as const) {
+      const criado = await db.transaction((tx) =>
+        registerCollector(tx, { schoolId: escola, location: `Local ${codigos.length}`, ...TUBO, prefix, createdBy: null, pepper: PEPPER }),
+      );
+      codigos.push(criado.code);
+    }
+    expect(codigos).toEqual(["EC-001", "EC-002", "SIM-001", "EC-003", "SIM-002"]);
+  });
+
+  it("formata o código com o prefixo pedido", () => {
+    expect(formatCollectorCode(1)).toBe("EC-001");
+    expect(formatCollectorCode(2, "SIM")).toBe("SIM-002");
+  });
+});

@@ -153,6 +153,7 @@ async function seed() {
       const criado = await db.transaction((tx) =>
         registerCollector(tx, {
           schoolId,
+          prefix: "SIM",
           location: SIMULATED_COLLECTOR.location,
           name: SIMULATED_COLLECTOR.name,
           nominalDiameterMm: 100,
