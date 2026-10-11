@@ -42,6 +42,23 @@ interface ProfileRow {
   grade_phase: GradePhase | null;
 }
 
+/**
+ * Garante o perfil de quem acabou de entrar pela primeira vez.
+ *
+ * Com cadastro aberto, o Supabase Auth cria a conta e o app descobre a pessoa
+ * aqui. O perfil nasce SEM ESCOLA (ela vem da primeira leitura de QR) e com a
+ * função `student`, que é o padrão seguro: se o primeiro acesso for interrompido
+ * no meio, a conta fica sem privilégio nenhum em vez de virar educador.
+ *
+ * `onboarded_at` continua nulo, então o app leva a pessoa ao primeiro acesso.
+ */
+export async function ensureProfile(db: Queryable, userId: string): Promise<void> {
+  await db.query(
+    "insert into public.profiles (id, role, status) values ($1, 'student', 'active') on conflict (id) do nothing",
+    [userId],
+  );
+}
+
 /** Perfil ativo do usuário do Supabase Auth, ou null. */
 export async function findActor(db: Queryable, userId: string): Promise<Actor | null> {
   const { rows } = await db.query<{ id: string; school_id: string | null; role: UserRole; platform_admin: boolean }>(

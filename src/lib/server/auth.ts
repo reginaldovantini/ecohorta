@@ -2,7 +2,7 @@ import type { Actor } from "./actor";
 import { getDatabase } from "./db/pg";
 import { ConfigError } from "./errors";
 import { jsonError } from "./http";
-import { findActor } from "./profile-service";
+import { ensureProfile, findActor } from "./profile-service";
 import { createSupabaseServerClient } from "./supabase-server";
 
 /**
@@ -21,7 +21,11 @@ export async function authenticate(): Promise<{ actor: Actor; response?: undefin
   }
   if (!userId) return { response: jsonError(401, "Faça login para continuar.") };
 
-  const actor = await findActor(getDatabase(), userId);
-  if (!actor) return { response: jsonError(403, "Conta sem perfil ativo.") };
+  // Primeiro login (Google ou e-mail): a conta existe no Auth e o perfil nasce agora.
+  const db = getDatabase();
+  await ensureProfile(db, userId);
+  const actor = await findActor(db, userId);
+  // Só sobra um caso: perfil desativado por uma pessoa da administração.
+  if (!actor) return { response: jsonError(403, "Esta conta está desativada.") };
   return { actor };
 }

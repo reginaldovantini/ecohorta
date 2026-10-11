@@ -198,8 +198,11 @@ async function createAdmin() {
   const password = randomBytes(12).toString("base64url");
 
   await withDatabase(async (db) => {
-    // Administração da plataforma não pertence a uma escola: ela cria escolas.
-    const schoolId = values.platform ? null : await resolveSchool(db);
+    // Administrar a plataforma e pertencer a uma escola são coisas separadas: quem
+    // cuida da rede normalmente também participa de uma escola. Sem escola cadastrada,
+    // a conta nasce sem vínculo — e é ela que vai criar a primeira.
+    const escolas = await db.query<{ id: string }>("select id from public.schools");
+    const schoolId = escolas.rows.length === 0 && values.platform ? null : await resolveSchool(db);
     const created = await createAdministrator(db, createAuthAdmin(), {
       email,
       password,

@@ -180,7 +180,7 @@ export interface ScanResult {
   location: string;
   schoolId: string;
   scanId: string;
-  /** A leitura ligou esta pessoa à escola do captador (primeiro acesso). */
+  /** A leitura trouxe esta pessoa para a escola do captador — a primeira ou mais uma. */
   joinedSchool: boolean;
 }
 
@@ -199,11 +199,17 @@ export async function scanCollector(tx: Queryable, profileId: string, qrToken: s
   const collector = rows[0];
   if (!collector) return null;
 
+  // Ler o QR é o que liga a pessoa a uma escola — e ela pode pertencer a várias.
   // `returning` em vez de rowCount: a interface Queryable do projeto expõe só as linhas.
-  const updated = await tx.query<{ id: string }>(
-    "update public.profiles set school_id = $2 where id = $1 and school_id is null returning id",
-    [profileId, collector.school_id],
+  const ingressou = await tx.query<{ profile_id: string }>(
+    `insert into public.school_members (profile_id, school_id, joined_via_collector) values ($1, $2, $3)
+     on conflict (profile_id, school_id) do nothing
+     returning profile_id`,
+    [profileId, collector.school_id, collector.id],
   );
+  // A escola que a pessoa está vendo só muda quando ela ainda não tinha nenhuma:
+  // ler o tubo de outra escola não deve tirá-la de onde ela estava.
+  await tx.query("update public.profiles set school_id = $2 where id = $1 and school_id is null", [profileId, collector.school_id]);
   const scan = await tx.query<{ id: string }>(
     "insert into public.collector_scans (collector_id, profile_id) values ($1, $2) returning id",
     [collector.id, profileId],
@@ -216,7 +222,7 @@ export async function scanCollector(tx: Queryable, profileId: string, qrToken: s
     location: collector.location,
     schoolId: collector.school_id,
     scanId: scan.rows[0]!.id,
-    joinedSchool: updated.rows.length > 0,
+    joinedSchool: ingressou.rows.length > 0,
   };
 }
 

@@ -525,3 +525,43 @@ describe("auditoria do schema", () => {
     expect(rows).toEqual([]);
   });
 });
+
+describe("pertencer a várias escolas", () => {
+  /*
+   * O defeito que isto cobre: `collector_stewards` sempre atravessou escolas,
+   * mas o acesso olhava uma escola só no perfil. Dava para ter autoridade numa
+   * escola e não enxergar os captadores dela.
+   */
+  it("responsável por captadores de duas escolas enxerga os dois", async () => {
+    // O professor já é membro e responsável na escola de teste; agora também na outra.
+    await db.query("insert into school_members (profile_id, school_id) values ($1, $2)", [IDS.teacher, IDS.otherSchool]);
+    await db.query("insert into collector_stewards (collector_id, profile_id) values ($1, $2)", [IDS.otherCollector, IDS.teacher]);
+
+    const vistos = await asUser(pg, IDS.teacher, (q) => q.query<{ code: string }>("select code from collectors order by code"));
+    expect(vistos.rows.map((r) => r.code)).toEqual(["EC-001", "EC-900"]);
+  });
+
+  it("sem o vínculo, a autoridade sozinha não mostra o captador da outra escola", async () => {
+    await db.query("insert into collector_stewards (collector_id, profile_id) values ($1, $2)", [IDS.otherCollector, IDS.teacher]);
+    const vistos = await asUser(pg, IDS.teacher, (q) => q.query<{ code: string }>("select code from collectors"));
+    expect(vistos.rows.map((r) => r.code)).toEqual(["EC-001"]);
+  });
+
+  it("estudante continua vendo só a escola a que pertence", async () => {
+    const vistos = await asUser(pg, IDS.student, (q) => q.query<{ code: string }>("select code from collectors"));
+    expect(vistos.rows.map((r) => r.code)).toEqual(["EC-001"]);
+    const escolas = await asUser(pg, IDS.student, (q) => q.query<{ name: string }>("select name from schools"));
+    expect(escolas.rows.map((r) => r.name)).toEqual(["Escola de Teste"]);
+  });
+
+  it("administração da plataforma pertence a todas as escolas", async () => {
+    await db.query("update profiles set platform_admin = true where id = $1", [IDS.staff]);
+    const escolas = await asUser(pg, IDS.staff, (q) => q.query<{ name: string }>("select name from schools order by name"));
+    expect(escolas.rows.map((r) => r.name)).toEqual(["Escola de Teste", "Outra Escola"]);
+  });
+
+  it("a pessoa vê os próprios vínculos, e não os de quem é de outra escola", async () => {
+    const meus = await asUser(pg, IDS.otherStudent, (q) => q.query<{ profile_id: string }>("select profile_id from school_members"));
+    expect(meus.rows.map((r) => r.profile_id)).toEqual([IDS.otherStudent]);
+  });
+});

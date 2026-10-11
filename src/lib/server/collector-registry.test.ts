@@ -189,17 +189,46 @@ describe("leitura do QR", () => {
     expect(rows[0]!.school_id).toBe(escolaA);
   });
 
-  it("não troca a escola de quem já pertence a uma", async () => {
+  it("ler o QR de outra escola ADICIONA um vínculo, sem tirar a pessoa de onde ela estava", async () => {
     const naEscolaA = await registrar(escolaA, "Tubo A");
     const naEscolaB = await registrar(escolaB, "Tubo B");
-    const pessoa = await criarPessoa("ja-tem-escola@escola.exemplo");
+    const pessoa = await criarPessoa("duas-escolas@escola.exemplo");
 
     await db.transaction((tx) => scanCollector(tx, pessoa, naEscolaA.qrToken));
     const segunda = (await db.transaction((tx) => scanCollector(tx, pessoa, naEscolaB.qrToken)))!;
+    expect(segunda.joinedSchool).toBe(true); // entrou em mais uma
 
-    expect(segunda.joinedSchool).toBe(false);
+    const vinculos = await db.query<{ school_id: string }>(
+      "select school_id from public.school_members where profile_id = $1 order by joined_at", [pessoa],
+    );
+    expect(vinculos.rows.map((r) => r.school_id)).toEqual([escolaA, escolaB]);
+
+    // A escola que ela está vendo continua sendo a primeira: a leitura não a muda de lugar.
     const { rows } = await db.query<{ school_id: string }>("select school_id from public.profiles where id = $1", [pessoa]);
     expect(rows[0]!.school_id).toBe(escolaA);
+  });
+
+  it("reler o QR da mesma escola não duplica o vínculo nem reconta como ingresso", async () => {
+    const captador = await registrar(escolaA, "Tubo relido");
+    const pessoa = await criarPessoa("relido@escola.exemplo");
+
+    const primeira = (await db.transaction((tx) => scanCollector(tx, pessoa, captador.qrToken)))!;
+    const segunda = (await db.transaction((tx) => scanCollector(tx, pessoa, captador.qrToken)))!;
+    expect([primeira.joinedSchool, segunda.joinedSchool]).toEqual([true, false]);
+
+    const { rows } = await db.query("select 1 from public.school_members where profile_id = $1", [pessoa]);
+    expect(rows).toHaveLength(1);
+  });
+
+  it("guarda por qual captador a pessoa entrou na escola", async () => {
+    const captador = await registrar(escolaA, "Tubo da entrada");
+    const pessoa = await criarPessoa("por-qual-tubo@escola.exemplo");
+    await db.transaction((tx) => scanCollector(tx, pessoa, captador.qrToken));
+
+    const { rows } = await db.query<{ joined_via_collector: string }>(
+      "select joined_via_collector from public.school_members where profile_id = $1", [pessoa],
+    );
+    expect(rows[0]!.joined_via_collector).toBe(captador.id);
   });
 
   it("registra a presença a cada leitura", async () => {
@@ -341,5 +370,58 @@ describe("prefixo: EC é físico, SIM é simulação", () => {
   it("formata o código com o prefixo pedido", () => {
     expect(formatCollectorCode(1)).toBe("EC-001");
     expect(formatCollectorCode(2, "SIM")).toBe("SIM-002");
+  });
+});
+
+describe("o estudante que visita outra escola", () => {
+  /*
+   * A regra combinada: joga na escola a que pertence, com os captadores dela.
+   * Visitou outra escola e leu o QR de um captador de lá? Passa a jogar ali
+   * também — sem pedir nada a ninguém, e sem deixar de pertencer à sua escola.
+   */
+  it("não alcança o captador da outra escola antes de ler o QR dele", async () => {
+    const daVisita = await registrar(escolaB, "Horta da escola vizinha");
+    const estudante = await criarPessoa("visitante@escola.exemplo");
+    const doSeuColegio = await registrar(escolaA, "Horta da minha escola");
+    await db.transaction((tx) => scanCollector(tx, estudante, doSeuColegio.qrToken));
+
+    const minhas = await db.query<{ school_id: string }>("select school_id from public.school_members where profile_id = $1", [estudante]);
+    expect(minhas.rows.map((r) => r.school_id)).toEqual([escolaA]);
+    expect(minhas.rows.map((r) => r.school_id)).not.toContain(daVisita.id);
+  });
+
+  it("ao ler o QR durante a visita, passa a jogar lá também — e continua na própria escola", async () => {
+    const daMinhaEscola = await registrar(escolaA, "Pátio da minha escola");
+    const daVisita = await registrar(escolaB, "Quadra da escola visitada");
+    const estudante = await criarPessoa("em-visita@escola.exemplo");
+
+    await db.transaction((tx) => scanCollector(tx, estudante, daMinhaEscola.qrToken));
+    const visita = (await db.transaction((tx) => scanCollector(tx, estudante, daVisita.qrToken)))!;
+
+    expect(visita.joinedSchool).toBe(true);
+    expect(visita.location).toBe("Quadra da escola visitada");
+
+    const escolas = await db.query<{ school_id: string }>(
+      "select school_id from public.school_members where profile_id = $1 order by joined_at", [estudante],
+    );
+    expect(escolas.rows.map((r) => r.school_id)).toEqual([escolaA, escolaB]);
+
+    // E a leitura da visita autoriza a missão naquele captador, ali, naquele momento.
+    const recusa = await db.transaction((tx) =>
+      checkScan(tx, { scanId: visita.scanId, profileId: estudante, collectorId: visita.collectorId, nowMs: Date.now() }),
+    );
+    expect(recusa).toBeNull();
+  });
+
+  it("a leitura da visita não autoriza missão no captador da própria escola", async () => {
+    const daMinhaEscola = await registrar(escolaA, "Horta de casa");
+    const daVisita = await registrar(escolaB, "Horta visitada");
+    const estudante = await criarPessoa("so-onde-esta@escola.exemplo");
+
+    const visita = (await db.transaction((tx) => scanCollector(tx, estudante, daVisita.qrToken)))!;
+    const recusa = await db.transaction((tx) =>
+      checkScan(tx, { scanId: visita.scanId, profileId: estudante, collectorId: daMinhaEscola.id, nowMs: Date.now() }),
+    );
+    expect(recusa).toBe("other_collector");
   });
 });

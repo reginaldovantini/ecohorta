@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createCollectorService } from "./collector-service";
 import { ACTORS, createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER } from "./db/test-db";
 import type { Database } from "./db/types";
-import { findActor, getMe, updateIdentity } from "./profile-service";
+import { completeOnboarding, ensureProfile, findActor, getMe, updateIdentity } from "./profile-service";
 
 let db: Database;
 const { student } = ACTORS;
@@ -77,5 +77,100 @@ describe("perfil do usuário autenticado", () => {
     expect(me.history).toEqual([
       expect.objectContaining({ executionId, missionId: "irrigar-horta", status: "COMPLETED", deliveredLiters: 1.99, xpAwarded: 50, origin: "simulation" }),
     ]);
+  });
+});
+
+describe("primeiro acesso (cadastro aberto)", () => {
+  const NOVO = "80000000-0000-4000-8000-000000000001";
+
+  beforeEach(async () => {
+    await db.query("insert into auth.users (id, email) values ($1, 'novo@gmail.com')", [NOVO]);
+  });
+
+  it("o perfil nasce no primeiro login: sem escola, sem privilégio e sem cadastro concluído", async () => {
+    await ensureProfile(db, NOVO);
+    const actor = (await findActor(db, NOVO))!;
+    expect(actor).toMatchObject({ schoolId: null, role: "student", platformAdmin: false, stewardOf: [] });
+
+    const me = await getMe(db, actor);
+    expect(me.identity).toBeNull(); // leva ao primeiro acesso
+    expect(me.schoolName).toBeNull();
+  });
+
+  it("entrar de novo não recria nem sobrescreve o perfil", async () => {
+    await ensureProfile(db, NOVO);
+    await db.query("update profiles set role = 'teacher', nickname = 'Rê' where id = $1", [NOVO]);
+    await ensureProfile(db, NOVO);
+    const { rows } = await db.query<{ role: string; nickname: string }>("select role, nickname from profiles where id = $1", [NOVO]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual({ role: "teacher", nickname: "Rê" });
+  });
+
+  it("conclui o cadastro de estudante e guarda os dados pessoais fora do perfil de exibição", async () => {
+    await ensureProfile(db, NOVO);
+    const actor = (await findActor(db, NOVO))!;
+    const result = await completeOnboarding(db, actor, {
+      name: "Jhow",
+      sex: "masculino",
+      birthDate: "2010-04-15",
+      role: "student",
+      gradePhase: "ano_9",
+      avatarId: "broto",
+    });
+    expect(result.ok).toBe(true);
+
+    const me = await getMe(db, (await findActor(db, NOVO))!);
+    expect(me.identity).toEqual({ role: "student", nickname: "Jhow", avatarId: "broto", gradePhase: "ano_9" });
+    expect(JSON.stringify(me)).not.toMatch(/masculino|2010-04-15/);
+
+    const { rows } = await db.query<{ first_name: string; sex: string; birth_date: Date }>(
+      "select first_name, sex, birth_date from person_records where profile_id = $1",
+      [NOVO],
+    );
+    expect(rows[0]).toMatchObject({ first_name: "Jhow", sex: "masculino" });
+  });
+
+  it("professor e funcionário não recebem ano/fase", async () => {
+    await ensureProfile(db, NOVO);
+    const actor = (await findActor(db, NOVO))!;
+    await completeOnboarding(db, actor, {
+      name: "Rê",
+      sex: "feminino",
+      birthDate: "1985-02-10",
+      role: "teacher",
+      gradePhase: "ano_1",
+      avatarId: "cientista",
+    });
+    const { rows } = await db.query<{ role: string; grade_phase: string | null }>("select role, grade_phase from profiles where id = $1", [NOVO]);
+    expect(rows[0]).toEqual({ role: "teacher", grade_phase: null });
+  });
+
+  it("recusa função de administração: ela não é autoatribuível", async () => {
+    await ensureProfile(db, NOVO);
+    const actor = (await findActor(db, NOVO))!;
+    const result = await completeOnboarding(db, actor, {
+      name: "Esperto",
+      sex: "masculino",
+      birthDate: "2000-01-01",
+      role: "admin",
+      avatarId: "estrela",
+    });
+    expect(result.ok).toBe(false);
+    const { rows } = await db.query<{ role: string }>("select role from profiles where id = $1", [NOVO]);
+    expect(rows[0]!.role).toBe("student");
+  });
+
+  it("recusa estudante sem ano/fase", async () => {
+    await ensureProfile(db, NOVO);
+    const actor = (await findActor(db, NOVO))!;
+    const result = await completeOnboarding(db, actor, {
+      name: "Sem Ano",
+      sex: "feminino",
+      birthDate: "2010-01-01",
+      role: "student",
+      avatarId: "gota",
+    });
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.message).toMatch(/ano\/fase/i);
   });
 });

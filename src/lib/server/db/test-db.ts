@@ -60,7 +60,7 @@ export async function resetTestDatabase(db: Queryable) {
     `truncate table public.mission_post_reports, public.mission_post_likes, public.mission_posts,
      public.xp_transactions, public.mission_executions, public.device_commands, public.telemetry,
      public.calibration_validations, public.sensor_observations, public.collector_hardware_changes,
-     public.collector_scans, public.collector_stewards,
+     public.collector_scans, public.collector_stewards, public.school_members,
      public.collector_state, public.collector_calibrations, public.devices, public.collectors,
      public.guardian_consents, public.person_records, public.profiles, public.schools, auth.users
      restart identity cascade`,
@@ -133,6 +133,11 @@ export async function seedTestSchool(db: Queryable) {
      ($1, $2, 1, 'EC-001', 'EcoCaptador', 'Horta', 12, 0.5, 100, 1500, $5),
      ($3, $4, 1, 'EC-900', 'Captador Externo', 'Pátio', 12, 0.5, null, null, $6)`,
     [IDS.collector, IDS.school, IDS.otherCollector, IDS.otherSchool, "a".repeat(32), "b".repeat(32)],
+  );
+  // Pertencer à escola é o que dá visibilidade; é o que a leitura do QR cria.
+  await db.query(
+    `insert into school_members (profile_id, school_id) values ($1, $6), ($2, $6), ($3, $6), ($4, $6), ($5, $7)`,
+    [IDS.student, IDS.student2, IDS.teacher, IDS.staff, IDS.otherStudent, IDS.school, IDS.otherSchool],
   );
   // O poder de calibrar vem daqui, não do papel declarado no cadastro.
   await db.query("insert into collector_stewards (collector_id, profile_id) values ($1, $2)", [IDS.collector, IDS.teacher]);
