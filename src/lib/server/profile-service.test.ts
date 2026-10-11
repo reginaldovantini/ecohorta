@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createCollectorService } from "./collector-service";
-import { ACTORS, createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER } from "./db/test-db";
+import { ACTORS, createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, makeCollectorReal } from "./db/test-db";
 import type { Database } from "./db/types";
 import { addSchoolMember, completeOnboarding, ensureProfile, findActor, getMe, switchSchool, updateIdentity } from "./profile-service";
 
@@ -46,6 +46,8 @@ describe("perfil do usuário autenticado", () => {
   });
 
   it("XP e histórico vêm do banco, a partir da missão confirmada pelo sensor", async () => {
+    // XP só existe em captador físico: a simulação é ferramenta de teste.
+    await makeCollectorReal(db);
     let clock = 1_000_000;
     const service = createCollectorService({ db, pepper: TEST_PEPPER, now: () => clock });
     const device = (await service.authenticateDevice(`Bearer ${TEST_DEVICE_TOKEN}`, "VIRTUAL-001"))!;
@@ -75,7 +77,8 @@ describe("perfil do usuário autenticado", () => {
     const me = await getMe(db, student);
     expect(me.xp).toBe(50);
     expect(me.history).toEqual([
-      expect.objectContaining({ executionId, missionId: "irrigar-horta", status: "COMPLETED", deliveredLiters: 1.99, xpAwarded: 50, origin: "simulation" }),
+      // Captador físico: é o único que gera XP, e é por isso que este teste o usa.
+      expect.objectContaining({ executionId, missionId: "irrigar-horta", status: "COMPLETED", deliveredLiters: 1.99, xpAwarded: 50, origin: "device" }),
     ]);
   });
 });

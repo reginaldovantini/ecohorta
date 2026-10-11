@@ -41,7 +41,7 @@ import type {
 } from "@/lib/iot/types";
 import { findMission } from "@/lib/missions/catalog";
 import { getRescuePlan } from "@/lib/missions/rescue";
-import { isEducator, type Actor } from "./actor";
+import { isAdministrator, isEducator, type Actor } from "./actor";
 import { millis, num, numOrNull, type Database, type Queryable } from "./db/types";
 import { fail, type ServiceResult } from "./errors";
 
@@ -413,12 +413,23 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
     };
   }
 
+  /**
+   * XP da missão concluída.
+   *
+   * Captador simulado NÃO gera XP. Ele existe para a administração testar a
+   * plataforma; somar o XP dele ao de quem regou a horta de verdade misturaria
+   * teste com conquista, e o nível e o ranking deixariam de significar algo.
+   */
   async function awardMissionXp(q: Queryable, commandId: string, nowMs: number) {
-    const { rows } = await q.query<{ id: string; profile_id: string; mission_id: string }>(
-      "select id, profile_id, mission_id from public.mission_executions where command_id = $1",
+    const { rows } = await q.query<{ id: string; profile_id: string; mission_id: string; is_simulated: boolean }>(
+      `select e.id, e.profile_id, e.mission_id, d.is_simulated
+       from public.mission_executions e
+       join public.device_commands d on d.id = e.command_id
+       where e.command_id = $1`,
       [commandId],
     );
     const execution = rows[0];
+    if (execution?.is_simulated) return;
     const mission = execution ? findMission(execution.mission_id) : null;
     if (!execution || !mission || mission.xp <= 0) return;
     // O livro-razão impede XP duplicado para a mesma execução (xp_once_per_source).
@@ -513,15 +524,18 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
      * `verified` diz se esta pessoa já leu o QR DESTE captador alguma vez. Um
      * captador não verificado aparece apagado, pedindo a leitura: é assim que a
      * exigência de presença fica visível antes de a pessoa tentar uma missão.
+     *
+     * O captador de teste (prefixo SIM) aparece só para a administração. Ele é
+     * ferramenta de verificação da plataforma, não parte do jogo de ninguém.
      */
     async listCollectors(actor: Actor) {
       const { rows } = await db.query<{ code: string; name: string; location: string; verified: boolean }>(
         `select c.code, c.name, c.location,
                 exists (select 1 from public.collector_scans s where s.collector_id = c.id and s.profile_id = $2) as verified
          from public.collectors c
-         where c.school_id = $1 and c.active
+         where c.school_id = $1 and c.active and (c.prefix <> 'SIM' or $3)
          order by c.prefix, c.seq`,
-        [actor.schoolId, actor.profileId],
+        [actor.schoolId, actor.profileId, isAdministrator(actor)],
       );
       return rows;
     },

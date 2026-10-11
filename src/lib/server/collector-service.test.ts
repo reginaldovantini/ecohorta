@@ -2,7 +2,7 @@ import type { PGlite } from "@electric-sql/pglite";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { TelemetryPayload } from "@/lib/iot/api-schema";
 import { createCollectorService, IDLE_POLL_MS, ACTIVE_POLL_MS, type AuthenticatedDevice, type CollectorService } from "./collector-service";
-import { createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, ACTORS } from "./db/test-db";
+import { createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, ACTORS, makeCollectorReal } from "./db/test-db";
 import type { Database } from "./db/types";
 
 const { otherStudent, staff, student, student2, teacher } = ACTORS;
@@ -121,6 +121,8 @@ describe("ciclo de liberação", () => {
   });
 
   it("é idempotente e registra o reúso medido e o XP uma única vez", async () => {
+    // XP só existe em captador físico: a simulação é ferramenta de teste.
+    await makeCollectorReal(db);
     await service.requestDispense(student, "EC-001", dispense(CMD.a, EXEC.a));
     expect((await service.requestDispense(student, "EC-001", dispense(CMD.a, EXEC.a))).ok).toBe(true);
 

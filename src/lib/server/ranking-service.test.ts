@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { ACTORS, createTestDatabase, IDS, resetTestDatabase } from "./db/test-db";
+import { createCollectorService } from "./collector-service";
+import { ACTORS, createTestDatabase, IDS, makeCollectorReal, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER } from "./db/test-db";
 import type { Database } from "./db/types";
 import { collectiveImpact, getRanking, participantRanking, schoolRanking } from "./ranking-service";
 
@@ -44,8 +45,8 @@ beforeAll(async () => {
 beforeEach(async () => {
   await resetTestDatabase(db);
   missao = 0;
-  // O cenário padrão tem o EC-001 ligado ao dispositivo virtual; aqui ele é físico.
-  await db.query("update devices set is_simulated = false where collector_id = $1", [IDS.collector]);
+  // Impacto e ranking só existem com captador físico.
+  await makeCollectorReal(db);
 });
 
 describe("impacto coletivo", () => {
@@ -193,5 +194,73 @@ describe("quem ainda não concluiu o primeiro acesso", () => {
     await concluir(recem, IDS.collector, { delivered: 9 });
     await concluir(IDS.student, IDS.collector, { delivered: 1 });
     expect((await participantRanking(db, student)).map((p) => p.nickname)).toEqual(["Jhow"]);
+  });
+});
+
+describe("o captador de teste não contamina nada", () => {
+  it("missão simulada não gera XP: teste não vira conquista", async () => {
+    await db.query("update collectors set prefix = 'SIM', code = 'SIM-001' where id = $1", [IDS.collector]);
+    await db.query("update devices set is_simulated = true where collector_id = $1", [IDS.collector]);
+
+    const service = createCollectorService({ db, pepper: TEST_PEPPER });
+    const device = (await service.authenticateDevice(`Bearer ${TEST_DEVICE_TOKEN}`, "VIRTUAL-001", "SIM-001"))!;
+    const commandId = "60000000-0000-4000-8000-0000000000ff";
+    await db.query(
+      `insert into device_commands (id, collector_id, requested_by, target_liters, status, is_simulated, queued_at)
+       values ($1, $2, $3, 1, 'EXECUTING', true, now())`,
+      [commandId, IDS.collector, IDS.student],
+    );
+    await db.query(
+      `insert into mission_executions (id, profile_id, collector_id, command_id, mission_id, mission_category, target_liters, status, created_at)
+       values (gen_random_uuid(), $1, $2, $3, 'hidratar-mudas', 'action', 1, 'EXECUTING', now())`,
+      [IDS.student, IDS.collector, commandId],
+    );
+
+    await service.ingestTelemetry(device, {
+      device_id: "VIRTUAL-001",
+      collector_code: "SIM-001",
+      seq: 1,
+      uptime_ms: 1000,
+      distance_mm: 900,
+      valve: "closed",
+      status: "READY",
+      fw_version: "teste",
+      command_report: {
+        command_id: commandId,
+        status: "COMPLETED",
+        delivered_liters: 1,
+        start_volume_liters: 5,
+        end_volume_liters: 4,
+        failure: null,
+        started_uptime_ms: 0,
+        finished_uptime_ms: 500,
+      },
+    });
+
+    const execucao = await db.query<{ status: string; xp_awarded: number }>(
+      "select status, xp_awarded from mission_executions where command_id = $1",
+      [commandId],
+    );
+    // A missão é registrada — ela aconteceu — mas sem XP nenhum.
+    expect(execucao.rows[0]).toMatchObject({ status: "COMPLETED", xp_awarded: 0 });
+    const xp = await db.query("select 1 from xp_transactions where profile_id = $1", [IDS.student]);
+    expect(xp.rows).toHaveLength(0);
+  });
+
+  it("o captador de teste não aparece para estudante, professor nem funcionário", async () => {
+    await db.query("update collectors set prefix = 'SIM', code = 'SIM-001' where id = $1", [IDS.collector]);
+    const service = createCollectorService({ db, pepper: TEST_PEPPER });
+
+    expect(await service.listCollectors(student)).toEqual([]);
+    expect(await service.listCollectors(ACTORS.staff)).toEqual([]);
+    // Nem para quem é responsável pelo tubo: responsabilidade é sobre o captador, não administração.
+    expect(await service.listCollectors(teacher)).toEqual([]);
+  });
+
+  it("aparece para a administração, que é quem o usa para testar", async () => {
+    await db.query("update collectors set prefix = 'SIM', code = 'SIM-001' where id = $1", [IDS.collector]);
+    const service = createCollectorService({ db, pepper: TEST_PEPPER });
+    const admin = { ...student, role: "admin" as const };
+    expect((await service.listCollectors(admin)).map((c) => c.code)).toEqual(["SIM-001"]);
   });
 });

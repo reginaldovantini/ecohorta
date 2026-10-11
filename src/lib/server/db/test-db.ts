@@ -201,3 +201,15 @@ export async function seedPhysicalScenario(db: Database, esp32Token: string) {
   await ensureDevice(db, { collectorId: IDS.collector, deviceKey: "ESP32-001", isSimulated: false, token: esp32Token, pepper: TEST_PEPPER });
   return { simCollectorId: simId };
 }
+
+/**
+ * Torna o EC-001 do cenário um captador FÍSICO.
+ *
+ * O cenário padrão o deixa ligado ao dispositivo virtual, que é o que a maioria
+ * dos testes precisa. Testes sobre XP, impacto e ranking precisam do contrário:
+ * captador simulado não gera nada disso, de propósito.
+ */
+export async function makeCollectorReal(db: Queryable) {
+  await db.query("update public.devices set is_simulated = false where collector_id = $1", [IDS.collector]);
+  await db.query("update public.collector_state set simulation = null where collector_id = $1", [IDS.collector]);
+}
