@@ -21,8 +21,9 @@ import type { DeviceFailure, DeviceStatus, ValveState } from "./types";
  * válvula fechada pelo volume MEDIDO com antecipação da latência; NO_FLOW,
  * TIMEOUT, cancelamento e comandos idempotentes por command_id.
  *
- * Tempo simulado (física) pode ser acelerado; a estabilização da superfície
- * usa tempo real para que a etapa de medição seja perceptível.
+ * Tempo simulado (física) pode ser acelerado, mas só o acúmulo de condensado: a
+ * liberação de água corre sempre em tempo real, para que o estudante acompanhe o
+ * regador enchendo e a etapa de medição seja perceptível.
  *
  * Na simulação, o sensor "instalado" é sempre o configurado: a troca física é instantânea.
  */
@@ -239,9 +240,10 @@ export function createVirtualDevice(
   }
 
   function step(requestedSimMs: number, realMs: number) {
-    // A estabilização da superfície acontece em tempo real, mesmo com a simulação
-    // acelerada: senão o condensado de minutos simulados distorceria a medição final.
-    const simMs = active?.phase === "MEASURING" ? realMs : requestedSimMs;
+    // A liberação inteira acontece em tempo real, mesmo com a simulação acelerada: o
+    // estudante acompanha o regador enchendo, e o condensado de minutos simulados
+    // distorceria a medição final. Acelerar o tempo vale só para o acúmulo entre missões.
+    const simMs = active ? realMs : requestedSimMs;
     simClock += simMs;
     realClock += realMs;
 

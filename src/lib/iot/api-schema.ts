@@ -137,7 +137,7 @@ export const simulationRequestSchema = z.object({
     .object({
       timeScale: z.number().positive().max(1000),
       inflowEnabled: z.boolean(),
-      inflowLitersPerHour: z.number().min(0).max(20),
+      inflowLitersPerHour: z.number().min(0).max(120),
       faultNoFlow: z.boolean(),
       offline: z.boolean(),
     })

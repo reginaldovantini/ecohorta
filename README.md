@@ -95,13 +95,14 @@ Abra http://localhost:3000 e entre em `/entrar`.
   - falha por falta de vazão (`NO_FLOW`), timeout e comandos idempotentes;
   - transbordamento com descarte estimado.
 - **Painel da simulação** (somente professor/admin): toque no selo **SIMULAÇÃO**. Controla velocidade do tempo (1×, 30×, 120×), condensado, nível do captador, distância do sensor e falhas (válvula sem vazão, captador offline).
+- **Ritmo da demonstração:** o condensado entra a **60 L/h** (enche os 12 L em ~11 min e repõe uma missão de 3 L em ~3 min), e o painel oferece **1,2 L/h · real** para mostrar o ritmo verdadeiro. A liberação de uma missão é rápida como uma torneira aberta: **3 L em ~10 s** (6 s com o tubo cheio, 14 s quase vazio, porque a vazão por gravidade cai com o nível).
 - **Calibração de volume na simulação:** Perfil → Administração → Captadores → SIM-001. Cada etapa tem um botão para colocar o volume no captador virtual; a calibração resultante fica marcada como SIMULAÇÃO.
-- **Dica para demonstrar:** use **30×**. Uma liberação de 3 L leva cerca de 2 min simulados, ou 4 s na tela.
+- **Dica para demonstrar:** a velocidade do tempo (30×, 120×) acelera **só o acúmulo** de condensado. A liberação corre sempre em tempo real, para o estudante acompanhar o regador enchendo.
 - **Estado salvo:**
   - estado do captador, balanço, comandos, execuções e XP ficam no **Supabase** e sobrevivem a reinícios;
   - o nível físico do dispositivo virtual fica em `.data/` no computador que o executa.
 - **Para recomeçar a simulação:** "Reiniciar simulação" no painel (XP e histórico dos participantes são mantidos).
-- **Parâmetros:** `src/lib/iot/simulation-config.ts` (capacidade, altura útil, vazão), a substituir pelos valores **medidos** no captador real.
+- **Parâmetros:** `src/lib/iot/simulation-config.ts` (capacidade, altura útil, vazões de entrada e de saída), a substituir pelos valores **medidos** no captador real. Nenhum deles é medição, e a válvula de saída ainda não foi escolhida (`docs/HARDWARE.md`).
 
 ## Scripts
 

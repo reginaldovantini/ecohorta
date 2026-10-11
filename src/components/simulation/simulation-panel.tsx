@@ -10,13 +10,12 @@ import {
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button } from "@/components/ui/button";
 import type { SimulationRequest } from "@/lib/iot/data-source";
-import { DEFAULT_SIMULATION_SETTINGS, TIME_SCALES } from "@/lib/iot/simulation-config";
+import { DEFAULT_SIMULATION_SETTINGS, INFLOW_PRESETS, REAL_CONDENSATE_LITERS_PER_HOUR, TIME_SCALES } from "@/lib/iot/simulation-config";
 import { cn } from "@/lib/utils/cn";
 import { formatDecimal } from "@/lib/utils/format";
 import { SimulationPanelContext } from "./simulation-panel-context";
 
 const LEVEL_PRESETS = [0.1, 0.5, 0.9, 0.97, 1] as const;
-const INFLOW_PRESETS = [0.6, 1.2, 3] as const;
 
 /** `enabled` só para professores e administradores; para os demais, o selo SIMULAÇÃO não abre o painel. */
 export function SimulationPanelProvider({ enabled, children }: { enabled: boolean; children: ReactNode }) {
@@ -62,7 +61,7 @@ function SimulationPanelBody() {
       <PanelGroup
         icon={<Timer />}
         title="Velocidade do tempo"
-        hint="O condensado real acumula devagar (cerca de 1 L/h). Acelere para demonstrar."
+        hint="Acelera só o acúmulo de condensado. A liberação de água para uma missão acontece sempre em tempo real."
       >
         <Segmented
           label="Velocidade do tempo"
@@ -72,7 +71,11 @@ function SimulationPanelBody() {
         />
       </PanelGroup>
 
-      <PanelGroup icon={<Droplets />} title="Ar-condicionado">
+      <PanelGroup
+        icon={<Droplets />}
+        title="Ar-condicionado"
+        hint={`Só ${formatDecimal(REAL_CONDENSATE_LITERS_PER_HOUR, 1)} L/h é o ritmo real do condensado; as vazões maiores enchem o tubo em minutos para demonstrar.`}
+      >
         <SwitchRow
           label="Produzindo condensado"
           checked={settings.inflowEnabled}
@@ -80,7 +83,10 @@ function SimulationPanelBody() {
         />
         <Segmented
           label="Vazão de condensado"
-          options={INFLOW_PRESETS.map((rate) => ({ value: rate, label: `${formatDecimal(rate, 1)} L/h` }))}
+          options={INFLOW_PRESETS.map((rate) => ({
+            value: rate,
+            label: rate === REAL_CONDENSATE_LITERS_PER_HOUR ? `${formatDecimal(rate, 1)} L/h · real` : `${formatDecimal(rate, 0)} L/h`,
+          }))}
           value={settings.inflowLitersPerHour}
           disabled={!settings.inflowEnabled}
           onChange={(inflowLitersPerHour) => void send({ settings: { inflowLitersPerHour } })}

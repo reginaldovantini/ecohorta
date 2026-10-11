@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceCommand } from "./api-schema";
 import { distanceFromVolume, measuredReuse, volumeFromDistance } from "@/lib/collector/volume-calibration";
+import { VIRTUAL_DEVICE_CONFIG } from "./simulation-config";
 import { createVolumeConverter, median } from "./calibration";
 import { createVirtualDevice, virtualVolumeModel, type PhysicsSettings, type VirtualDeviceConfig } from "./virtual-device";
 
@@ -71,11 +72,12 @@ describe("firmware virtual — liberação", () => {
     expect(device.reading()).toMatchObject({ valve: "closed", status: "READY" });
   });
 
-  it("mantém a medição precisa com a simulação acelerada (estabilização em tempo real)", () => {
+  it("a simulação acelerada não encurta a liberação: a válvula corre em tempo real", () => {
     const { device } = setup(8, { inflowEnabled: true, inflowLitersPerHour: 1.2 });
     device.receive(dispense("fast", 2));
-    for (let elapsed = 0; elapsed < 60_000; elapsed += 100) {
-      device.advance(100 * 120, 100); // 120×
+    let realElapsed = 0;
+    for (; realElapsed < 240_000; realElapsed += 100) {
+      device.advance(100 * 120, 100); // painel em 120×
       const status = device.commandReport()?.status;
       if (status === "COMPLETED" || status === "FAILED") break;
     }
@@ -83,8 +85,10 @@ describe("firmware virtual — liberação", () => {
     expect(report.status).toBe("COMPLETED");
     expect(report.delivered_liters).toBeGreaterThan(1.95);
     expect(report.delivered_liters).toBeLessThan(2.06);
-    // Duração física: alguns minutos simulados de válvula aberta, não a estabilização acelerada.
-    expect(report.finished_uptime_ms! - report.started_uptime_ms!).toBeLessThan(150_000);
+    // O estudante vê o regador enchendo no tempo do relógio, não no tempo acelerado.
+    const durationMs = report.finished_uptime_ms! - report.started_uptime_ms!;
+    expect(durationMs).toBeGreaterThan(60_000); // ~2 L a 2,4 L/min nesta configuração de teste
+    expect(Math.abs(durationMs - realElapsed)).toBeLessThan(2000);
   });
 
   it("é idempotente: o mesmo command_id nunca executa duas vezes", () => {
@@ -128,6 +132,53 @@ describe("firmware virtual — liberação", () => {
     run(1000);
     expect(device.commandReport()).toMatchObject({ status: "FAILED", failure: "NO_FLOW" });
     expect(device.reading().valve).toBe("closed");
+  });
+});
+
+describe("firmware virtual — ritmo visto pelo estudante (configuração do SIM-001)", () => {
+  /** Liberação com a configuração que o SIM-001 usa de verdade, passo de 100 ms em tempo real. */
+  const dispenseOnSim = (volumeLiters: number, targetLiters: number) => {
+    const device = createVirtualDevice(
+      VIRTUAL_DEVICE_CONFIG,
+      { volumeLiters, settings: { inflowEnabled: false, inflowLitersPerHour: 0, faultNoFlow: false } },
+      { random: mulberry32(11) },
+    );
+    for (let i = 0; i < 20; i++) device.advance(100, 100); // estabiliza o filtro
+    device.receive(dispense("sim", targetLiters));
+    let valveMs = 0;
+    for (let elapsed = 0; elapsed < 120_000; elapsed += 100) {
+      device.advance(100, 100);
+      if (device.reading().valve === "open") valveMs += 100;
+      const status = device.commandReport()?.status;
+      if (status === "COMPLETED" || status === "FAILED" || status === "CANCELLED") break;
+    }
+    return { report: device.commandReport()!, valveSeconds: valveMs / 1000 };
+  };
+
+  it("enche o regador de 3 L em cerca de 10 s, como uma torneira aberta", () => {
+    const { report, valveSeconds } = dispenseOnSim(6, 3); // tubo pela metade
+    expect(report.status).toBe("COMPLETED");
+    expect(report.delivered_liters).toBeGreaterThan(2.85);
+    expect(report.delivered_liters).toBeLessThan(3.15);
+    expect(valveSeconds).toBeGreaterThan(6);
+    expect(valveSeconds).toBeLessThan(15);
+  });
+
+  it("sai mais rápido com o tubo cheio: a vazão por gravidade cai com o nível", () => {
+    const cheio = dispenseOnSim(VIRTUAL_DEVICE_CONFIG.capacityLiters, 3);
+    const quaseVazio = dispenseOnSim(4, 3);
+    expect(cheio.valveSeconds).toBeLessThan(quaseVazio.valveSeconds);
+    expect(quaseVazio.valveSeconds).toBeLessThan(20);
+  });
+
+  it("o condensado da demonstração enche o tubo em minutos, não em horas", () => {
+    const device = createVirtualDevice(
+      VIRTUAL_DEVICE_CONFIG,
+      { volumeLiters: 0, settings: { inflowEnabled: true, inflowLitersPerHour: 60, faultNoFlow: false }, sensorModel: "VL53L1X" },
+      { random: mulberry32(5) },
+    );
+    for (let elapsed = 0; elapsed < 15 * 60_000; elapsed += 1000) device.advance(1000, 1000);
+    expect(device.reading().volumeLiters).toBeGreaterThan(VIRTUAL_DEVICE_CONFIG.capacityLiters - 0.2);
   });
 });
 
