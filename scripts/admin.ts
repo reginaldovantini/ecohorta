@@ -3,7 +3,7 @@
  * Lê as credenciais do .env.local.
  *
  *   npm run db:migrate
- *   npm run db:seed [--school "Nome"]
+ *   npm run db:seed [--school "Nome"]        (cria só a escola; captador se cadastra à parte)
  *   npm run admin -- create-admin --email voce@escola.exemplo --name "Rê" [--platform] [--school "Nome"]
  *   npm run admin -- list-collectors
  *   npm run admin -- register-collector --location "Horta dos fundos" [--school "Nome"] [--diameter 100] [--height 1500] [--reserve 0.5] [--sensor VL53L1X]
@@ -16,22 +16,21 @@
  * CAPTADOR normalmente se cadastra DENTRO da plataforma (Administração → Captadores).
  * `register-collector` existe para o primeiro captador, antes de haver administrador.
  *
- * Convenção: EC-001, EC-002... são sequenciais DENTRO de cada escola. SIM-001 é o
- * captador da SIMULAÇÃO (VIRTUAL-001), criado pelo seed.
+ * Convenção: EC-001, EC-002... são sequenciais DENTRO de cada escola. O prefixo SIM
+ * existe só para o captador virtual de DESENVOLVIMENTO, nunca em dados de produção.
  *
  * Senhas, códigos de responsável e tokens aparecem UMA única vez e não são salvos,
  * exceto o token do dispositivo virtual, gravado apenas no .env.local deste computador.
  */
 import { randomBytes } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { DEFAULT_DISTANCE_SENSOR, DISTANCE_SENSOR_MODELS, isDistanceSensorModel } from "@/lib/collector/distance-sensors";
-import { SIMULATED_COLLECTOR, SIMULATED_DEVICE_ID } from "@/lib/iot/simulation-config";
 import { openScriptDatabase } from "@/lib/server/db/pg";
 import type { Queryable } from "@/lib/server/db/types";
 import { registerCollector } from "@/lib/server/collector-registry";
-import { createAdministrator, ensureDevice, ensureSchool, generateSecret } from "@/lib/server/provisioning";
+import { createAdministrator, ensureDevice, ensureSchool } from "@/lib/server/provisioning";
 import { createAuthAdmin } from "@/lib/server/supabase-admin";
 
 try {
@@ -90,17 +89,6 @@ async function resolveSchool(db: Queryable) {
   return match.id;
 }
 
-/** Salva o token do dispositivo virtual no .env.local (somente neste computador). */
-function storeVirtualToken(token: string) {
-  const file = ".env.local";
-  const content = existsSync(file) ? readFileSync(file, "utf8") : "";
-  const line = `IOT_SIMULATED_DEVICE_TOKEN=${token}`;
-  const next = /^IOT_SIMULATED_DEVICE_TOKEN=.*$/m.test(content)
-    ? content.replace(/^IOT_SIMULATED_DEVICE_TOKEN=.*$/m, line)
-    : `${content.trimEnd()}\n\n# Gerado por npm run db:seed (o banco guarda apenas o hash)\n${line}\n`;
-  writeFileSync(file, next);
-}
-
 async function migrate() {
   await withDatabase(async (db) => {
     // Mesma tabela de controle do Supabase CLI: migrations aplicadas aqui também aparecem para `supabase db push`.
@@ -130,48 +118,15 @@ async function migrate() {
 }
 
 async function seed() {
-  const devicePepper = pepper();
-  let token = process.env.IOT_SIMULATED_DEVICE_TOKEN;
-  if (!token) {
-    token = generateSecret(32);
-    storeVirtualToken(token);
-    console.log("Token do dispositivo virtual gerado e gravado no .env.local.");
-  }
-
   await withDatabase(async (db) => {
     const schoolId = await ensureSchool(db, values.school ?? DEFAULT_SCHOOL);
     console.log(`Escola: ${values.school ?? DEFAULT_SCHOOL}`);
-
-    const existente = await db.query<{ id: string; code: string }>(
-      "select c.id, c.code from public.collectors c join public.devices d on d.collector_id = c.id where d.device_key = $1",
-      [SIMULATED_DEVICE_ID],
-    );
-    let collectorId = existente.rows[0]?.id;
-    let code = existente.rows[0]?.code;
-
-    if (!collectorId) {
-      const criado = await db.transaction((tx) =>
-        registerCollector(tx, {
-          schoolId,
-          prefix: "SIM",
-          location: SIMULATED_COLLECTOR.location,
-          name: SIMULATED_COLLECTOR.name,
-          nominalDiameterMm: 100,
-          nominalUsefulHeightMm: 1500,
-          reserveLiters: SIMULATED_COLLECTOR.reserveLiters,
-          createdBy: null,
-          pepper: devicePepper,
-        }),
-      );
-      collectorId = criado.id;
-      code = criado.code;
-      console.log(`Captador ${criado.code} criado (${criado.location}, ~${criado.estimatedCapacityLiters} L estimados).`);
-      console.log(`Código de responsável (aparece só agora): ${criado.stewardCode}`);
-    }
-
-    await ensureDevice(db, { collectorId, deviceKey: SIMULATED_DEVICE_ID, isSimulated: true, token, pepper: devicePepper });
-    console.log(`Dispositivo ${SIMULATED_DEVICE_ID} (SIMULAÇÃO) ligado ao captador ${code}.`);
-    console.log("Este captador ainda NÃO entrega litros: calibre-o em Administração → Captadores.");
+    const quantos = await db.query<{ n: string }>("select count(*)::text as n from public.collectors where school_id = $1", [schoolId]);
+    console.log(`Captadores cadastrados nesta escola: ${quantos.rows[0]!.n}`);
+    console.log("");
+    console.log("O seed NÃO cria captador. Cada captador é cadastrado por quem administra,");
+    console.log("com a localização onde ele será instalado:");
+    console.log('  npm run admin -- register-collector --location "Horta dos fundos"');
   });
 }
 
