@@ -222,7 +222,10 @@ describe("autorização", () => {
 
   it("usuário de outra escola não enxerga o captador", async () => {
     expect(await service.getSnapshot(otherStudent, "EC-001")).toBeNull();
-    expect(await service.listCollectors(otherStudent)).toEqual([{ code: "EC-900", name: "Captador Externo", location: "Pátio" }]);
+    expect(await service.listCollectors(otherStudent)).toEqual([
+      // Apagado: a pessoa pertence à escola, mas ainda não leu o QR deste captador.
+      { code: "EC-900", name: "Captador Externo", location: "Pátio", verified: false },
+    ]);
     expect(await service.requestDispense(otherStudent, "EC-001", dispense(CMD.b, EXEC.b))).toMatchObject({ ok: false, status: 404 });
   });
 

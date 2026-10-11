@@ -506,10 +506,22 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
   const canSeeCommand = (actor: Actor, command: CommandRow) => command.requested_by === actor.profileId || isEducator(actor);
 
   return {
+    /**
+     * Captadores da escola ATUAL da pessoa — nunca os de outra escola a que ela
+     * também pertença: o jogo acontece em um lugar por vez.
+     *
+     * `verified` diz se esta pessoa já leu o QR DESTE captador alguma vez. Um
+     * captador não verificado aparece apagado, pedindo a leitura: é assim que a
+     * exigência de presença fica visível antes de a pessoa tentar uma missão.
+     */
     async listCollectors(actor: Actor) {
-      const { rows } = await db.query<{ code: string; name: string; location: string }>(
-        "select code, name, location from public.collectors where school_id = $1 order by code",
-        [actor.schoolId],
+      const { rows } = await db.query<{ code: string; name: string; location: string; verified: boolean }>(
+        `select c.code, c.name, c.location,
+                exists (select 1 from public.collector_scans s where s.collector_id = c.id and s.profile_id = $2) as verified
+         from public.collectors c
+         where c.school_id = $1 and c.active
+         order by c.prefix, c.seq`,
+        [actor.schoolId, actor.profileId],
       );
       return rows;
     },

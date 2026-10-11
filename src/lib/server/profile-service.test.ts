@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createCollectorService } from "./collector-service";
 import { ACTORS, createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER } from "./db/test-db";
 import type { Database } from "./db/types";
-import { completeOnboarding, ensureProfile, findActor, getMe, updateIdentity } from "./profile-service";
+import { completeOnboarding, ensureProfile, findActor, getMe, switchSchool, updateIdentity } from "./profile-service";
 
 let db: Database;
 const { student } = ACTORS;
@@ -172,5 +172,91 @@ describe("primeiro acesso (cadastro aberto)", () => {
     });
     expect(result.ok).toBe(false);
     expect(result.ok === false && result.message).toMatch(/ano\/fase/i);
+  });
+});
+
+describe("jogar em uma escola por vez", () => {
+  it("lista as escolas a que a pessoa pertence, marcando a atual", async () => {
+    const me = await getMe(db, student);
+    expect(me.schools).toEqual([{ id: IDS.school, name: "Escola de Teste", current: true, joinedVia: null }]);
+  });
+
+  it("o estudante só enxerga os captadores da escola atual, mesmo pertencendo a duas", async () => {
+    await db.query("insert into school_members (profile_id, school_id) values ($1, $2)", [IDS.student, IDS.otherSchool]);
+    const service = createCollectorService({ db, pepper: TEST_PEPPER });
+
+    expect((await service.listCollectors(student)).map((c) => c.code)).toEqual(["EC-001"]);
+
+    await switchSchool(db, student, IDS.otherSchool);
+    const depois = (await findActor(db, IDS.student))!;
+    expect((await service.listCollectors(depois)).map((c) => c.code)).toEqual(["EC-900"]);
+  });
+
+  it("trocar de escola muda o que o perfil mostra como atual", async () => {
+    await db.query("insert into school_members (profile_id, school_id) values ($1, $2)", [IDS.student, IDS.otherSchool]);
+    await switchSchool(db, student, IDS.otherSchool);
+    const me = await getMe(db, (await findActor(db, IDS.student))!);
+    expect(me.schoolName).toBe("Outra Escola");
+    expect(me.schools.find((s) => s.current)?.name).toBe("Outra Escola");
+    expect(me.schools).toHaveLength(2);
+  });
+
+  it("não troca para uma escola a que não pertence: a leitura do QR é o caminho", async () => {
+    const result = await switchSchool(db, student, IDS.otherSchool);
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.message).toMatch(/QR Code/i);
+
+    const { rows } = await db.query<{ school_id: string }>("select school_id from profiles where id = $1", [IDS.student]);
+    expect(rows[0]!.school_id).toBe(IDS.school); // continua onde estava
+  });
+
+  it("recusa escola inexistente ou valor inventado pelo navegador", async () => {
+    expect((await switchSchool(db, student, "00000000-0000-4000-8000-000000000000")).ok).toBe(false);
+    expect((await switchSchool(db, student, 42)).ok).toBe(false);
+    expect((await switchSchool(db, student, null)).ok).toBe(false);
+  });
+
+  it("diz por qual captador a pessoa entrou em cada escola", async () => {
+    await db.query("insert into school_members (profile_id, school_id, joined_via_collector) values ($1, $2, $3)", [
+      IDS.student,
+      IDS.otherSchool,
+      IDS.otherCollector,
+    ]);
+    const me = await getMe(db, student);
+    const visitada = me.schools.find((s) => s.id === IDS.otherSchool)!;
+    expect(visitada.joinedVia).toEqual({ code: "EC-900", location: "Pátio" });
+  });
+});
+
+describe("captador apagado até a verificação", () => {
+  it("o captador aparece apagado enquanto esta pessoa nunca leu o QR dele", async () => {
+    const service = createCollectorService({ db, pepper: TEST_PEPPER });
+    const [captador] = await service.listCollectors(student);
+    expect(captador).toMatchObject({ code: "EC-001", verified: false });
+  });
+
+  it("depois de ler o QR, ele acende — e só para quem leu", async () => {
+    const service = createCollectorService({ db, pepper: TEST_PEPPER });
+    await db.query("insert into collector_scans (collector_id, profile_id) values ($1, $2)", [IDS.collector, IDS.student]);
+
+    expect((await service.listCollectors(student))[0]).toMatchObject({ verified: true });
+    // O colega da mesma escola continua precisando ler o dele.
+    expect((await service.listCollectors(ACTORS.student2))[0]).toMatchObject({ verified: false });
+  });
+
+  it("ao trocar de escola, os captadores de lá começam apagados", async () => {
+    await db.query("insert into school_members (profile_id, school_id) values ($1, $2)", [IDS.student, IDS.otherSchool]);
+    await db.query("insert into collector_scans (collector_id, profile_id) values ($1, $2)", [IDS.collector, IDS.student]);
+    await switchSchool(db, student, IDS.otherSchool);
+
+    const service = createCollectorService({ db, pepper: TEST_PEPPER });
+    const naOutra = await service.listCollectors((await findActor(db, IDS.student))!);
+    expect(naOutra).toEqual([expect.objectContaining({ code: "EC-900", verified: false })]);
+  });
+
+  it("captador desativado some da lista", async () => {
+    await db.query("update collectors set active = false where id = $1", [IDS.collector]);
+    const service = createCollectorService({ db, pepper: TEST_PEPPER });
+    expect(await service.listCollectors(student)).toEqual([]);
   });
 });

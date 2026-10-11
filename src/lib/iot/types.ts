@@ -63,7 +63,7 @@ export type FailureReason = DeviceFailure | "DEVICE_OFFLINE" | "CONNECTION_ERROR
 export interface CollectorInfo {
   /** collector_id — UUID no banco; identificador estável. */
   id: string;
-  /** Código impresso no QR Code, ex.: "EC-001". */
+  /** Identificação legível, ex.: "EC-001". NÃO é o conteúdo do QR, que é um token opaco. */
   code: string;
   name: string;
   location: string;

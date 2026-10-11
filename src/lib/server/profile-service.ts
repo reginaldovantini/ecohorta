@@ -26,8 +26,18 @@ export interface MeResponse {
   identity: DisplayIdentity | null;
   /** Responsável por estes captadores (calibração, bancada, ligações). */
   stewardOf: string[];
+  /** Escolas a que a pessoa pertence. A atual é a que o jogo mostra. */
+  schools: MySchool[];
   xp: number;
   history: ExecutionRecord[];
+}
+
+export interface MySchool {
+  id: string;
+  name: string;
+  current: boolean;
+  /** Entrou nesta escola lendo o QR deste captador. */
+  joinedVia: { code: string; location: string } | null;
 }
 
 interface ProfileRow {
@@ -97,6 +107,50 @@ function toIdentity(row: ProfileRow): DisplayIdentity | null {
   }
 }
 
+/**
+ * Escolas a que a pessoa pertence, com a atual marcada.
+ * Entrar numa escola é físico (ler o QR de um captador de lá); escolher em qual
+ * jogar é uma troca de tela, feita no perfil.
+ */
+export async function listMySchools(db: Queryable, profileId: string, currentSchoolId: string | null): Promise<MySchool[]> {
+  const { rows } = await db.query<{ id: string; name: string; code: string | null; location: string | null }>(
+    `select s.id, s.name, c.code, c.location
+     from public.school_members m
+     join public.schools s on s.id = m.school_id
+     left join public.collectors c on c.id = m.joined_via_collector
+     where m.profile_id = $1
+     order by s.name`,
+    [profileId],
+  );
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    current: row.id === currentSchoolId,
+    joinedVia: row.code && row.location ? { code: row.code, location: row.location } : null,
+  }));
+}
+
+/**
+ * Troca a escola que a pessoa está jogando.
+ *
+ * SÓ entre escolas a que ela já pertence — e pertencer exige ter lido o QR de um
+ * captador de lá. Esta checagem é a fronteira de segurança: os serviços filtram
+ * tudo por `actor.schoolId` sem passar pelo RLS, então aceitar uma escola
+ * qualquer aqui abriria os dados dela.
+ */
+export async function switchSchool(db: Queryable, actor: Actor, schoolId: unknown): Promise<ServiceResult<void>> {
+  if (typeof schoolId !== "string" || schoolId.length === 0) return fail(422, "Escola inválida.");
+  const { rows } = await db.query<{ school_id: string }>(
+    "select school_id from public.school_members where profile_id = $1 and school_id = $2",
+    [actor.profileId, schoolId],
+  );
+  if (rows.length === 0) {
+    return fail(403, "Você ainda não pertence a esta escola. Leia o QR Code de um captador dela.");
+  }
+  await db.query("update public.profiles set school_id = $2 where id = $1", [actor.profileId, schoolId]);
+  return { ok: true, value: undefined };
+}
+
 export async function getMe(db: Queryable, actor: Actor): Promise<MeResponse> {
   const profile = await db.query<ProfileRow>(
     `select p.id, p.role, p.school_id, s.name as school_name, p.nickname, p.avatar_id, p.job_title,
@@ -145,6 +199,7 @@ export async function getMe(db: Queryable, actor: Actor): Promise<MeResponse> {
     schoolName: row.school_name,
     identity: toIdentity(row),
     stewardOf: [...actor.stewardOf],
+    schools: await listMySchools(db, actor.profileId, row.school_id),
     xp: num(xp.rows[0]?.xp ?? 0),
     history: history.rows.map((item) => ({
       executionId: item.id,
