@@ -31,7 +31,6 @@ describe("migrations", () => {
     expect(rows.map((row) => row.table_name)).toEqual(
       expect.arrayContaining([
         "schools",
-        "school_classes",
         "profiles",
         "person_records",
         "guardian_consents",
@@ -42,7 +41,13 @@ describe("migrations", () => {
         "device_commands",
         "mission_executions",
         "xp_transactions",
+        "collector_stewards",
+        "collector_scans",
+        "mission_posts",
+        "mission_post_likes",
+        "mission_post_reports",
         "participant_age_bands",
+        "mission_wall",
         "profile_xp",
       ]),
     );
@@ -58,41 +63,56 @@ describe("migrations", () => {
 });
 
 describe("constraints e triggers", () => {
-  it("exige turma e código de acesso para estudantes", async () => {
+  it("estudante que concluiu o primeiro acesso precisa de ano/fase", async () => {
     await db.query("insert into auth.users (id) values ('90000000-0000-4000-8000-000000000001')");
-    await rejects(
-      db.query("insert into profiles (id, school_id, role, access_code) values ('90000000-0000-4000-8000-000000000001', $1, 'student', '6C-ZZZZ')", [IDS.school]),
-      /student_has_class/,
+    // Sem concluir o cadastro, o perfil existe sem ano/fase: é o estado logo após o login.
+    await db.query(
+      "insert into profiles (id, school_id, role) values ('90000000-0000-4000-8000-000000000001', $1, 'student')",
+      [IDS.school],
     );
     await rejects(
-      db.query("insert into profiles (id, school_id, role, class_id) values ('90000000-0000-4000-8000-000000000001', $1, 'student', $2)", [IDS.school, IDS.class6c]),
-      /student_has_access_code/,
+      db.query("update profiles set nickname = 'Xy', avatar_id = 'broto', onboarded_at = now() where id = '90000000-0000-4000-8000-000000000001'"),
+      /student_has_grade_phase/,
     );
   });
 
-  it("exige setor para funcionários e identidade completa ao concluir o primeiro acesso", async () => {
-    await db.query("insert into auth.users (id) values ('90000000-0000-4000-8000-000000000002')");
+  it("ano/fase é só de estudante", async () => {
     await rejects(
-      db.query("insert into profiles (id, school_id, role, job_title) values ('90000000-0000-4000-8000-000000000002', $1, 'staff', 'Apoio')", [IDS.school]),
-      /staff_has_sector/,
+      db.query("update profiles set grade_phase = 'ano_1' where id = $1", [IDS.teacher]),
+      /grade_phase_only_for_students/,
     );
+  });
+
+  it("cadastro aberto: entra sem escola, e a escola vem da leitura do QR", async () => {
+    await db.query("insert into auth.users (id) values ('90000000-0000-4000-8000-000000000003')");
+    await db.query("insert into profiles (id, role) values ('90000000-0000-4000-8000-000000000003', 'student')");
+    const { rows } = await db.query<{ school_id: string | null; role: string }>(
+      "select school_id, role from profiles where id = '90000000-0000-4000-8000-000000000003'",
+    );
+    // 'student' é o padrão seguro: cadastro interrompido no meio nunca vira educador.
+    expect(rows[0]).toEqual({ school_id: null, role: "student" });
+  });
+
+  it("exige identidade completa ao concluir o primeiro acesso", async () => {
+    await db.query("insert into auth.users (id) values ('90000000-0000-4000-8000-000000000002')");
     await rejects(
       db.query("insert into profiles (id, school_id, role, onboarded_at) values ('90000000-0000-4000-8000-000000000002', $1, 'teacher', now())", [IDS.school]),
       /onboarded_has_identity/,
     );
   });
 
-  it("recusa data de nascimento futura e estudante sem data (trigger, não CHECK com current_date)", async () => {
+  it("recusa data de nascimento futura, e estudante sem data ou sem sexo (trigger, não CHECK com current_date)", async () => {
     await rejects(db.query("update person_records set birth_date = current_date + 1 where profile_id = $1", [IDS.teacher]), /futuro/);
     await rejects(db.query("update person_records set birth_date = null where profile_id = $1", [IDS.student]), /data de nascimento/);
+    await rejects(db.query("update person_records set sex = null where profile_id = $1", [IDS.student]), /sexo/);
     await db.query("update person_records set birth_date = current_date where profile_id = $1", [IDS.teacher]);
   });
 
   it("mantém o consentimento quando a conta de quem registrou é removida", async () => {
-    await db.query("insert into guardian_consents (profile_id, recorded_by, consented_at, method) values ($1, $2, now(), 'termo_impresso')", [
-      IDS.student,
-      IDS.teacher,
-    ]);
+    await db.query(
+      "insert into guardian_consents (profile_id, purpose, recorded_by, consented_at, method) values ($1, 'participacao', $2, now(), 'termo_impresso')",
+      [IDS.student, IDS.teacher],
+    );
     await db.query("delete from auth.users where id = $1", [IDS.teacher]);
     const { rows } = await db.query<{ recorded_by: string | null }>("select recorded_by from guardian_consents where profile_id = $1", [IDS.student]);
     expect(rows).toEqual([{ recorded_by: null }]);
@@ -151,11 +171,12 @@ describe("Row Level Security", () => {
     expect(staff.rows.map((row) => row.profile_id)).toEqual([IDS.staff]);
   });
 
-  it("perfis de exibição ficam restritos à escola e sem o código de acesso", async () => {
+  it("perfis de exibição ficam restritos à escola, e a marca de administração não é legível", async () => {
     const visible = await asUser(pg, IDS.student, (q) => q.query<{ id: string }>("select id, nickname from profiles"));
     expect(visible.rows.map((row) => row.id)).not.toContain(IDS.otherStudent);
     expect(visible.rows).toHaveLength(4);
-    await rejects(asUser(pg, IDS.student, (q) => q.query("select access_code from profiles")), /permission denied/);
+    // platform_admin fica fora das colunas concedidas: ninguém descobre quem manda na plataforma.
+    await rejects(asUser(pg, IDS.student, (q) => q.query("select platform_admin from profiles")), /permission denied/);
   });
 
   it("usuário altera apenas o próprio apelido e avatar", async () => {

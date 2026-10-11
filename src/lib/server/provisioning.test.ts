@@ -1,27 +1,40 @@
-import { randomUUID } from "node:crypto";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createTestDatabase, IDS, resetTestDatabase, TEST_PEPPER } from "./db/test-db";
+import { isEducator, isStewardOf, type Actor } from "./actor";
+import { ACTORS, createTestDatabase, hashDeviceToken, IDS, resetTestDatabase, TEST_PEPPER } from "./db/test-db";
 import type { Database } from "./db/types";
-import { createCollectorService } from "./collector-service";
-import { createParticipant, ensureClass, ensureCollector, ensureSchool, recordGuardianConsent, type AuthAdmin } from "./provisioning";
+import { findActor } from "./profile-service";
+import { createAdministrator, ensureDevice, ensureSchool, recordGuardianConsent, revokeGuardianConsent } from "./provisioning";
+
+/*
+ * Provisionamento no modelo de CADASTRO ABERTO.
+ *
+ * Pessoas não são mais criadas por script: entram pelo app e declaram a função.
+ * Sobrou aqui o que exige acesso de fora: escola, dispositivo e a conta de
+ * administração — a única função que ninguém pode se autoatribuir.
+ */
 
 let db: Database;
-const createdEmails: string[] = [];
-const deleted: string[] = [];
 
-/** Auth falso: grava em auth.users do banco de teste, como o Supabase faria. */
-const fakeAuth: AuthAdmin = {
-  async createUser({ email }) {
-    const id = randomUUID();
-    await db.query("insert into auth.users (id, email) values ($1, $2)", [id, email]);
-    createdEmails.push(email);
-    return id;
-  },
-  async deleteUser(userId) {
-    deleted.push(userId);
-    await db.query("delete from auth.users where id = $1", [userId]);
-  },
-};
+/** Supabase Auth de mentira: guarda os ids criados e permite simular falha. */
+function fakeAuth() {
+  const created: string[] = [];
+  const removed: string[] = [];
+  let nextId = 0;
+  return {
+    created,
+    removed,
+    createUser: async ({ email }: { email: string }) => {
+      const id = `70000000-0000-4000-8000-00000000000${++nextId}`;
+      // O Supabase Auth cria a linha em auth.users; o perfil referencia ela.
+      await db.query("insert into auth.users (id, email) values ($1, $2)", [id, email]);
+      created.push(id);
+      return id;
+    },
+    deleteUser: async (id: string) => {
+      removed.push(id);
+    },
+  };
+}
 
 beforeAll(async () => {
   ({ db } = await createTestDatabase());
@@ -29,118 +42,159 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await resetTestDatabase(db);
-  createdEmails.length = 0;
-  deleted.length = 0;
 });
 
-describe("provisionamento", () => {
-  it("é idempotente para escola, turma e captador", async () => {
-    const school = await ensureSchool(db, "Escola de Teste");
-    expect(school).toBe(IDS.school);
-    const classA = await ensureClass(db, school, { name: "6º Ano C", educationLevel: "elementary", grade: 6, section: "C", schoolYear: 2026 });
-    expect(classA).toBe(IDS.class6c);
-
-    const first = await ensureCollector(db, {
-      schoolId: school,
-      code: "ec002",
-      name: "Captador 2",
-      location: "Pátio",
-      capacityLiters: 20,
-      reserveLiters: 1,
-      device: { deviceKey: "ESP32-002", isSimulated: false, token: "token-real-1", pepper: TEST_PEPPER },
-    });
-    const again = await ensureCollector(db, {
-      schoolId: school,
-      code: "EC-002",
-      name: "Captador 2",
-      location: "Pátio",
-      capacityLiters: 20,
-      reserveLiters: 1,
-      device: { deviceKey: "ESP32-002", isSimulated: false, token: "token-real-2", pepper: TEST_PEPPER },
-    });
-    expect(again).toEqual(first);
-
-    // O token rotacionado passa a valer; o anterior deixa de valer.
-    const service = createCollectorService({ db, pepper: TEST_PEPPER });
-    expect(await service.authenticateDevice("Bearer token-real-1", "ESP32-002")).toBeNull();
-    expect(await service.authenticateDevice("Bearer token-real-2", "ESP32-002")).toMatchObject({ collectorCode: "EC-002", isSimulated: false });
+describe("escola", () => {
+  it("cria uma vez e reaproveita no mesmo nome", async () => {
+    const primeira = await ensureSchool(db, "Escola Nova");
+    const segunda = await ensureSchool(db, "Escola Nova");
+    expect(segunda).toBe(primeira);
   });
+});
 
-  it("cria estudante com código + PIN, sem e-mail pessoal, separando cadastro e exibição", async () => {
-    const created = await createParticipant(db, fakeAuth, {
-      role: "student",
+describe("conta de administração", () => {
+  it("é a única pessoa criada fora do app, e nasce com o primeiro acesso concluído", async () => {
+    const auth = fakeAuth();
+    const criado = await createAdministrator(db, auth, {
+      email: "Coordenacao@Escola.Exemplo",
+      password: "senha-bem-longa-123",
+      name: "Rê",
       schoolId: IDS.school,
-      classId: IDS.class6c,
-      firstName: "Maria",
-      lastName: "Oliveira",
-      birthDate: "2013-05-20",
     });
-    expect(created.accessCode).toMatch(/^6C-[A-Z2-9]{4}$/);
-    expect(created.pin).toMatch(/^\d{6}$/);
-    expect(created.email).toBe(`${created.accessCode!.toLowerCase()}@alunos.ecohorta.invalid`);
 
-    const profile = await db.query<{ role: string; nickname: string | null; access_code: string }>(
-      "select role, nickname, access_code from profiles where id = $1",
-      [created.profileId],
+    expect(criado.email).toBe("coordenacao@escola.exemplo"); // normalizado
+    const { rows } = await db.query<{ role: string; platform_admin: boolean; onboarded_at: Date | null; nickname: string }>(
+      "select role, platform_admin, onboarded_at, nickname from public.profiles where id = $1",
+      [criado.profileId],
     );
-    expect(profile.rows[0]).toEqual({ role: "student", nickname: null, access_code: created.accessCode });
-    const record = await db.query<{ first_name: string }>("select first_name from person_records where profile_id = $1", [created.profileId]);
-    expect(record.rows[0]?.first_name).toBe("Maria");
-
-    await recordGuardianConsent(db, { studentId: created.profileId, recordedBy: IDS.teacher, method: "termo_impresso" });
-    const consent = await db.query("select 1 from guardian_consents where profile_id = $1", [created.profileId]);
-    expect(consent.rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ role: "admin", platform_admin: false, nickname: "Rê" });
+    expect(rows[0]!.onboarded_at).not.toBeNull();
   });
 
-  it("cria professor, funcionário e administrador com e-mail e senha forte", async () => {
-    const teacher = await createParticipant(db, fakeAuth, {
-      role: "teacher",
-      schoolId: IDS.school,
-      firstName: "Carlos",
-      lastName: "Mendes",
-      jobTitle: "Professor de Matemática",
-      email: "Carlos@Escola.Exemplo",
-      password: "senha-muito-forte",
+  it("administração da plataforma não pertence a escola nenhuma: ela cria escolas", async () => {
+    const criado = await createAdministrator(db, fakeAuth(), {
+      email: "plataforma@ecohorta.exemplo",
+      password: "senha-bem-longa-123",
+      name: "Plataforma",
+      schoolId: null,
+      platformAdmin: true,
     });
-    expect(teacher.email).toBe("carlos@escola.exemplo");
-    expect(teacher.pin).toBeUndefined();
-
-    await expect(
-      createParticipant(db, fakeAuth, {
-        role: "staff",
-        schoolId: IDS.school,
-        firstName: "Rita",
-        lastName: "Alves",
-        jobTitle: "Secretária",
-        sector: "secretaria",
-        email: "rita@escola.exemplo",
-        password: "curta",
-      }),
-    ).rejects.toThrow(/10 caracteres/);
+    const { rows } = await db.query<{ school_id: string | null; platform_admin: boolean }>(
+      "select school_id, platform_admin from public.profiles where id = $1",
+      [criado.profileId],
+    );
+    expect(rows[0]).toEqual({ school_id: null, platform_admin: true });
   });
 
-  it("valida dados cadastrais e desfaz a conta do Auth se o banco recusar", async () => {
-    await expect(
-      createParticipant(db, fakeAuth, { role: "student", schoolId: IDS.school, classId: IDS.class6c, firstName: "Ana", lastName: "Lima", birthDate: "20/05/2013" }),
-    ).rejects.toThrow(/Dados inválidos/);
-    expect(createdEmails).toHaveLength(0);
-
-    await expect(
-      createParticipant(db, fakeAuth, {
-        role: "student",
-        schoolId: IDS.school,
-        classId: IDS.class6c,
-        firstName: "Ana",
-        lastName: "Lima",
-        birthDate: new Date(Date.now() + 86_400_000 * 10).toISOString().slice(0, 10),
-      }),
-    ).rejects.toThrow(/futuro/);
-    expect(deleted).toHaveLength(1);
+  it("recusa e-mail inválido, senha curta e nome vazio", async () => {
+    const auth = fakeAuth();
+    const base = { email: "a@b.com", password: "senha-bem-longa-123", name: "Rê", schoolId: IDS.school };
+    await expect(createAdministrator(db, auth, { ...base, email: "sem-arroba" })).rejects.toThrow(/e-mail/i);
+    await expect(createAdministrator(db, auth, { ...base, password: "curta" })).rejects.toThrow(/senha/i);
+    await expect(createAdministrator(db, auth, { ...base, name: " " })).rejects.toThrow(/nome/i);
+    expect(auth.created).toHaveLength(0); // nem chega a criar conta no Auth
   });
 
-  it("não permite turma de outra escola", async () => {
+  it("se o banco falhar, a conta criada no Auth é removida: nunca sobra login sem perfil", async () => {
+    const auth = fakeAuth();
     await expect(
-      createParticipant(db, fakeAuth, { role: "student", schoolId: IDS.school, classId: IDS.otherClass, firstName: "Ana", lastName: "Lima", birthDate: "2013-01-01" }),
-    ).rejects.toThrow(/Turma não encontrada/);
+      createAdministrator(db, auth, {
+        email: "orfao@escola.exemplo",
+        password: "senha-bem-longa-123",
+        name: "Órfão",
+        schoolId: "00000000-0000-4000-8000-000000000000", // escola inexistente
+      }),
+    ).rejects.toThrow();
+    expect(auth.removed).toEqual(auth.created);
+  });
+});
+
+describe("poder não vem da função declarada", () => {
+  it("quem declara professor sem ser responsável não é educador", () => {
+    const declarado: Actor = { profileId: IDS.student, schoolId: IDS.school, role: "teacher", platformAdmin: false, stewardOf: [] };
+    expect(isEducator(declarado)).toBe(false);
+    expect(isStewardOf(declarado, IDS.collector)).toBe(false);
+  });
+
+  it("quem é responsável por um captador é educador, mesmo declarando ser estudante", () => {
+    const responsavel: Actor = { profileId: IDS.student, schoolId: IDS.school, role: "student", platformAdmin: false, stewardOf: [IDS.collector] };
+    expect(isEducator(responsavel)).toBe(true);
+    expect(isStewardOf(responsavel, IDS.collector)).toBe(true);
+    expect(isStewardOf(responsavel, IDS.otherCollector)).toBe(false);
+  });
+
+  it("o ator carrega do banco os captadores sob responsabilidade", async () => {
+    const professor = await findActor(db, IDS.teacher);
+    expect(professor!.stewardOf).toEqual([IDS.collector]);
+    expect(isEducator(professor!)).toBe(true);
+
+    const funcionario = await findActor(db, IDS.staff);
+    expect(funcionario!.stewardOf).toEqual([]);
+    expect(isEducator(funcionario!)).toBe(false);
+  });
+
+  it("o cenário de teste reflete isso: staff declarado não abre porta", () => {
+    expect(isEducator(ACTORS.staff)).toBe(false);
+    expect(isEducator(ACTORS.teacher)).toBe(true);
+  });
+});
+
+describe("dispositivo", () => {
+  it("guarda só o hash do token", async () => {
+    const token = "token-novo-de-tamanho-suficiente-para-o-teste";
+    await ensureDevice(db, { collectorId: IDS.collector, deviceKey: "VIRTUAL-001", isSimulated: true, token, pepper: TEST_PEPPER });
+    const { rows } = await db.query<{ token_hash: string }>("select token_hash from public.devices where device_key = 'VIRTUAL-001'");
+    expect(rows[0]!.token_hash).toBe(hashDeviceToken(token));
+    expect(rows[0]!.token_hash).not.toContain(token);
+  });
+
+  it("trocar de SIMULAÇÃO para REAL recomeça o estado e substitui a calibração ativa", async () => {
+    await db.query("update public.collector_state set volume_liters = 7, volume_source = 'device', distance_mm = 800 where collector_id = $1", [IDS.collector]);
+
+    await ensureDevice(db, {
+      collectorId: IDS.collector,
+      deviceKey: "ESP32-NOVO",
+      isSimulated: false,
+      token: "token-do-esp32-de-tamanho-suficiente",
+      pepper: TEST_PEPPER,
+    });
+
+    const { rows } = await db.query<{ volume_liters: string | null; volume_source: string; distance_mm: string | null; status: string }>(
+      "select volume_liters, volume_source, distance_mm, status from public.collector_state where collector_id = $1",
+      [IDS.collector],
+    );
+    expect(rows[0]).toMatchObject({ volume_liters: null, volume_source: "none", distance_mm: null, status: "OFFLINE" });
+  });
+});
+
+describe("consentimento por finalidade", () => {
+  it("participar do projeto e publicar imagem são autorizações separadas", async () => {
+    await recordGuardianConsent(db, { profileId: IDS.student, purpose: "participacao", recordedBy: null, method: "termo_impresso" });
+    const { rows } = await db.query<{ purpose: string }>("select purpose from public.guardian_consents where profile_id = $1", [IDS.student]);
+    expect(rows.map((r) => r.purpose)).toEqual(["participacao"]);
+
+    await recordGuardianConsent(db, { profileId: IDS.student, purpose: "uso_de_imagem", recordedBy: IDS.teacher, method: "termo_digital" });
+    const dois = await db.query<{ purpose: string }>("select purpose from public.guardian_consents where profile_id = $1 order by purpose", [IDS.student]);
+    expect(dois.rows.map((r) => r.purpose)).toEqual(["participacao", "uso_de_imagem"]);
+  });
+
+  it("retirar o consentimento de imagem não derruba o de participação", async () => {
+    await recordGuardianConsent(db, { profileId: IDS.student, purpose: "participacao", recordedBy: null, method: "termo_impresso" });
+    await recordGuardianConsent(db, { profileId: IDS.student, purpose: "uso_de_imagem", recordedBy: null, method: "termo_impresso" });
+    await revokeGuardianConsent(db, IDS.student, "uso_de_imagem");
+
+    const { rows } = await db.query<{ purpose: string; revoked_at: Date | null }>(
+      "select purpose, revoked_at from public.guardian_consents where profile_id = $1 order by purpose",
+      [IDS.student],
+    );
+    expect(rows[0]).toMatchObject({ purpose: "participacao", revoked_at: null });
+    expect(rows[1]!.revoked_at).not.toBeNull();
+  });
+
+  it("a linha fica depois de retirada: o histórico de que houve autorização não se apaga", async () => {
+    await recordGuardianConsent(db, { profileId: IDS.student, purpose: "uso_de_imagem", recordedBy: null, method: "termo_impresso" });
+    await revokeGuardianConsent(db, IDS.student, "uso_de_imagem");
+    const { rows } = await db.query("select 1 from public.guardian_consents where profile_id = $1 and purpose = 'uso_de_imagem'", [IDS.student]);
+    expect(rows).toHaveLength(1);
   });
 });

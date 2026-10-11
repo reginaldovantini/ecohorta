@@ -7,8 +7,8 @@ import { VIRTUAL_DEVICE_CONFIG } from "@/lib/iot/simulation-config";
 import { createVirtualDevice, VIRTUAL_SENSOR_MODEL } from "@/lib/iot/virtual-device";
 import { getMissionAvailability } from "@/lib/missions/availability";
 import { findMission } from "@/lib/missions/catalog";
-import type { Actor } from "./actor";
 import { createBenchService } from "./bench-service";
+import type { Actor } from "./actor";
 import { createCalibrationService, type CalibrationService } from "./calibration-service";
 import {
   CALIBRATION_POLL_MS,
@@ -17,18 +17,17 @@ import {
   type AuthenticatedDevice,
   type CollectorService,
 } from "./collector-service";
-import { createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER } from "./db/test-db";
+import {createTestDatabase, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, ACTORS } from "./db/test-db";
 import type { Database } from "./db/types";
+
+const { otherSchoolTeacher, staff, student, teacher } = ACTORS;
+
 
 /*
  * Calibração experimental de volume sobre PostgreSQL real (PGlite):
  * leitura estabilizada, etapas, validação, versões, volume derivado e dispositivo virtual.
  */
 
-const teacher: Actor = { profileId: IDS.teacher, schoolId: IDS.school, role: "teacher" };
-const student: Actor = { profileId: IDS.student, schoolId: IDS.school, role: "student" };
-const staff: Actor = { profileId: IDS.staff, schoolId: IDS.school, role: "staff" };
-const otherSchoolTeacher: Actor = { profileId: IDS.otherStudent, schoolId: IDS.otherSchool, role: "teacher" };
 
 /** Tubo DN100 real (96,8 mm internos): distâncias de cada etapa. */
 const MM_PER_LITER = 1_000_000 / ((Math.PI / 4) * 96.8 ** 2);

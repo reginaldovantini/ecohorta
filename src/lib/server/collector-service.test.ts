@@ -1,10 +1,12 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { TelemetryPayload } from "@/lib/iot/api-schema";
-import type { Actor } from "./actor";
 import { createCollectorService, IDLE_POLL_MS, ACTIVE_POLL_MS, type AuthenticatedDevice, type CollectorService } from "./collector-service";
-import { createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER } from "./db/test-db";
+import { createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, ACTORS } from "./db/test-db";
 import type { Database } from "./db/types";
+
+const { otherStudent, staff, student, student2, teacher } = ACTORS;
+
 
 const CMD = {
   a: "0b7c6a8e-1f2d-4c3b-9a8e-7f6d5c4b3a21",
@@ -17,11 +19,6 @@ const EXEC = {
   c: "5a2b1f3d-6c7b-4b8a-8f3d-2c1b0a9f8e76",
 };
 
-const student: Actor = { profileId: IDS.student, schoolId: IDS.school, role: "student" };
-const student2: Actor = { profileId: IDS.student2, schoolId: IDS.school, role: "student" };
-const teacher: Actor = { profileId: IDS.teacher, schoolId: IDS.school, role: "teacher" };
-const staff: Actor = { profileId: IDS.staff, schoolId: IDS.school, role: "staff" };
-const otherStudent: Actor = { profileId: IDS.otherStudent, schoolId: IDS.otherSchool, role: "student" };
 
 let pg: PGlite;
 let db: Database;

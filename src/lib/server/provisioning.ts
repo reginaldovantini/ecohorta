@@ -1,21 +1,21 @@
-import { createHash, randomBytes, randomInt } from "node:crypto";
-import { normalizeCollectorCode } from "@/lib/collector/code";
-import { DEFAULT_DISTANCE_SENSOR, type DistanceSensorModel } from "@/lib/collector/distance-sensors";
+import { createHash, randomBytes } from "node:crypto";
 import { DEFAULT_SIMULATION_SETTINGS } from "@/lib/iot/simulation-config";
-import { ACCESS_CODE_ALPHABET, accessCodePrefix, studentEmail } from "@/lib/users/access";
-import {
-  adminRecordSchema,
-  staffRecordSchema,
-  studentRecordSchema,
-  teacherRecordSchema,
-  type EducationLevel,
-  type StaffSector,
-} from "@/lib/users/types";
 import { isUniqueViolation, type Database, type Queryable } from "./db/types";
 
 /*
- * Provisionamento (escola, turmas, captadores e participantes).
- * Usado pelos scripts de administração e pela API de administração.
+ * Provisionamento — o que NÃO nasce dentro do app.
+ *
+ * Desde que o cadastro passou a ser aberto (Google), pessoas não são mais criadas
+ * por script: elas entram sozinhas e declaram a função. Sobrou aqui o que exige
+ * acesso de fora do app:
+ *
+ *   escola        — criada antes de existir qualquer captador nela;
+ *   dispositivo   — o ESP32 (ou o virtual) ligado a um captador já cadastrado;
+ *   administração — a única conta que ninguém pode se autoatribuir, porque é ela
+ *                   que cadastra captadores e, com platform_admin, cria escolas.
+ *
+ * Captador não se cadastra aqui: isso é operação de administração dentro da
+ * plataforma, com QR e código de responsável (src/lib/server/collector-registry.ts).
  */
 
 export interface AuthAdmin {
@@ -26,16 +26,6 @@ export interface AuthAdmin {
 export const hashDeviceToken = (token: string, pepper: string) => createHash("sha256").update(`${pepper}:${token}`).digest("hex");
 export const generateSecret = (bytes = 32) => randomBytes(bytes).toString("hex");
 
-export function generatePin() {
-  return String(randomInt(0, 1_000_000)).padStart(6, "0");
-}
-
-export function generateAccessCode(prefix: string) {
-  let suffix = "";
-  for (let i = 0; i < 4; i++) suffix += ACCESS_CODE_ALPHABET[randomInt(0, ACCESS_CODE_ALPHABET.length)];
-  return `${prefix}-${suffix}`;
-}
-
 export async function ensureSchool(db: Queryable, name: string) {
   const { rows } = await db.query<{ id: string }>(
     "insert into public.schools (name) values ($1) on conflict (name) do update set name = excluded.name returning id",
@@ -44,98 +34,52 @@ export async function ensureSchool(db: Queryable, name: string) {
   return rows[0]!.id;
 }
 
-export async function ensureClass(
-  db: Queryable,
-  schoolId: string,
-  input: { name: string; educationLevel: EducationLevel; grade: number; section: string; schoolYear: number },
-) {
-  const { rows } = await db.query<{ id: string }>(
-    `insert into public.school_classes (school_id, name, education_level, grade, section, school_year)
-     values ($1, $2, $3, $4, $5, $6)
-     on conflict (school_id, school_year, education_level, grade, section) do update set name = excluded.name
-     returning id`,
-    [schoolId, input.name, input.educationLevel, input.grade, input.section, input.schoolYear],
-  );
-  return rows[0]!.id;
-}
-
 /**
- * Cria ou atualiza o captador e seu dispositivo. O token é recebido em claro
- * apenas para gerar o hash — nunca é salvo.
+ * Liga um dispositivo a um captador já cadastrado. O token chega em claro só para
+ * virar hash — nunca é salvo, e não há como recuperá-lo depois.
+ *
+ * Trocar entre REAL e SIMULAÇÃO no mesmo captador recomeça estado, leituras e
+ * balanço, e substitui a calibração ativa: medição de um dispositivo não vale para
+ * outro (docs/CALIBRACAO.md).
  */
-export async function ensureCollector(
+export async function ensureDevice(
   db: Database,
-  input: {
-    schoolId: string;
-    code: string;
-    name: string;
-    location: string;
-    capacityLiters: number;
-    reserveLiters: number;
-    /** Dimensões de projeto do tubo (ex.: DN100 e 1.500 mm), referência da calibração. */
-    nominalDiameterMm?: number | null;
-    nominalUsefulHeightMm?: number | null;
-    /**
-     * Sensor de distância de um captador NOVO. Em um captador existente não é alterado aqui:
-     * a troca é feita na plataforma (Ligações), com confirmação e histórico.
-     */
-    distanceSensor?: DistanceSensorModel;
-    device: { deviceKey: string; isSimulated: boolean; token: string; pepper: string };
-  },
+  input: { collectorId: string; deviceKey: string; isSimulated: boolean; token: string; pepper: string },
 ) {
-  const code = normalizeCollectorCode(input.code);
-  if (!code) throw new Error(`Código de captador inválido: ${input.code}`);
   return db.transaction(async (tx) => {
-    const collector = await tx.query<{ id: string }>(
-      `insert into public.collectors (school_id, code, name, location, capacity_liters, reserve_liters, nominal_diameter_mm, nominal_useful_height_mm,
-         distance_sensor)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-       on conflict (code) do update set name = excluded.name, location = excluded.location,
-         capacity_liters = excluded.capacity_liters, reserve_liters = excluded.reserve_liters,
-         nominal_diameter_mm = coalesce(excluded.nominal_diameter_mm, public.collectors.nominal_diameter_mm),
-         nominal_useful_height_mm = coalesce(excluded.nominal_useful_height_mm, public.collectors.nominal_useful_height_mm)
-       returning id`,
-      [
-        input.schoolId,
-        code,
-        input.name,
-        input.location,
-        input.capacityLiters,
-        input.reserveLiters,
-        input.nominalDiameterMm ?? null,
-        input.nominalUsefulHeightMm ?? null,
-        input.distanceSensor ?? DEFAULT_DISTANCE_SENSOR,
-      ],
-    );
-    const collectorId = collector.rows[0]!.id;
-    // Tipo do dispositivo que alimentava este captador até agora (REAL ou SIMULAÇÃO).
     const previous = await tx.query<{ is_simulated: boolean | null }>(
-      `select d.is_simulated from public.collector_state s left join public.devices d on d.id = s.device_id where s.collector_id = $1`,
-      [collectorId],
+      "select d.is_simulated from public.collector_state s left join public.devices d on d.id = s.device_id where s.collector_id = $1",
+      [input.collectorId],
     );
     const previousKind = previous.rows[0]?.is_simulated ?? null;
+
+    // Um captador tem um dispositivo ativo por vez (índice único no banco):
+    // trocar o ESP32 desativa o anterior em vez de esbarrar na restrição.
+    await tx.query("update public.devices set active = false where collector_id = $1 and device_key <> $2 and active", [
+      input.collectorId,
+      input.deviceKey,
+    ]);
     const device = await tx.query<{ id: string }>(
       `insert into public.devices (collector_id, device_key, is_simulated, token_hash)
        values ($1, $2, $3, $4)
        on conflict (device_key) do update set collector_id = excluded.collector_id, is_simulated = excluded.is_simulated,
          token_hash = excluded.token_hash, active = true
        returning id`,
-      [collectorId, input.device.deviceKey, input.device.isSimulated, hashDeviceToken(input.device.token, input.device.pepper)],
+      [input.collectorId, input.deviceKey, input.isSimulated, hashDeviceToken(input.token, input.pepper)],
     );
     const deviceId = device.rows[0]!.id;
-    const simulation = input.device.isSimulated
+    const simulation = input.isSimulated
       ? JSON.stringify({ settings: DEFAULT_SIMULATION_SETTINGS, pendingAction: null, nextActionId: 1 })
       : null;
+
     await tx.query(
       `insert into public.collector_state (collector_id, device_id, simulation) values ($1, $2, $3::jsonb)
        on conflict (collector_id) do update set device_id = excluded.device_id,
          simulation = case when $4 then coalesce(public.collector_state.simulation, excluded.simulation) else null end`,
-      [collectorId, deviceId, simulation, input.device.isSimulated],
+      [input.collectorId, deviceId, simulation, input.isSimulated],
     );
 
-    if (previousKind !== null && previousKind !== input.device.isSimulated) {
-      // Troca entre SIMULAÇÃO e REAL: nada do outro tipo continua valendo neste captador.
-      // Estado, leituras e balanço recomeçam; a calibração ativa é substituída (o histórico fica).
+    if (previousKind !== null && previousKind !== input.isSimulated) {
       await tx.query(
         `update public.collector_state
          set accounting = '{}'::jsonb, volume_liters = null, volume_source = 'none', calibration_id = null, height_mm = null,
@@ -145,131 +89,86 @@ export async function ensureCollector(
              last_telemetry_at = null, last_telemetry_volume = null,
              bench_mode_until = null, bench_started_at = null, bench_started_by = null, calibration_mode_until = null
          where collector_id = $1`,
-        [collectorId],
+        [input.collectorId],
       );
       await tx.query(
         "update public.collector_calibrations set status = 'superseded', superseded_at = now() where collector_id = $1 and status = 'active'",
-        [collectorId],
+        [input.collectorId],
       );
-      await tx.query("update public.collector_calibrations set status = 'cancelled' where collector_id = $1 and status = 'draft'", [collectorId]);
+      await tx.query("update public.collector_calibrations set status = 'cancelled' where collector_id = $1 and status = 'draft'", [input.collectorId]);
     }
-    return { collectorId, deviceId };
+    return deviceId;
   });
 }
 
-export type ParticipantInput =
-  | { role: "student"; schoolId: string; classId: string; firstName: string; lastName: string; birthDate: string }
-  | { role: "teacher"; schoolId: string; firstName: string; lastName: string; jobTitle: string; email: string; password: string }
-  | {
-      role: "staff";
-      schoolId: string;
-      firstName: string;
-      lastName: string;
-      jobTitle: string;
-      sector: StaffSector;
-      email: string;
-      password: string;
-    }
-  | { role: "admin"; schoolId: string; firstName: string; lastName: string; jobTitle: string | null; email: string; password: string };
-
-export interface CreatedParticipant {
-  profileId: string;
-  role: ParticipantInput["role"];
+export interface AdministratorInput {
   email: string;
-  /** Somente estudantes: entregar ao estudante uma única vez. */
-  accessCode?: string;
-  pin?: string;
-}
-
-function validate(input: ParticipantInput) {
-  switch (input.role) {
-    case "student":
-      return studentRecordSchema.safeParse(input);
-    case "teacher":
-      return teacherRecordSchema.safeParse(input);
-    case "staff":
-      return staffRecordSchema.safeParse(input);
-    case "admin":
-      return adminRecordSchema.safeParse(input);
-  }
+  password: string;
+  /** Primeiro nome ou apelido; é o que aparece na saudação. */
+  name: string;
+  schoolId: string | null;
+  /** Administração da plataforma: cria escolas e cadastra captadores de qualquer escola. */
+  platformAdmin?: boolean;
 }
 
 /**
- * Cria o participante: conta no Supabase Auth + perfil de exibição + registro cadastral.
- * Se a parte do banco falhar, a conta criada no Auth é removida.
+ * Cria uma conta de administração. É a única função de criação de pessoa que
+ * sobrou fora do app, exatamente porque `admin` não está entre as funções que
+ * alguém pode declarar no primeiro acesso.
+ *
+ * Se a parte do banco falhar, a conta criada no Auth é removida: nunca fica uma
+ * conta capaz de entrar sem perfil correspondente.
  */
-export async function createParticipant(db: Database, auth: AuthAdmin, input: ParticipantInput): Promise<CreatedParticipant> {
-  const parsed = validate(input);
-  if (!parsed.success) throw new Error(`Dados inválidos: ${parsed.error.issues.map((issue) => issue.path.join(".") + " " + issue.message).join("; ")}`);
-  if (input.role !== "student" && input.password.length < 10) throw new Error("A senha precisa ter pelo menos 10 caracteres.");
+export async function createAdministrator(db: Database, auth: AuthAdmin, input: AdministratorInput) {
+  const email = input.email.trim().toLowerCase();
+  const name = input.name.trim();
+  if (!email.includes("@")) throw new Error("Informe um e-mail válido.");
+  if (input.password.length < 10) throw new Error("A senha precisa ter pelo menos 10 caracteres.");
+  if (name.length < 2) throw new Error("Informe o nome.");
 
-  let accessCode: string | undefined;
-  let pin: string | undefined;
-  let email: string;
-  let password: string;
-
-  if (input.role === "student") {
-    const { rows } = await db.query<{ grade: number; section: string; school_id: string }>(
-      "select grade, section, school_id from public.school_classes where id = $1",
-      [input.classId],
-    );
-    const schoolClass = rows[0];
-    if (!schoolClass || schoolClass.school_id !== input.schoolId) throw new Error("Turma não encontrada nesta escola.");
-    const prefix = accessCodePrefix(schoolClass.grade, schoolClass.section);
-    for (let attempt = 0; attempt < 10 && !accessCode; attempt++) {
-      const candidate = generateAccessCode(prefix);
-      const taken = await db.query("select 1 from public.profiles where access_code = $1", [candidate]);
-      if (taken.rows.length === 0) accessCode = candidate;
-    }
-    if (!accessCode) throw new Error("Não foi possível gerar um código de acesso único.");
-    pin = generatePin();
-    email = studentEmail(accessCode);
-    password = pin;
-  } else {
-    email = input.email.trim().toLowerCase();
-    password = input.password;
-  }
-
-  const userId = await auth.createUser({ email, password, role: input.role });
+  const userId = await auth.createUser({ email, password: input.password, role: "admin" });
   try {
     await db.transaction(async (tx) => {
       await tx.query(
-        `insert into public.profiles (id, school_id, role, class_id, job_title, staff_sector, access_code, status)
-         values ($1, $2, $3, $4, $5, $6, $7, 'active')`,
-        [
-          userId,
-          input.schoolId,
-          input.role,
-          input.role === "student" ? input.classId : null,
-          input.role === "student" ? null : input.jobTitle,
-          input.role === "staff" ? input.sector : null,
-          accessCode ?? null,
-        ],
+        `insert into public.profiles (id, school_id, role, nickname, avatar_id, platform_admin, status, onboarded_at)
+         values ($1, $2, 'admin', $3, 'cientista', $4, 'active', now())`,
+        [userId, input.schoolId, name.slice(0, 20), input.platformAdmin ?? false],
       );
-      await tx.query("insert into public.person_records (profile_id, first_name, last_name, birth_date) values ($1, $2, $3, $4)", [
-        userId,
-        input.firstName.trim(),
-        input.lastName.trim(),
-        input.role === "student" ? input.birthDate : null,
-      ]);
+      await tx.query("insert into public.person_records (profile_id, first_name) values ($1, $2)", [userId, name]);
     });
   } catch (error) {
     await auth.deleteUser(userId).catch(() => undefined);
-    if (isUniqueViolation(error)) throw new Error("Já existe um participante com este identificador.");
+    if (isUniqueViolation(error)) throw new Error("Já existe uma conta com este e-mail.");
     throw error;
   }
-
-  return { profileId: userId, role: input.role, email, accessCode, pin };
+  return { profileId: userId, email };
 }
 
-/** Registro do consentimento do responsável (LGPD art. 14). */
+export type ConsentPurpose = "participacao" | "uso_de_imagem";
+export type ConsentMethod = "termo_impresso" | "termo_digital" | "outro";
+
+/**
+ * Consentimento do responsável (LGPD art. 14), por finalidade.
+ * Participar do projeto e ter a imagem no mural são autorizações diferentes:
+ * a segunda pode ser retirada sem derrubar a primeira.
+ */
 export async function recordGuardianConsent(
   db: Queryable,
-  input: { studentId: string; recordedBy: string | null; method: "termo_impresso" | "termo_digital" | "outro"; consentedAt?: Date },
+  input: { profileId: string; purpose: ConsentPurpose; recordedBy: string | null; method: ConsentMethod; consentedAt?: Date },
 ) {
   await db.query(
-    `insert into public.guardian_consents (profile_id, recorded_by, consented_at, method) values ($1, $2, $3, $4)
-     on conflict (profile_id) do update set recorded_by = excluded.recorded_by, consented_at = excluded.consented_at, method = excluded.method`,
-    [input.studentId, input.recordedBy, input.consentedAt ?? new Date(), input.method],
+    `insert into public.guardian_consents (profile_id, purpose, recorded_by, consented_at, method)
+     values ($1, $2, $3, $4, $5)
+     on conflict (profile_id, purpose) do update set recorded_by = excluded.recorded_by,
+       consented_at = excluded.consented_at, method = excluded.method, revoked_at = null`,
+    [input.profileId, input.purpose, input.recordedBy, input.consentedAt ?? new Date(), input.method],
+  );
+}
+
+/** Retirada do consentimento. A linha fica: o histórico de que houve autorização não se apaga. */
+export async function revokeGuardianConsent(db: Queryable, profileId: string, purpose: ConsentPurpose) {
+  await db.query(
+    "update public.guardian_consents set revoked_at = now() where profile_id = $1 and purpose = $2 and revoked_at is null",
+    [profileId, purpose],
   );
 }

@@ -1,14 +1,15 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CALIBRATION_STEP_IDS, type CalibrationStepId } from "@/lib/collector/volume-calibration";
 import { hardwareChangeRequestSchema, type SensorDiagnostics, type TelemetryPayload } from "@/lib/iot/api-schema";
-import type { Actor } from "./actor";
 import { createBenchService, type BenchService } from "./bench-service";
 import { createCalibrationService, type CalibrationService } from "./calibration-service";
+import type { Actor } from "./actor";
 import { createCollectorService, type AuthenticatedDevice, type CollectorService } from "./collector-service";
-import { createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER } from "./db/test-db";
+import { createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, ACTORS, seedPhysicalScenario } from "./db/test-db";
 import type { Database } from "./db/types";
 import { createHardwareService, type HardwareService } from "./hardware-service";
-import { ensureCollector } from "./provisioning";
+
+const { otherSchoolTeacher, staff, student, teacher } = ACTORS;
 
 /*
  * Configuração de hardware (sensor de distância VL53L0X ou VL53L1X) sobre PostgreSQL real (PGlite):
@@ -16,10 +17,6 @@ import { ensureCollector } from "./provisioning";
  * o configurado e o reportado, sensor ausente, timeout, leituras e proteção da calibração.
  */
 
-const teacher: Actor = { profileId: IDS.teacher, schoolId: IDS.school, role: "teacher" };
-const student: Actor = { profileId: IDS.student, schoolId: IDS.school, role: "student" };
-const staff: Actor = { profileId: IDS.staff, schoolId: IDS.school, role: "staff" };
-const otherSchoolTeacher: Actor = { profileId: IDS.otherStudent, schoolId: IDS.otherSchool, role: "teacher" };
 
 const ESP32_TOKEN = "token-do-esp32-de-teste-suficientemente-longo";
 const MM_PER_LITER = 1_000_000 / ((Math.PI / 4) * 96.8 ** 2);
@@ -120,26 +117,7 @@ beforeEach(async () => {
   calibrations = createCalibrationService({ db, now: () => clock });
   bench = createBenchService({ db, now: () => clock });
   hardware = createHardwareService({ db, now: () => clock });
-  await ensureCollector(db, {
-    schoolId: IDS.school,
-    code: "SIM-001",
-    name: "Captador virtual",
-    location: "Simulação",
-    capacityLiters: 12,
-    reserveLiters: 0.5,
-    device: { deviceKey: "VIRTUAL-001", isSimulated: true, token: TEST_DEVICE_TOKEN, pepper: TEST_PEPPER },
-  });
-  await ensureCollector(db, {
-    schoolId: IDS.school,
-    code: "EC-001",
-    name: "EcoCaptador",
-    location: "Horta",
-    capacityLiters: 11.8,
-    reserveLiters: 0.5,
-    nominalDiameterMm: 100,
-    nominalUsefulHeightMm: 1500,
-    device: { deviceKey: "ESP32-001", isSimulated: false, token: ESP32_TOKEN, pepper: TEST_PEPPER },
-  });
+  await seedPhysicalScenario(db, ESP32_TOKEN);
   esp32 = (await collectors.authenticateDevice(`Bearer ${ESP32_TOKEN}`, "ESP32-001", "EC-001"))!;
   virtual = (await collectors.authenticateDevice(`Bearer ${TEST_DEVICE_TOKEN}`, "VIRTUAL-001", "SIM-001"))!;
 });

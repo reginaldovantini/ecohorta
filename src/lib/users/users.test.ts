@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ageBandOf, ageOn } from "./age";
 import { describeIdentity } from "./display";
-import { displayIdentitySchema, nicknameSchema, studentRecordSchema } from "./types";
+import { displayIdentitySchema, nicknameSchema, onboardingSchema, personRecordSchema, SELF_DECLARED_ROLES } from "./types";
 
 describe("idade derivada da data de nascimento", () => {
   const on = (iso: string) => {
@@ -43,30 +43,60 @@ describe("identidade de exibição", () => {
     expect(nicknameSchema.safeParse("x".repeat(21)).success).toBe(false);
   });
 
-  const student = { role: "student", nickname: "Jhow", avatarId: "broto", classId: "ef-6c", className: "6º Ano C", educationLevel: "elementary" };
+  const student = { role: "student", nickname: "Jhow", avatarId: "broto", gradePhase: "ano_9" };
 
-  it("exige turma para estudante e setor para funcionário", () => {
+  it("exige ano/fase para estudante", () => {
     expect(displayIdentitySchema.safeParse(student).success).toBe(true);
     expect(displayIdentitySchema.safeParse({ role: "student", nickname: "Jhow", avatarId: "broto" }).success).toBe(false);
-    expect(
-      displayIdentitySchema.safeParse({ role: "staff", nickname: "Rê", avatarId: "sensor", jobTitle: "Bibliotecária" }).success,
-    ).toBe(false);
+    expect(displayIdentitySchema.safeParse({ ...student, gradePhase: "ano_7" }).success).toBe(false);
     expect(displayIdentitySchema.safeParse({ ...student, avatarId: "foto" }).success).toBe(false);
   });
 
-  it("descreve o perfil sem dados cadastrais", () => {
-    expect(describeIdentity({ role: "student", nickname: "Jhow", avatarId: "broto", classId: "ef-6c", className: "6º Ano C", educationLevel: "elementary" })).toBe(
-      "Estudante · 6º Ano C — Ensino Fundamental",
-    );
-    expect(describeIdentity({ role: "admin", nickname: "Direção", avatarId: "estrela", jobTitle: null })).toBe("Administrador(a)");
-    expect(describeIdentity({ role: "staff", nickname: "Rê", avatarId: "sensor", jobTitle: "Técnica", sector: "laboratorio" })).toBe(
-      "Laboratório · Técnica",
-    );
+  it("funcionário não precisa mais de setor: o cadastro aberto pede só a função", () => {
+    expect(displayIdentitySchema.safeParse({ role: "staff", nickname: "Rê", avatarId: "sensor", jobTitle: null, sector: null }).success).toBe(true);
   });
 
-  it("valida o registro cadastral do estudante com data ISO", () => {
-    const record = { firstName: "João", lastName: "Silva", birthDate: "2012-04-15", schoolId: "s", classId: "c" };
-    expect(studentRecordSchema.safeParse(record).success).toBe(true);
-    expect(studentRecordSchema.safeParse({ ...record, birthDate: "15/04/2012" }).success).toBe(false);
+  it("descreve o perfil sem dados cadastrais", () => {
+    expect(describeIdentity({ role: "student", nickname: "Jhow", avatarId: "broto", gradePhase: "ano_1" })).toBe("Estudante · 1º Ano");
+    expect(describeIdentity({ role: "admin", nickname: "Direção", avatarId: "estrela", jobTitle: null })).toBe("Administrador(a)");
+    expect(describeIdentity({ role: "teacher", nickname: "Rê", avatarId: "cientista", jobTitle: null })).toBe("Professor(a)");
+    expect(describeIdentity({ role: "staff", nickname: "Lia", avatarId: "sensor", jobTitle: "Técnica", sector: "laboratorio" })).toBe("Laboratório");
+  });
+});
+
+describe("primeiro acesso", () => {
+  const base = { name: "Jhow", sex: "masculino", birthDate: "2010-04-15", avatarId: "broto" } as const;
+
+  it("aceita o cadastro mínimo de estudante", () => {
+    expect(onboardingSchema.safeParse({ ...base, role: "student", gradePhase: "ano_9" }).success).toBe(true);
+  });
+
+  it("exige o ano/fase de quem declara ser estudante", () => {
+    const parsed = onboardingSchema.safeParse({ ...base, role: "student" });
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.message).toBe("Escolha o ano/fase.");
+  });
+
+  it("não pede ano/fase de professor nem de funcionário", () => {
+    expect(onboardingSchema.safeParse({ ...base, role: "teacher" }).success).toBe(true);
+    expect(onboardingSchema.safeParse({ ...base, role: "staff" }).success).toBe(true);
+  });
+
+  it("administração NÃO é autoatribuível no primeiro acesso", () => {
+    expect(onboardingSchema.safeParse({ ...base, role: "admin" }).success).toBe(false);
+    expect(SELF_DECLARED_ROLES).not.toContain("admin");
+  });
+
+  it("exige sexo e data de nascimento em formato ISO", () => {
+    expect(onboardingSchema.safeParse({ ...base, role: "teacher", sex: undefined }).success).toBe(false);
+    expect(onboardingSchema.safeParse({ ...base, role: "teacher", birthDate: "15/04/2010" }).success).toBe(false);
+  });
+});
+
+describe("dados cadastrais", () => {
+  it("guarda só primeiro nome, sexo e nascimento — sobrenome não é coletado", () => {
+    expect(personRecordSchema.safeParse({ firstName: "João", sex: "masculino", birthDate: "2010-04-15" }).success).toBe(true);
+    expect(personRecordSchema.safeParse({ firstName: null, sex: null, birthDate: null }).success).toBe(true);
+    expect(personRecordSchema.safeParse({ firstName: "João", sex: "masculino", birthDate: "15/04/2010" }).success).toBe(false);
   });
 });

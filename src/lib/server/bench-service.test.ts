@@ -2,7 +2,6 @@ import type { PGlite } from "@electric-sql/pglite";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { CALIBRATION_STEP_IDS, type CalibrationStepId } from "@/lib/collector/volume-calibration";
 import { telemetryPayloadSchema, type SensorDiagnostics, type TelemetryPayload } from "@/lib/iot/api-schema";
-import type { Actor } from "./actor";
 import { createBenchService, type BenchService } from "./bench-service";
 import { createCalibrationService, type CalibrationService } from "./calibration-service";
 import {
@@ -13,18 +12,17 @@ import {
   type AuthenticatedDevice,
   type CollectorService,
 } from "./collector-service";
-import { createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER } from "./db/test-db";
+import { createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, ACTORS, seedPhysicalScenario } from "./db/test-db";
 import type { Database } from "./db/types";
-import { ensureCollector } from "./provisioning";
+import { ensureDevice } from "./provisioning";
+
+const { otherSchoolTeacher, student, teacher } = ACTORS;
 
 /*
  * Fase 3 — integração física: EC-001 REAL (ESP32 + VL53L1X) e SIM-001 (dispositivo virtual),
  * bancada, observações, validação experimental e separação REAL × SIMULAÇÃO. PostgreSQL real (PGlite).
  */
 
-const teacher: Actor = { profileId: IDS.teacher, schoolId: IDS.school, role: "teacher" };
-const student: Actor = { profileId: IDS.student, schoolId: IDS.school, role: "student" };
-const otherSchoolTeacher: Actor = { profileId: IDS.otherStudent, schoolId: IDS.otherSchool, role: "teacher" };
 
 const ESP32_TOKEN = "token-do-esp32-de-teste-suficientemente-longo";
 const MM_PER_LITER = 1_000_000 / ((Math.PI / 4) * 96.8 ** 2);
@@ -118,26 +116,7 @@ beforeEach(async () => {
 
   // Convenção da Fase 3 aplicada sobre o cenário de teste (EC-001 começou simulado):
   // SIM-001 recebe o dispositivo virtual e EC-001 passa a ser o captador físico.
-  await ensureCollector(db, {
-    schoolId: IDS.school,
-    code: "SIM-001",
-    name: "Captador virtual",
-    location: "Simulação",
-    capacityLiters: 12,
-    reserveLiters: 0.5,
-    device: { deviceKey: "VIRTUAL-001", isSimulated: true, token: TEST_DEVICE_TOKEN, pepper: TEST_PEPPER },
-  });
-  await ensureCollector(db, {
-    schoolId: IDS.school,
-    code: "EC-001",
-    name: "EcoCaptador",
-    location: "Horta",
-    capacityLiters: 11.8,
-    reserveLiters: 0.5,
-    nominalDiameterMm: 100,
-    nominalUsefulHeightMm: 1500,
-    device: { deviceKey: "ESP32-001", isSimulated: false, token: ESP32_TOKEN, pepper: TEST_PEPPER },
-  });
+  await seedPhysicalScenario(db, ESP32_TOKEN);
   esp32 = (await collectors.authenticateDevice(`Bearer ${ESP32_TOKEN}`, "ESP32-001", "EC-001"))!;
   virtual = (await collectors.authenticateDevice(`Bearer ${TEST_DEVICE_TOKEN}`, "VIRTUAL-001", "SIM-001"))!;
 });
@@ -181,24 +160,7 @@ describe("REAL × SIMULAÇÃO", () => {
     expect((await calibrations.completeSession(teacher, "EC-001")).ok).toBe(true);
     expect((await snapshot()).calibration).toMatchObject({ isSimulated: true, appliesToDevice: true });
 
-    await ensureCollector(db, {
-      schoolId: IDS.school,
-      code: "SIM-001",
-      name: "Captador virtual",
-      location: "Simulação",
-      capacityLiters: 12,
-      reserveLiters: 0.5,
-      device: { deviceKey: "VIRTUAL-001", isSimulated: true, token: TEST_DEVICE_TOKEN, pepper: TEST_PEPPER },
-    });
-    await ensureCollector(db, {
-      schoolId: IDS.school,
-      code: "EC-001",
-      name: "EcoCaptador",
-      location: "Horta",
-      capacityLiters: 11.8,
-      reserveLiters: 0.5,
-      device: { deviceKey: "ESP32-001", isSimulated: false, token: ESP32_TOKEN, pepper: TEST_PEPPER },
-    });
+    await seedPhysicalScenario(db, ESP32_TOKEN);
 
     const physical = await snapshot();
     expect(physical.telemetry).toMatchObject({ origin: "device", status: "OFFLINE", volumeSource: "none", distanceMm: null });
@@ -217,15 +179,7 @@ describe("REAL × SIMULAÇÃO", () => {
 
     // Troca do ESP32: a calibração do sensor antigo deixa de valer.
     await db.query("update devices set active = false where device_key = 'ESP32-001'");
-    await ensureCollector(db, {
-      schoolId: IDS.school,
-      code: "EC-001",
-      name: "EcoCaptador",
-      location: "Horta",
-      capacityLiters: 11.8,
-      reserveLiters: 0.5,
-      device: { deviceKey: "ESP32-002", isSimulated: false, token: `${ESP32_TOKEN}-2`, pepper: TEST_PEPPER },
-    });
+    await ensureDevice(db, { collectorId: IDS.collector, deviceKey: "ESP32-002", isSimulated: false, token: `${ESP32_TOKEN}-2`, pepper: TEST_PEPPER });
     const replacement = (await collectors.authenticateDevice(`Bearer ${ESP32_TOKEN}-2`, "ESP32-002", "EC-001"))!;
     clock += 1000;
     await collectors.ingestTelemetry(replacement, { ...real(tube(4)), device_id: "ESP32-002" });

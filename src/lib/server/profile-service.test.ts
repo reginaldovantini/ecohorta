@@ -1,12 +1,11 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import type { Actor } from "./actor";
 import { createCollectorService } from "./collector-service";
-import { createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER } from "./db/test-db";
+import { ACTORS, createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER } from "./db/test-db";
 import type { Database } from "./db/types";
 import { findActor, getMe, updateIdentity } from "./profile-service";
 
 let db: Database;
-const student: Actor = { profileId: IDS.student, schoolId: IDS.school, role: "student" };
+const { student } = ACTORS;
 
 beforeAll(async () => {
   ({ db } = await createTestDatabase());
@@ -18,24 +17,18 @@ beforeEach(async () => {
 
 describe("perfil do usuário autenticado", () => {
   it("encontra somente perfis ativos", async () => {
-    expect(await findActor(db, IDS.student)).toEqual(student);
+    expect(await findActor(db, IDS.student)).toEqual({ ...student, stewardOf: [] });
     await db.query("update profiles set status = 'inactive' where id = $1", [IDS.student]);
     expect(await findActor(db, IDS.student)).toBeNull();
     expect(await findActor(db, "99999999-0000-4000-8000-000000000000")).toBeNull();
   });
 
-  it("monta identidade de exibição com turma do banco e sem dados cadastrais", async () => {
+  it("monta identidade de exibição com o ano/fase do banco e sem dados cadastrais", async () => {
     const me = await getMe(db, student);
     expect(me).toMatchObject({ role: "student", schoolName: "Escola de Teste", xp: 0, history: [] });
-    expect(me.identity).toEqual({
-      role: "student",
-      nickname: "Jhow",
-      avatarId: "broto",
-      classId: IDS.class6c,
-      className: "6º Ano C",
-      educationLevel: "elementary",
-    });
-    expect(JSON.stringify(me)).not.toMatch(/João|Silva|2012-04-15|6C-AAAA/);
+    expect(me.identity).toEqual({ role: "student", nickname: "Jhow", avatarId: "broto", gradePhase: "ano_9" });
+    // Nome, sexo e data de nascimento nunca saem do banco para o navegador.
+    expect(JSON.stringify(me)).not.toMatch(/João|masculino|2010-04-15/);
   });
 
   it("exige primeiro acesso quando não há apelido e salva apelido e avatar validados", async () => {

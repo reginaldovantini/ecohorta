@@ -1,7 +1,14 @@
 import type { ExecutionRecord } from "@/lib/missions/history";
-import { identityUpdateSchema, type DisplayIdentity, type EducationLevel, type StaffSector, type UserRole } from "@/lib/users/types";
+import {
+  identityUpdateSchema,
+  onboardingSchema,
+  type DisplayIdentity,
+  type GradePhase,
+  type StaffSector,
+  type UserRole,
+} from "@/lib/users/types";
 import type { Actor } from "./actor";
-import { millis, num, type Queryable } from "./db/types";
+import { millis, num, type Database, type Queryable } from "./db/types";
 import { fail, type ServiceResult } from "./errors";
 
 /*
@@ -12,10 +19,13 @@ import { fail, type ServiceResult } from "./errors";
 export interface MeResponse {
   profileId: string;
   role: UserRole;
-  schoolId: string;
-  schoolName: string;
-  /** Nulo até o primeiro acesso (apelido e avatar ainda não escolhidos). */
+  /** Nulos até a pessoa ler o QR de um captador: é a leitura que a liga a uma escola. */
+  schoolId: string | null;
+  schoolName: string | null;
+  /** Nulo até o primeiro acesso ser concluído. */
   identity: DisplayIdentity | null;
+  /** Responsável por estes captadores (calibração, bancada, ligações). */
+  stewardOf: string[];
   xp: number;
   history: ExecutionRecord[];
 }
@@ -23,25 +33,36 @@ export interface MeResponse {
 interface ProfileRow {
   id: string;
   role: UserRole;
-  school_id: string;
-  school_name: string;
+  school_id: string | null;
+  school_name: string | null;
   nickname: string | null;
   avatar_id: string | null;
   job_title: string | null;
   staff_sector: StaffSector | null;
-  class_id: string | null;
-  class_name: string | null;
-  education_level: EducationLevel | null;
+  grade_phase: GradePhase | null;
 }
 
 /** Perfil ativo do usuário do Supabase Auth, ou null. */
 export async function findActor(db: Queryable, userId: string): Promise<Actor | null> {
-  const { rows } = await db.query<{ id: string; school_id: string; role: UserRole }>(
-    "select id, school_id, role from public.profiles where id = $1 and status = 'active'",
+  const { rows } = await db.query<{ id: string; school_id: string | null; role: UserRole; platform_admin: boolean }>(
+    "select id, school_id, role, platform_admin from public.profiles where id = $1 and status = 'active'",
     [userId],
   );
   const row = rows[0];
-  return row ? { profileId: row.id, schoolId: row.school_id, role: row.role } : null;
+  if (!row) return null;
+  // Os captadores sob responsabilidade vêm do banco a cada requisição: é deles que
+  // sai o poder de calibrar, e não da função declarada no cadastro.
+  const stewardships = await db.query<{ collector_id: string }>(
+    "select collector_id from public.collector_stewards where profile_id = $1",
+    [userId],
+  );
+  return {
+    profileId: row.id,
+    schoolId: row.school_id,
+    role: row.role,
+    platformAdmin: row.platform_admin,
+    stewardOf: stewardships.rows.map((item) => item.collector_id),
+  };
 }
 
 function toIdentity(row: ProfileRow): DisplayIdentity | null {
@@ -49,13 +70,11 @@ function toIdentity(row: ProfileRow): DisplayIdentity | null {
   const base = { nickname: row.nickname, avatarId: row.avatar_id as DisplayIdentity["avatarId"] };
   switch (row.role) {
     case "student":
-      return row.class_id && row.class_name && row.education_level
-        ? { role: "student", ...base, classId: row.class_id, className: row.class_name, educationLevel: row.education_level }
-        : null;
+      return row.grade_phase ? { role: "student", ...base, gradePhase: row.grade_phase } : null;
     case "teacher":
-      return { role: "teacher", ...base, jobTitle: row.job_title ?? "Professor(a)" };
+      return { role: "teacher", ...base, jobTitle: row.job_title };
     case "staff":
-      return row.staff_sector ? { role: "staff", ...base, jobTitle: row.job_title ?? "Funcionário(a)", sector: row.staff_sector } : null;
+      return { role: "staff", ...base, jobTitle: row.job_title, sector: row.staff_sector };
     case "admin":
       return { role: "admin", ...base, jobTitle: row.job_title };
   }
@@ -63,11 +82,10 @@ function toIdentity(row: ProfileRow): DisplayIdentity | null {
 
 export async function getMe(db: Queryable, actor: Actor): Promise<MeResponse> {
   const profile = await db.query<ProfileRow>(
-    `select p.id, p.role, p.school_id, s.name as school_name, p.nickname, p.avatar_id, p.job_title, p.staff_sector,
-            p.class_id, c.name as class_name, c.education_level
+    `select p.id, p.role, p.school_id, s.name as school_name, p.nickname, p.avatar_id, p.job_title,
+            p.staff_sector, p.grade_phase
      from public.profiles p
-     join public.schools s on s.id = p.school_id
-     left join public.school_classes c on c.id = p.class_id
+     left join public.schools s on s.id = p.school_id
      where p.id = $1`,
     [actor.profileId],
   );
@@ -109,6 +127,7 @@ export async function getMe(db: Queryable, actor: Actor): Promise<MeResponse> {
     schoolId: row.school_id,
     schoolName: row.school_name,
     identity: toIdentity(row),
+    stewardOf: [...actor.stewardOf],
     xp: num(xp.rows[0]?.xp ?? 0),
     history: history.rows.map((item) => ({
       executionId: item.id,
@@ -126,7 +145,35 @@ export async function getMe(db: Queryable, actor: Actor): Promise<MeResponse> {
   };
 }
 
-/** O próprio usuário escolhe apelido e avatar (primeiro acesso ou edição). */
+/**
+ * Primeiro acesso: nome ou apelido, sexo, nascimento, função e — se estudante —
+ * ano/fase. Nada de escola aqui: ela vem da primeira leitura de QR.
+ *
+ * A função é declarada livremente porque não concede poder: `admin` fica fora do
+ * schema justamente para não ser autoatribuível.
+ */
+export async function completeOnboarding(db: Database, actor: Actor, input: unknown): Promise<ServiceResult<void>> {
+  const parsed = onboardingSchema.safeParse(input);
+  if (!parsed.success) return fail(422, parsed.error.issues[0]?.message ?? "Dados do cadastro inválidos.");
+  const { name, sex, birthDate, role, gradePhase, avatarId } = parsed.data;
+
+  await db.transaction(async (tx) => {
+    await tx.query(
+      `update public.profiles
+       set role = $2, nickname = $3, avatar_id = $4, grade_phase = $5, onboarded_at = coalesce(onboarded_at, now())
+       where id = $1`,
+      [actor.profileId, role, name, avatarId, role === "student" ? (gradePhase ?? null) : null],
+    );
+    await tx.query(
+      `insert into public.person_records (profile_id, first_name, sex, birth_date) values ($1, $2, $3, $4)
+       on conflict (profile_id) do update set first_name = excluded.first_name, sex = excluded.sex, birth_date = excluded.birth_date`,
+      [actor.profileId, name, sex, birthDate],
+    );
+  });
+  return { ok: true, value: undefined };
+}
+
+/** Depois do primeiro acesso, o usuário ainda troca apelido e avatar quando quiser. */
 export async function updateIdentity(db: Queryable, actor: Actor, input: unknown): Promise<ServiceResult<void>> {
   const parsed = identityUpdateSchema.safeParse(input);
   if (!parsed.success) return fail(422, parsed.error.issues[0]?.message ?? "Apelido ou avatar inválido.");
