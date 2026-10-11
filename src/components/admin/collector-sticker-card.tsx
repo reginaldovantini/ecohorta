@@ -35,7 +35,7 @@ export function CollectorStickerCard({ code, location }: { code: string; locatio
           { icon: Download, texto: "Baixe o PDF e leve à gráfica — as instruções vão impressas nele." },
           { icon: Droplets, texto: "Peça adesivo VINIL com laminação: o tubo molha, e papel comum apaga o QR." },
           { icon: Printer, texto: "Tamanho real (100%). Nunca em “ajustar à página”." },
-          { icon: Ruler, texto: `Confira com uma régua: o QR precisa medir ${STICKER.qrMm / 10} cm de lado.` },
+          { icon: Ruler, texto: `Arte final de ${widthMm} × ${heightMm} mm, com QR de ${STICKER.qrMm / 10} cm — já no tamanho certo.` },
         ].map(({ icon: Icon, texto }, index) => (
           <li key={index} className="flex gap-3 text-sm text-mist-300">
             <span className="grid size-6 shrink-0 place-items-center rounded-full bg-white/[0.07] text-leaf-300">

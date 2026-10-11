@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import qrcode from "qrcode-generator";
-import { buildStickerPdf, STICKER, stickerSize } from "./qr-sticker";
+import { buildStickerPdf, STICKER, stickerSize, textWidth } from "./qr-sticker";
 
 const MM = 72 / 25.4;
 const URL = "https://ecohorta.vercel.app/q/0efae393694a357a699ec21de5cb1248";
@@ -9,6 +9,7 @@ const sticker = (url = URL) =>
   buildStickerPdf({ url, code: "EC-001", location: "Horta dos fundos", schoolName: "EE Prof.ª Clarinda Mendes de Aquino" });
 
 /** O PDF é latin-1, então dá para lê-lo como texto e inspecionar o conteúdo. */
+const ENTER = String.fromCharCode(10);
 const asText = (bytes: Uint8Array) => Buffer.from(bytes).toString("latin1");
 
 /**
@@ -32,15 +33,32 @@ function moduleSides(texto: string): number[] {
 }
 
 describe("tamanho exigido", () => {
-  it("o símbolo do QR tem exatamente 3 cm de lado", () => {
-    expect(STICKER.qrMm).toBe(30);
+  it("o símbolo do QR tem exatamente 5 cm de lado", () => {
+    expect(STICKER.qrMm).toBe(50);
   });
 
-  it("o adesivo nasce da geometria, sem número mágico", () => {
-    const { widthMm, heightMm, qrBoxMm } = stickerSize();
+  it("a zona de silêncio passa dos 4 módulos que o padrão exige", () => {
+    const qr = qrcode(0, "Q");
+    qr.addData(URL);
+    qr.make();
+    const moduloMm = STICKER.qrMm / qr.getModuleCount();
+    expect(STICKER.quietMm / moduloMm).toBeGreaterThanOrEqual(4);
+  });
+
+  it("a chamada é grande o bastante para ser lida de longe", () => {
+    // Letra de 9 mm: o adesivo é uma chamada à ação num pátio, não uma etiqueta.
+    expect(STICKER.callSizeMm).toBeGreaterThanOrEqual(8);
+  });
+
+  it("a arte final é fechada em 8 × 15 cm", () => {
+    const { widthMm, heightMm } = stickerSize();
+    expect([widthMm, heightMm]).toEqual([80, 150]);
+  });
+
+  it("a caixa do QR tem a mesma folga nos lados e acima", () => {
+    const { widthMm, qrBoxMm, qrMarginMm } = stickerSize();
     expect(qrBoxMm).toBe(STICKER.qrMm + 2 * STICKER.quietMm);
-    expect(widthMm).toBe(qrBoxMm + 2 * STICKER.paddingMm);
-    expect(heightMm).toBe(STICKER.paddingMm * 2 + qrBoxMm + STICKER.textBlockMm);
+    expect(qrMarginMm).toBe((widthMm - qrBoxMm) / 2);
   });
 
   it("os módulos ocupam 30 mm no papel, qualquer que seja a versão do QR", () => {
@@ -51,7 +69,7 @@ describe("tamanho exigido", () => {
     const modules = qr.getModuleCount();
 
     // Todos os módulos são desenhados com o mesmo lado; 30 mm divididos por eles.
-    const esperado = (30 * MM) / modules;
+    const esperado = (STICKER.qrMm * MM) / modules;
     const lados = moduleSides(texto);
     expect(lados.length).toBeGreaterThan(100);
     for (const lado of new Set(lados)) expect(lado).toBeCloseTo(esperado, 2);
@@ -94,7 +112,7 @@ describe("fidelidade do QR", () => {
 
     const lados = moduleSides(asText(sticker()));
     // E o adesivo desenha a matriz do Q, não a do L.
-    expect(lados[0]).toBeCloseTo((30 * MM) / comQ.getModuleCount(), 2);
+    expect(lados[0]).toBeCloseTo((STICKER.qrMm * MM) / comQ.getModuleCount(), 2);
   });
 });
 
@@ -110,7 +128,7 @@ describe("estrutura do arquivo", () => {
     const inicio = texto.indexOf("xref\n0 ");
     // Linha 0 é "xref", linha 1 é "0 N" e linha 2 é a entrada livre: os objetos vêm depois.
     const entradas = texto.slice(inicio).split("\n").slice(3).filter((linha) => linha.endsWith(" n "));
-    expect(entradas).toHaveLength(8);
+    expect(entradas).toHaveLength(10);
     for (const [index, linha] of entradas.entries()) {
       const posicao = Number(linha.slice(0, 10));
       expect(texto.slice(posicao, posicao + 20)).toMatch(new RegExp(`^${index + 1} 0 obj`));
@@ -173,7 +191,7 @@ describe("o que o adesivo diz", () => {
     expect(escolaEm).toBeGreaterThan(graficaEm);
     // Tamanho real é instrução de impressão; régua é conferência de quem recebe.
     expect(texto.indexOf("Tamanho real")).toBeLessThan(escolaEm);
-    expect(texto.indexOf("Conferir com r")).toBeGreaterThan(escolaEm);
+    expect(texto.indexOf("Colar no tubo")).toBeGreaterThan(escolaEm);
   });
 
   it("não imprime o token em lugar nenhum legível: ele existe só dentro do QR", () => {
@@ -182,5 +200,90 @@ describe("o que o adesivo diz", () => {
     // O token não aparece como texto desenhável (entre parênteses, operador Tj).
     const desenhados = [...texto.matchAll(/\(([^)]*)\) Tj/g)].map((m) => m[1]).join(" ");
     expect(desenhados).not.toContain(token);
+  });
+});
+
+describe("o que NÃO está no PDF", () => {
+  it("não pede para o usuário medir nada", () => {
+    const texto = asText(sticker());
+    // A plataforma é que gera o arquivo; ninguém na escola altera o tamanho,
+    // então mandar conferir com régua só acrescentaria ruído.
+    // Em WinAnsi, "régua" sai como r\351gua: é essa forma que precisa estar ausente.
+    expect(texto).not.toContain("r\\351gua");
+    expect(texto).not.toContain("Conferir com");
+    expect(texto).not.toMatch(/cm de lado/);
+  });
+
+  it("diz que o adesivo pertence a UM captador", () => {
+    // "não" sai em WinAnsi: ã é \343.
+    expect(asText(sticker())).toContain("n\\343o serve em outro tubo");
+  });
+});
+
+describe("o texto cabe no adesivo", () => {
+  const MMpt = 72 / 25.4;
+
+  /** Posições e corpos de cada texto desenhado, lidos do próprio fluxo do PDF. */
+  function textos(texto: string) {
+    const encontrados: { x: number; size: number; conteudo: string; bold: boolean; branco: boolean }[] = [];
+    let size = 0;
+    let bold = false;
+    // O texto DENTRO do adesivo é branco; a legenda, fora dele, é escura — e ela
+    // pode ser mais larga que o adesivo, porque está na folha.
+    let branco = false;
+    for (const linha of texto.split(ENTER)) {
+      const fonte = /\/(F\d) ([\d.]+) Tf/.exec(linha);
+      if (fonte) {
+        bold = fonte[1] === "F1";
+        size = Number(fonte[2]);
+      }
+      const desenho = /1 0 0 1 ([\d.]+) [\d.]+ Tm \((.*)\) Tj/.exec(linha);
+      if (linha.includes("1 1 1 rg")) branco = true;
+      else if (/[\d.]+ [\d.]+ [\d.]+ rg/.test(linha)) branco = false;
+      if (desenho) encontrados.push({ x: Number(desenho[1]), size, conteudo: desenho[2]!, bold, branco });
+    }
+    return encontrados;
+  }
+
+  /** Texto do PDF de volta a caracteres: \343 vira ã. */
+  const semEscape = (valor: string) =>
+    valor.replace(new RegExp("\\\\(\\d{3})", "g"), (_, oct: string) => String.fromCharCode(parseInt(oct, 8)));
+
+  it("a tabela de larguras bate com as métricas publicadas da Adobe", () => {
+    // Se a tabela estiver errada, o corpo da letra é calculado errado e o texto
+    // estoura a borda — foi exatamente o que aconteceu com uma aproximação.
+    expect(textWidth("M", { bold: true })).toBeCloseTo(0.833, 3);
+    expect(textWidth("I", { bold: true })).toBeCloseTo(0.278, 3);
+    expect(textWidth("W", { bold: true })).toBeCloseTo(0.944, 3);
+    expect(textWidth("l")).toBeCloseTo(0.222, 3);
+    expect(textWidth("m")).toBeCloseTo(0.833, 3);
+    // Acentuada mede o mesmo que a base.
+    expect(textWidth("Ã", { bold: true })).toBe(textWidth("A", { bold: true }));
+    expect(textWidth("á")).toBe(textWidth("a"));
+  });
+
+  it("nenhuma linha do adesivo ultrapassa as bordas", () => {
+    const x0 = (210 * MMpt - STICKER.widthMm * MMpt) / 2;
+    const direita = x0 + STICKER.widthMm * MMpt;
+    const doAdesivo = textos(asText(sticker())).filter((item) => item.branco);
+    expect(doAdesivo.length).toBeGreaterThanOrEqual(5);
+
+    for (const { x, size, conteudo, bold } of doAdesivo) {
+      const largura = textWidth(semEscape(conteudo), { bold }) * size;
+      expect(x, `"${conteudo}" começa antes da borda`).toBeGreaterThanOrEqual(x0);
+      expect(x + largura, `"${conteudo}" passa da borda direita`).toBeLessThanOrEqual(direita);
+    }
+  });
+
+  it("a chamada aproveita a largura disponível, em vez de sobrar espaço", () => {
+    const util = (STICKER.widthMm - 2 * STICKER.textMarginMm) * MMpt;
+    const chamada = textos(asText(sticker())).find((item) => item.conteudo === "LEIA E INICIE")!;
+    const largura = textWidth("LEIA E INICIE", { bold: true }) * chamada.size;
+    expect(largura).toBeLessThanOrEqual(util);
+    expect(largura).toBeGreaterThan(util * 0.85);
+  });
+
+  it("a assinatura ficou grande: é chamada, não letra miúda", () => {
+    expect(STICKER.signatureSizeMm).toBeGreaterThanOrEqual(6);
   });
 });

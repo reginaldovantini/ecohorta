@@ -24,9 +24,16 @@ import qrcode from "qrcode-generator";
 const MM = 72 / 25.4;
 const mm = (value: number) => value * MM;
 
-/** Cores amostradas do adesivo de referência. */
-const VERDE_CLARO: RGB = [0x11 / 255, 0x73 / 255, 0x58 / 255];
-const VERDE_ESCURO: RGB = [0x02 / 255, 0x52 / 255, 0x39 / 255];
+/*
+ * Degradê do verde, amostrado da referência: profundo nas pontas e mais aberto
+ * no meio. Três paradas em vez de duas — com duas o adesivo fica chapado de um
+ * lado e escuro do outro; com a clara no meio ele ganha o brilho que destaca a
+ * peça no tubo e faz o texto branco saltar.
+ */
+const rgb = (hex: number): RGB => [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
+const VERDE_TOPO = rgb(0x0a5d46);
+const VERDE_MEIO = rgb(0x0b7d56);
+const VERDE_BASE = rgb(0x05543d);
 
 type RGB = [number, number, number];
 
@@ -35,26 +42,58 @@ type RGB = [number, number, number];
  * o tamanho do QR é exigência de projeto e precisa ser verificável por teste.
  */
 export const STICKER = {
-  /** Lado do símbolo do QR. Exigência: 3 cm × 3 cm. */
-  qrMm: 30,
-  /** Zona de silêncio branca ao redor do símbolo; sem ela o leitor não acha o código. */
-  quietMm: 3,
-  /** Margem verde entre a caixa branca do QR e a borda do adesivo. */
-  paddingMm: 4,
+  /**
+   * Lado do símbolo do QR: 5 cm × 5 cm.
+   *
+   * O adesivo não é uma etiqueta de identificação, é uma CHAMADA. Ele fica num
+   * tubo no pátio e precisa parar quem passa a dois metros. Um QR pequeno pede
+   * que a pessoa chegue perto para descobrir do que se trata; um grande é lido
+   * de longe e já convida.
+   */
+  qrMm: 50,
+  /**
+   * Zona de silêncio branca ao redor do símbolo.
+   *
+   * O padrão exige 4 módulos. Aqui sobra um pouco de propósito: o adesivo vai
+   * ser fotografado de lado, com pouca luz e por celular antigo, e a folga é o
+   * que separa "leu de primeira" de "tenta de novo".
+   */
+  quietMm: 6,
+  /**
+   * Arte final: 8 × 15 cm. É medida fechada, e não resultado do conteúdo — a
+   * gráfica corta nessa dimensão e o adesivo ocupa a faixa do tubo que se vê de
+   * frente. O conteúdo se acomoda dentro dela.
+   */
+  widthMm: 80,
+  heightMm: 150,
   /** Borda branca externa, que dá o recorte do adesivo. */
-  borderMm: 1.6,
+  borderMm: 3,
   /** Cantos arredondados. */
-  radiusMm: 4,
-  /** Espaço reservado aos textos abaixo do QR. */
-  textBlockMm: 26,
+  radiusMm: 9,
+  /** Margem lateral dos textos. Menor que a do QR, para a chamada crescer mais. */
+  textMarginMm: 6,
+  /** Corpo da chamada. Grande de propósito: é o que se lê de longe. */
+  callSizeMm: 12,
+  /** Corpo da assinatura, sob a chamada. */
+  signatureSizeMm: 7,
+  /** Lado da folha ao lado da assinatura. */
+  leafMm: 20,
 } as const;
 
-/** Largura e altura do adesivo, derivadas da geometria acima. */
+/**
+ * Medidas do adesivo. A caixa branca do QR fica centrada na largura, e a mesma
+ * folga sobra acima dela — com margem igual nos três lados o QR fica visualmente
+ * assentado, em vez de parecer empurrado para um canto.
+ */
 export const stickerSize = () => {
   const caixaQr = STICKER.qrMm + 2 * STICKER.quietMm;
-  const width = caixaQr + 2 * STICKER.paddingMm;
-  const height = STICKER.paddingMm + caixaQr + STICKER.textBlockMm + STICKER.paddingMm;
-  return { widthMm: width, heightMm: height, qrBoxMm: caixaQr };
+  return {
+    widthMm: STICKER.widthMm,
+    heightMm: STICKER.heightMm,
+    qrBoxMm: caixaQr,
+    /** Margem acima e dos lados da caixa do QR. */
+    qrMarginMm: (STICKER.widthMm - caixaQr) / 2,
+  };
 };
 
 /** A4 em retrato, onde o adesivo é posicionado em tamanho real. */
@@ -107,21 +146,39 @@ function roundedRect(x: number, y: number, w: number, h: number, r: number): str
  */
 function leaf(cx: number, cy: number, size: number): string {
   const s = size / 2;
-  // Pontas da folha, na diagonal de baixo-esquerda para cima-direita.
-  const [ax, ay] = [cx - s, cy - s];
-  const [bx, by] = [cx + s, cy + s];
-  return [
+  // Base (onde entra o pecíolo) embaixo à esquerda, ponta em cima à direita.
+  const [bx, by] = [cx - s * 0.72, cy - s * 0.82];
+  const [tx, ty] = [cx + s * 0.78, cy + s * 0.88];
+  const partes = [
     "q 1 1 1 rg",
-    `${num(ax)} ${num(ay)} m`,
-    // Barriga de cima
-    `${num(cx - s * 1.15)} ${num(cy + s * 0.45)} ${num(cx - s * 0.2)} ${num(cy + s * 1.15)} ${num(bx)} ${num(by)} c`,
-    // Barriga de baixo, de volta à primeira ponta
-    `${num(cx + s * 1.15)} ${num(cy - s * 0.45)} ${num(cx + s * 0.2)} ${num(cy - s * 1.15)} ${num(ax)} ${num(ay)} c`,
+    `${num(bx)} ${num(by)} m`,
+    // Lado largo: sai da base, abre, e afina até a ponta.
+    `${num(bx - s * 0.5)} ${num(by + s * 0.95)} ${num(cx - s * 0.1)} ${num(ty - s * 0.08)} ${num(tx)} ${num(ty)} c`,
+    // Lado estreito, de volta à base.
+    `${num(cx + s * 0.62)} ${num(cy - s * 0.12)} ${num(cx + s * 0.1)} ${num(by - s * 0.18)} ${num(bx)} ${num(by)} c`,
     "f Q",
-    // Nervura central, no verde do fundo
-    `q 0.02 0.32 0.22 RG ${num(size * 0.09)} w 1 J`,
-    `${num(ax + s * 0.25)} ${num(ay + s * 0.25)} m ${num(bx - s * 0.2)} ${num(by - s * 0.2)} l S Q`,
-  ].join(ENTER);
+  ];
+
+  // Pecíolo e nervuras, no verde do fundo: é o que faz ler como folha, e não como gota.
+  const verde = "0.02 0.32 0.22 RG";
+  partes.push(`q ${verde} ${num(size * 0.07)} w 1 J 1 j`);
+  partes.push(`${num(bx - s * 0.32)} ${num(by - s * 0.3)} m ${num(bx)} ${num(by)} l S`);
+  // Nervura central, levemente curva, acompanhando o eixo da folha.
+  partes.push(
+    `${num(bx + s * 0.08)} ${num(by + s * 0.06)} m ` +
+      `${num(cx - s * 0.1)} ${num(cy - s * 0.02)} ${num(cx + s * 0.3)} ${num(cy + s * 0.3)} ${num(tx - s * 0.12)} ${num(ty - s * 0.12)} c S`,
+  );
+  partes.push("Q");
+
+  // Três nervuras laterais, saindo da central para o lado largo.
+  partes.push(`q ${verde} ${num(size * 0.045)} w 1 J`);
+  for (const t of [0.3, 0.5, 0.7]) {
+    const mx = bx + (tx - bx) * t;
+    const my = by + (ty - by) * t;
+    partes.push(`${num(mx)} ${num(my)} m ${num(mx - s * 0.34)} ${num(my + s * 0.26)} l S`);
+  }
+  partes.push("Q");
+  return partes.join(ENTER);
 }
 
 export interface StickerInput {
@@ -151,14 +208,14 @@ export function buildStickerPdf(input: StickerInput): Uint8Array {
   qr.make();
   const modules = qr.getModuleCount();
 
-  const { widthMm, heightMm, qrBoxMm } = stickerSize();
+  const { widthMm, heightMm, qrBoxMm, qrMarginMm } = stickerSize();
   const pageW = mm(PAGE.widthMm);
   const pageH = mm(PAGE.heightMm);
   const w = mm(widthMm);
   const h = mm(heightMm);
   // Adesivo centrado na horizontal, na parte de cima da folha.
   const x0 = (pageW - w) / 2;
-  const y0 = pageH - mm(45) - h;
+  const y0 = pageH - mm(30) - h;
 
   const content: string[] = [];
 
@@ -179,7 +236,7 @@ export function buildStickerPdf(input: StickerInput): Uint8Array {
   // ---- Caixa branca do QR (zona de silêncio) ----
   const qrBox = mm(qrBoxMm);
   const qrBoxX = x0 + (w - qrBox) / 2;
-  const qrBoxY = y0 + h - mm(STICKER.paddingMm) - qrBox;
+  const qrBoxY = y0 + h - mm(qrMarginMm) - qrBox;
   content.push(`q 1 1 1 rg ${num(qrBoxX)} ${num(qrBoxY)} ${num(qrBox)} ${num(qrBox)} re f Q`);
 
   // ---- Módulos do QR: exatamente 30 × 30 mm ----
@@ -199,23 +256,50 @@ export function buildStickerPdf(input: StickerInput): Uint8Array {
   }
   content.push("f Q");
 
-  // ---- Chamada: LEIA E INICIE / SUA MISSÃO ----
-  const chamadaSize = mm(4.6);
-  let textY = qrBoxY - mm(5.5);
+  /*
+   * A chamada ocupa a largura disponível.
+   *
+   * O corpo é calculado, não fixado: assim a linha mais longa encosta nas
+   * margens e o texto cresce até o limite do adesivo. Um número fixo ou
+   * sobraria espaço — desperdiçando o que faz a peça ser vista de longe — ou
+   * estouraria a borda no dia em que a frase mudar.
+   */
+  const larguraUtil = w - mm(STICKER.textMarginMm) * 2;
+  const maiorChamada = Math.max(...CHAMADA.map(helveticaBoldWidth));
+  const chamadaSize = Math.min(mm(STICKER.callSizeMm), larguraUtil / maiorChamada);
+
+  const folhaLado = mm(STICKER.leafMm);
+  const maiorAssinatura = Math.max(...ASSINATURA.map(helveticaWidth));
+  const assinaturaSize = Math.min(mm(STICKER.signatureSizeMm), (larguraUtil - folhaLado - mm(4)) / maiorAssinatura);
+
+  /*
+   * Os dois blocos de texto são centrados no espaço que sobra abaixo do QR, em
+   * vez de descerem de distâncias fixas. Com medida fechada de 8 × 15 cm, o
+   * espaço livre depende do conteúdo; distância fixa deixaria um vão embaixo no
+   * dia em que a frase encurtasse.
+   */
+  const alturaChamada = CHAMADA.length * chamadaSize * 1.12;
+  const alturaAssinatura = Math.max(ASSINATURA.length * assinaturaSize * 1.25, folhaLado);
+  const respiro = mm(8);
+  const alturaConteudo = alturaChamada + respiro + alturaAssinatura;
+  const espacoLivre = qrBoxY - (y0 + mm(STICKER.borderMm) * 2);
+  const topoConteudo = qrBoxY - (espacoLivre - alturaConteudo) / 2;
+
+  let textY = topoConteudo - chamadaSize * 0.86; // da linha de base da primeira linha
   content.push("q 1 1 1 rg BT /F1 " + num(chamadaSize) + " Tf");
   for (const line of CHAMADA) {
     const width = helveticaBoldWidth(line) * chamadaSize;
     content.push(`1 0 0 1 ${num(x0 + (w - width) / 2)} ${num(textY)} Tm (${pdfText(line)}) Tj`);
-    textY -= chamadaSize * 1.15;
+    textY -= chamadaSize * 1.12;
   }
   content.push("ET Q");
 
-  // ---- Assinatura com a folhinha ----
-  const assinaturaSize = mm(2.9);
+  // ---- Assinatura: folha à esquerda, mensagem à direita ----
+  const assinaturaTopo = topoConteudo - alturaChamada - respiro - assinaturaSize * 0.86;
   const blocoAltura = ASSINATURA.length * assinaturaSize * 1.25;
-  const assinaturaTopo = textY - mm(3);
-  const textoX = x0 + w * 0.36;
-  content.push(leaf(x0 + w * 0.21, assinaturaTopo - blocoAltura / 2 + assinaturaSize * 0.4, mm(5)));
+  const textoX = x0 + mm(STICKER.textMarginMm) + folhaLado + mm(4);
+
+  content.push(leaf(x0 + mm(STICKER.textMarginMm) + folhaLado / 2, assinaturaTopo - blocoAltura / 2 + assinaturaSize * 0.5, folhaLado));
   content.push("q 1 1 1 rg BT /F2 " + num(assinaturaSize) + " Tf");
   let assinaturaY = assinaturaTopo;
   for (const line of ASSINATURA) {
@@ -261,8 +345,8 @@ export function buildStickerPdf(input: StickerInput): Uint8Array {
     { text: `Tamanho real (100%), sem ajustar à página. Cortar nas marcas.` },
     { text: "", space: true },
     { text: "NA ESCOLA", bold: true },
-    { text: `Conferir com régua: o QR precisa medir ${STICKER.qrMm / 10} cm de lado.` },
     { text: "Colar no tubo, à altura dos olhos, protegido da chuva direta." },
+    { text: "O adesivo é único deste captador: não serve em outro tubo." },
     { text: "", space: true },
     { text: `Adesivo ${num(widthMm)} × ${num(heightMm)} mm · QR ${STICKER.qrMm} × ${STICKER.qrMm} mm` },
   ];
@@ -291,9 +375,14 @@ export function buildStickerPdf(input: StickerInput): Uint8Array {
     `<< /Length ${byteLength(stream)} >>\nstream\n${stream}\nendstream`,
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
     "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
-    `<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [${num(x0)} ${num(y0 + h)} ${num(x0 + w)} ${num(y0)}] ` +
+    // Degradê na vertical: do topo do adesivo até a base.
+    `<< /ShadingType 2 /ColorSpace /DeviceRGB /Coords [${num(x0)} ${num(y0 + h)} ${num(x0)} ${num(y0)}] ` +
       "/Function 8 0 R /Extend [true true] >>",
-    `<< /FunctionType 2 /Domain [0 1] /C0 [${VERDE_CLARO.map(num).join(" ")}] /C1 [${VERDE_ESCURO.map(num).join(" ")}] /N 1 >>`,
+    // Costura duas rampas: topo → meio (claro) → base. O corte em 0,52 põe o
+    // ponto mais claro logo abaixo do QR, onde fica a chamada.
+    "<< /FunctionType 3 /Domain [0 1] /Functions [9 0 R 10 0 R] /Bounds [0.52] /Encode [0 1 0 1] >>",
+    `<< /FunctionType 2 /Domain [0 1] /C0 [${VERDE_TOPO.map(num).join(" ")}] /C1 [${VERDE_MEIO.map(num).join(" ")}] /N 1 >>`,
+    `<< /FunctionType 2 /Domain [0 1] /C0 [${VERDE_MEIO.map(num).join(" ")}] /C1 [${VERDE_BASE.map(num).join(" ")}] /N 1 >>`,
   ];
 
   let pdf = "%PDF-1.7\n";
@@ -319,17 +408,45 @@ function latin1Bytes(value: string): Uint8Array {
 
 const byteLength = (value: string) => value.length;
 
-/**
- * Largura aproximada de um texto em Helvetica-Bold, em múltiplos do corpo.
- * Serve só para centralizar; não precisa da métrica exata da fonte.
+/*
+ * MÉTRICAS DAS FONTES PADRÃO.
+ *
+ * O corpo do texto é calculado a partir da largura disponível, então a medida
+ * precisa ser a de verdade. Uma aproximação já estourou a borda do adesivo uma
+ * vez: a letra cabia na conta e não cabia no papel.
+ *
+ * Valores oficiais da Adobe para Helvetica e Helvetica-Bold, em milésimos do
+ * corpo. Letra acentuada mede o mesmo que a sem acento.
  */
-function helveticaBoldWidth(text: string): number {
+const LARGURA_BOLD: Record<string, number> = {
+  " ": 278, "!": 333, ",": 278, "-": 333, ".": 278, ":": 333, ";": 333, "(": 333, ")": 333,
+  A: 722, B: 722, C: 722, D: 722, E: 667, F: 611, G: 778, H: 722, I: 278, J: 556, K: 722, L: 611, M: 833,
+  N: 722, O: 778, P: 667, Q: 778, R: 722, S: 667, T: 611, U: 722, V: 667, W: 944, X: 667, Y: 667, Z: 611,
+  a: 556, b: 611, c: 556, d: 611, e: 556, f: 333, g: 611, h: 611, i: 278, j: 278, k: 556, l: 278, m: 889,
+  n: 611, o: 611, p: 611, q: 611, r: 389, s: 556, t: 333, u: 611, v: 556, w: 778, x: 556, y: 556, z: 500,
+};
+const LARGURA_REGULAR: Record<string, number> = {
+  " ": 278, "!": 278, ",": 278, "-": 333, ".": 278, ":": 278, ";": 278, "(": 333, ")": 333,
+  A: 667, B: 667, C: 722, D: 722, E: 667, F: 611, G: 778, H: 722, I: 278, J: 500, K: 667, L: 556, M: 833,
+  N: 722, O: 778, P: 667, Q: 778, R: 722, S: 667, T: 611, U: 722, V: 667, W: 944, X: 667, Y: 667, Z: 611,
+  a: 556, b: 556, c: 500, d: 556, e: 556, f: 278, g: 556, h: 556, i: 222, j: 222, k: 500, l: 222, m: 833,
+  n: 556, o: 556, p: 556, q: 556, r: 333, s: 500, t: 278, u: 556, v: 500, w: 722, x: 500, y: 500, z: 500,
+};
+
+/** Acentuada tem a largura da base: Ã mede o mesmo que A. */
+const semAcento = (character: string) => character.normalize("NFD").replace(/[̀-ͯ]/g, "") || character;
+
+function medir(text: string, tabela: Record<string, number>): number {
   let total = 0;
-  for (const character of text) {
-    if (character === " ") total += 0.278;
-    else if ("Iiljtfr".includes(character)) total += 0.33;
-    else if ("MWmw".includes(character)) total += 0.889;
-    else total += 0.611;
-  }
+  for (const character of text) total += (tabela[semAcento(character)] ?? 556) / 1000;
   return total;
 }
+
+const helveticaWidth = (text: string) => medir(text, LARGURA_REGULAR);
+const helveticaBoldWidth = (text: string) => medir(text, LARGURA_BOLD);
+
+/**
+ * Largura de um texto em múltiplos do corpo. Exportada para o layout poder ser
+ * verificado com a mesma régua que ele usa para decidir o tamanho da letra.
+ */
+export const textWidth = (text: string, { bold = false } = {}) => (bold ? helveticaBoldWidth(text) : helveticaWidth(text));
