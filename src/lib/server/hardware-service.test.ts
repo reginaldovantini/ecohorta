@@ -44,7 +44,7 @@ function real(distance: number | null, sensor: "VL53L0X" | "VL53L1X" = "VL53L1X"
   seq++;
   return {
     device_id: "ESP32-001",
-    collector_code: "EC-001",
+    collector_code: "ECO-001",
     seq,
     uptime_ms: seq * 1000,
     distance_mm: distance,
@@ -69,12 +69,12 @@ async function hold(distance: number, sensor: "VL53L0X" | "VL53L1X" = "VL53L1X",
 }
 
 async function calibrate(sensor: "VL53L0X" | "VL53L1X", patch: Partial<TelemetryPayload> = {}) {
-  expect(await calibrations.startSession(teacher, "EC-001")).toMatchObject({ ok: true });
+  expect(await calibrations.startSession(teacher, "ECO-001")).toMatchObject({ ok: true });
   for (const step of CALIBRATION_STEP_IDS) {
     await hold(POINTS[step], sensor, 20, patch);
-    expect(await calibrations.registerPoint(teacher, "EC-001", step)).toMatchObject({ ok: true });
+    expect(await calibrations.registerPoint(teacher, "ECO-001", step)).toMatchObject({ ok: true });
   }
-  const completed = await calibrations.completeSession(teacher, "EC-001");
+  const completed = await calibrations.completeSession(teacher, "ECO-001");
   if (!completed.ok) throw new Error(completed.message);
   return completed.value;
 }
@@ -86,18 +86,18 @@ async function firmwareApplies(sensor: "VL53L0X" | "VL53L1X", revision: number) 
 }
 
 const change = (distanceSensor: "VL53L0X" | "VL53L1X", actor: Actor = teacher, confirmPhysicalMatch = true, note: string | null = null) =>
-  hardware.changeSensor(actor, "EC-001", { distanceSensor, confirmPhysicalMatch, note });
+  hardware.changeSensor(actor, "ECO-001", { distanceSensor, confirmPhysicalMatch, note });
 
-const view = async (code = "EC-001") => {
+const view = async (code = "ECO-001") => {
   const result = await hardware.getView(teacher, code);
   if (!result.ok) throw new Error(result.message);
   return result.value;
 };
-const snapshot = async () => (await collectors.getSnapshot(student, "EC-001"))!;
+const snapshot = async () => (await collectors.getSnapshot(student, "ECO-001"))!;
 const collectorRow = async () =>
   (
     await db.query<{ distance_sensor: string; hardware_revision: number; hardware_updated_by: string | null }>(
-      "select distance_sensor, hardware_revision, hardware_updated_by from collectors where code = 'EC-001'",
+      "select distance_sensor, hardware_revision, hardware_updated_by from collectors where code = 'ECO-001'",
     )
   ).rows[0]!;
 const lastTelemetry = async () =>
@@ -118,7 +118,7 @@ beforeEach(async () => {
   bench = createBenchService({ db, now: () => clock });
   hardware = createHardwareService({ db, now: () => clock });
   await seedPhysicalScenario(db, ESP32_TOKEN);
-  esp32 = (await collectors.authenticateDevice(`Bearer ${ESP32_TOKEN}`, "ESP32-001", "EC-001"))!;
+  esp32 = (await collectors.authenticateDevice(`Bearer ${ESP32_TOKEN}`, "ESP32-001", "ECO-001"))!;
   virtual = (await collectors.authenticateDevice(`Bearer ${TEST_DEVICE_TOKEN}`, "VIRTUAL-001", "SIM-001"))!;
 });
 
@@ -128,7 +128,7 @@ describe("seleção do sensor (persistida na plataforma)", () => {
     const current = await view();
     expect(current.configuration).toMatchObject({ distanceSensor: "VL53L1X", revision: 1, updatedAt: null });
     expect(current.history).toEqual([]);
-    expect(current.collector).toMatchObject({ code: "EC-001", isSimulated: false, deviceKey: "ESP32-001" });
+    expect(current.collector).toMatchObject({ code: "ECO-001", isSimulated: false, deviceKey: "ESP32-001" });
   });
 
   it("configuração VL53L0X: persistida com nova revisão, autor, nota e confirmação no histórico", async () => {
@@ -137,7 +137,7 @@ describe("seleção do sensor (persistida na plataforma)", () => {
     expect(await collectorRow()).toEqual({ distance_sensor: "VL53L0X", hardware_revision: 2, hardware_updated_by: IDS.teacher });
 
     // Outra instância do serviço (outra função serverless) lê a mesma configuração do banco.
-    const fresh = await createHardwareService({ db, now: () => clock }).getView(teacher, "EC-001");
+    const fresh = await createHardwareService({ db, now: () => clock }).getView(teacher, "ECO-001");
     expect(fresh.ok && fresh.value.configuration).toMatchObject({ distanceSensor: "VL53L0X", revision: 2, updatedBy: "Prof. Rê" });
     expect(fresh.ok && fresh.value.history).toEqual([
       expect.objectContaining({ revision: 2, previousSensor: "VL53L1X", newSensor: "VL53L0X", changedBy: "Prof. Rê", note: "módulo GY-530 instalado", isSimulated: false }),
@@ -173,9 +173,9 @@ describe("seleção do sensor (persistida na plataforma)", () => {
   });
 
   it("estudantes e funcionários não abrem a configuração de hardware", async () => {
-    expect(await hardware.getView(student, "EC-001")).toMatchObject({ ok: false, status: 403 });
-    expect(await hardware.getView(staff, "EC-001")).toMatchObject({ ok: false, status: 403 });
-    expect(await hardware.getView(otherSchoolTeacher, "EC-001")).toMatchObject({ ok: false, status: 404 });
+    expect(await hardware.getView(student, "ECO-001")).toMatchObject({ ok: false, status: 403 });
+    expect(await hardware.getView(staff, "ECO-001")).toMatchObject({ ok: false, status: 403 });
+    expect(await hardware.getView(otherSchoolTeacher, "ECO-001")).toMatchObject({ ok: false, status: 404 });
   });
 });
 
@@ -248,7 +248,7 @@ describe("leituras e estado do sensor", () => {
     clock += 1000;
     await collectors.ingestTelemetry(esp32, real(1236, "VL53L0X"));
     const { rows } = await db.query<{ samples: number }>(
-      "select jsonb_array_length(distance_samples) as samples from collector_state s join collectors c on c.id = s.collector_id where c.code = 'EC-001'",
+      "select jsonb_array_length(distance_samples) as samples from collector_state s join collectors c on c.id = s.collector_id where c.code = 'ECO-001'",
     );
     expect(rows[0]!.samples).toBe(1);
   });
@@ -257,7 +257,7 @@ describe("leituras e estado do sensor", () => {
 describe("divergência entre o sensor configurado e o reportado", () => {
   it("⚠️ INCOMPATIBILIDADE DE HARDWARE: sem volume, em erro, sem calibração nem validação", async () => {
     await calibrate("VL53L1X");
-    await bench.endBench(teacher, "EC-001");
+    await bench.endBench(teacher, "ECO-001");
     await hold(tube(3));
     expect((await snapshot()).telemetry.volumeSource).toBe("calibration");
 
@@ -269,14 +269,14 @@ describe("divergência entre o sensor configurado e o reportado", () => {
     expect(current.telemetry.status).toBe("ERROR");
     expect(current.telemetry.volumeSource).toBe("none");
 
-    const start = await calibrations.startSession(teacher, "EC-001");
+    const start = await calibrations.startSession(teacher, "ECO-001");
     expect(start).toMatchObject({ ok: false, status: 409 });
     expect(!start.ok && start.message).toContain("INCOMPATIBILIDADE DE HARDWARE");
-    await bench.startBench(teacher, "EC-001");
-    const validation = await bench.recordValidation(teacher, "EC-001", { known_volume_liters: 3, measurement_method: "balanca" });
+    await bench.startBench(teacher, "ECO-001");
+    const validation = await bench.recordValidation(teacher, "ECO-001", { known_volume_liters: 3, measurement_method: "balanca" });
     expect(validation).toMatchObject({ ok: false, status: 409 });
 
-    const benchView = await bench.getView(teacher, "EC-001");
+    const benchView = await bench.getView(teacher, "ECO-001");
     expect(benchView.ok && benchView.value.hardware.compatibility).toBe("incompatible");
     expect(benchView.ok && benchView.value.live.volume).toBeNull();
   });
@@ -294,9 +294,9 @@ describe("divergência entre o sensor configurado e o reportado", () => {
   });
 
   it("uma etapa de calibração é recusada se o firmware trocar de driver no meio", async () => {
-    expect(await calibrations.startSession(teacher, "EC-001")).toMatchObject({ ok: true });
+    expect(await calibrations.startSession(teacher, "ECO-001")).toMatchObject({ ok: true });
     await hold(POINTS.zero, "VL53L0X");
-    const point = await calibrations.registerPoint(teacher, "EC-001", "zero");
+    const point = await calibrations.registerPoint(teacher, "ECO-001", "zero");
     expect(point).toMatchObject({ ok: false, status: 409 });
     expect(!point.ok && point.message).toContain("INCOMPATIBILIDADE DE HARDWARE");
   });
@@ -306,7 +306,7 @@ describe("troca do sensor e proteção da calibração", () => {
   it("VL53L1X → VL53L0X: a calibração anterior é substituída, o volume fica desconhecido e as missões param", async () => {
     const first = await calibrate("VL53L1X");
     expect(first.status).toBe("active");
-    await bench.endBench(teacher, "EC-001");
+    await bench.endBench(teacher, "ECO-001");
     await hold(tube(4));
     expect((await snapshot()).calibration).toMatchObject({ version: 1, sensorModel: "VL53L1X", hardwareRevision: 1, appliesToDevice: true });
 
@@ -331,7 +331,7 @@ describe("troca do sensor e proteção da calibração", () => {
     await calibrate("VL53L1X");
     await change("VL53L0X");
     // Até o firmware aplicar a configuração, as leituras são do driver anterior: calibrar é recusado.
-    expect(await calibrations.startSession(teacher, "EC-001")).toMatchObject({ ok: false, status: 409 });
+    expect(await calibrations.startSession(teacher, "ECO-001")).toMatchObject({ ok: false, status: 409 });
     await firmwareApplies("VL53L0X", 2);
     const second = await calibrate("VL53L0X", { hardware_revision: 2 });
     expect(second).toMatchObject({ status: "active", version: 2 });
@@ -368,20 +368,20 @@ describe("troca do sensor e proteção da calibração", () => {
   });
 
   it("uma calibração em andamento é cancelada pela troca", async () => {
-    expect(await calibrations.startSession(teacher, "EC-001")).toMatchObject({ ok: true });
+    expect(await calibrations.startSession(teacher, "ECO-001")).toMatchObject({ ok: true });
     await hold(POINTS.zero);
-    expect(await calibrations.registerPoint(teacher, "EC-001", "zero")).toMatchObject({ ok: true });
+    expect(await calibrations.registerPoint(teacher, "ECO-001", "zero")).toMatchObject({ ok: true });
 
     const result = await change("VL53L0X");
     expect(result.ok && result.value.change.cancelledCalibration).toBe(true);
-    expect(await calibrations.registerPoint(teacher, "EC-001", "one")).toMatchObject({ ok: false, status: 409 });
+    expect(await calibrations.registerPoint(teacher, "ECO-001", "one")).toMatchObject({ ok: false, status: 409 });
     const { rows } = await db.query<{ status: string }>("select status from collector_calibrations");
     expect(rows).toEqual([{ status: "cancelled" }]);
   });
 
   it("a troca não altera o balanço hídrico já medido", async () => {
     await calibrate("VL53L1X");
-    await bench.endBench(teacher, "EC-001");
+    await bench.endBench(teacher, "ECO-001");
     await hold(tube(5));
     const before = (await snapshot()).totals;
     await change("VL53L0X");

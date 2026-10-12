@@ -49,7 +49,7 @@ function telemetry(distance: number | null, patch: Partial<TelemetryPayload> = {
   seq++;
   return {
     device_id: "VIRTUAL-001",
-    collector_code: "EC-001",
+    collector_code: "ECO-001",
     seq,
     uptime_ms: seq * 1000,
     distance_mm: distance,
@@ -73,28 +73,28 @@ async function hold(distance: number | null, readings = 20, patch: Partial<Telem
 }
 
 async function calibrate(points: Record<CalibrationStepId, number>, actor: Actor = teacher) {
-  expect((await calibrations.startSession(actor, "EC-001")).ok).toBe(true);
+  expect((await calibrations.startSession(actor, "ECO-001")).ok).toBe(true);
   for (const step of CALIBRATION_STEP_IDS) {
     await hold(points[step]);
-    const registered = await calibrations.registerPoint(actor, "EC-001", step);
+    const registered = await calibrations.registerPoint(actor, "ECO-001", step);
     expect(registered).toMatchObject({ ok: true });
   }
-  const completed = await calibrations.completeSession(actor, "EC-001");
+  const completed = await calibrations.completeSession(actor, "ECO-001");
   if (!completed.ok) throw new Error(completed.message);
   return completed.value;
 }
 
 const view = async () => {
-  const result = await calibrations.getView(teacher, "EC-001");
+  const result = await calibrations.getView(teacher, "ECO-001");
   if (!result.ok) throw new Error(result.message);
   return result.value;
 };
 
-const snapshot = async () => (await collectors.getSnapshot(student, "EC-001"))!;
+const snapshot = async () => (await collectors.getSnapshot(student, "ECO-001"))!;
 
 /** Calibrar inicia um ensaio de bancada; o operador o encerra antes de voltar às missões. */
 const endBench = async () => {
-  expect((await createBenchService({ db, now: () => clock }).endBench(teacher, "EC-001")).ok).toBe(true);
+  expect((await createBenchService({ db, now: () => clock }).endBench(teacher, "ECO-001")).ok).toBe(true);
 };
 
 beforeAll(async () => {
@@ -111,15 +111,15 @@ beforeEach(async () => {
   seq = 0;
   collectors = createCollectorService({ db, pepper: TEST_PEPPER, now: () => clock });
   calibrations = createCalibrationService({ db, now: () => clock });
-  device = (await collectors.authenticateDevice(`Bearer ${TEST_DEVICE_TOKEN}`, "VIRTUAL-001", "EC-001"))!;
+  device = (await collectors.authenticateDevice(`Bearer ${TEST_DEVICE_TOKEN}`, "VIRTUAL-001", "ECO-001"))!;
 });
 
 describe("calibração — acesso", () => {
   it("é exclusiva de professores e administradores da escola", async () => {
-    expect(await calibrations.getView(student, "EC-001")).toMatchObject({ ok: false, status: 403 });
-    expect(await calibrations.startSession(staff, "EC-001")).toMatchObject({ ok: false, status: 403 });
-    expect(await calibrations.getView(otherSchoolTeacher, "EC-001")).toMatchObject({ ok: false, status: 404 });
-    expect((await calibrations.getView(teacher, "ec001")).ok).toBe(true);
+    expect(await calibrations.getView(student, "ECO-001")).toMatchObject({ ok: false, status: 403 });
+    expect(await calibrations.startSession(staff, "ECO-001")).toMatchObject({ ok: false, status: 403 });
+    expect(await calibrations.getView(otherSchoolTeacher, "ECO-001")).toMatchObject({ ok: false, status: 404 });
+    expect((await calibrations.getView(teacher, "eco001")).ok).toBe(true);
   });
 });
 
@@ -147,15 +147,15 @@ describe("calibração — leitura ao vivo", () => {
 
 describe("calibração — procedimento", () => {
   it("só registra leitura estável e na ordem das etapas", async () => {
-    await calibrations.startSession(teacher, "EC-001");
+    await calibrations.startSession(teacher, "ECO-001");
     await hold(ZERO_MM, 5);
-    const unstable = await calibrations.registerPoint(teacher, "EC-001", "zero");
+    const unstable = await calibrations.registerPoint(teacher, "ECO-001", "zero");
     expect(unstable).toMatchObject({ ok: false, status: 409 });
     expect(!unstable.ok && unstable.message).toMatch(/não estável/);
 
     await hold(ZERO_MM, 20);
-    expect(await calibrations.registerPoint(teacher, "EC-001", "two")).toMatchObject({ ok: false, status: 409 });
-    const registered = await calibrations.registerPoint(teacher, "EC-001", "zero");
+    expect(await calibrations.registerPoint(teacher, "ECO-001", "two")).toMatchObject({ ok: false, status: 409 });
+    const registered = await calibrations.registerPoint(teacher, "ECO-001", "zero");
     expect(registered.ok && registered.value.draft).toMatchObject({ nextStep: "one", status: "draft", version: null });
     expect(registered.ok && registered.value.draft?.points.zero?.distanceMm).toBeCloseTo(ZERO_MM, 0);
 
@@ -164,17 +164,17 @@ describe("calibração — procedimento", () => {
       clock += 1000;
       await collectors.ingestTelemetry(device, telemetry(ZERO_MM - i * 7));
     }
-    expect(await calibrations.registerPoint(teacher, "EC-001", "one")).toMatchObject({ ok: false, status: 409 });
+    expect(await calibrations.registerPoint(teacher, "ECO-001", "one")).toMatchObject({ ok: false, status: 409 });
   });
 
   it("registrar de novo uma etapa descarta as seguintes", async () => {
-    await calibrations.startSession(teacher, "EC-001");
+    await calibrations.startSession(teacher, "ECO-001");
     for (const step of ["zero", "one", "two"] as const) {
       await hold(TUBE_POINTS[step]);
-      await calibrations.registerPoint(teacher, "EC-001", step);
+      await calibrations.registerPoint(teacher, "ECO-001", step);
     }
     await hold(tube(1) - 4);
-    const redo = await calibrations.registerPoint(teacher, "EC-001", "one");
+    const redo = await calibrations.registerPoint(teacher, "ECO-001", "one");
     expect(redo.ok && redo.value.draft).toMatchObject({ nextStep: "two", distances: { twoLitersMm: null } });
     expect(redo.ok && Object.keys(redo.value.draft!.points).sort()).toEqual(["one", "zero"]);
   });
@@ -246,13 +246,13 @@ describe("calibração — procedimento", () => {
   });
 
   it("cancelar ou reiniciar o procedimento não apaga nada", async () => {
-    await calibrations.startSession(teacher, "EC-001");
-    await calibrations.startSession(teacher, "EC-001");
-    await calibrations.cancelSession(teacher, "EC-001");
+    await calibrations.startSession(teacher, "ECO-001");
+    await calibrations.startSession(teacher, "ECO-001");
+    await calibrations.cancelSession(teacher, "ECO-001");
     const { rows } = await pg.query<{ status: string }>("select status from collector_calibrations order by created_at");
     expect(rows.map((row) => row.status)).toEqual(["cancelled", "cancelled"]);
     expect((await view()).draft).toBeNull();
-    expect(await calibrations.completeSession(teacher, "EC-001")).toMatchObject({ ok: false, status: 409 });
+    expect(await calibrations.completeSession(teacher, "ECO-001")).toMatchObject({ ok: false, status: 409 });
   });
 });
 
@@ -285,7 +285,7 @@ describe("volume derivado na telemetria", () => {
 
   it("o balanço não conta a água adicionada à mão durante a calibração", async () => {
     await hold(ZERO_MM, 3); // volume informado pelo dispositivo: 6 L
-    await calibrations.startSession(teacher, "EC-001");
+    await calibrations.startSession(teacher, "ECO-001");
     const before = (await snapshot()).totals.capturedLiters;
     await hold(ZERO_MM, 3, { volume_liters: 10 });
     await hold(ZERO_MM, 3, { volume_liters: 2 });
@@ -297,7 +297,7 @@ describe("volume derivado na telemetria", () => {
     await endBench(); // missões ficam bloqueadas durante o ensaio de bancada
     await hold(tube(5));
     const commandId = "6b3c2d4e-7f8a-4b9c-8d0e-1f2a3b4c5d6e";
-    const created = await collectors.requestDispense(student, "EC-001", {
+    const created = await collectors.requestDispense(student, "ECO-001", {
       command_id: commandId,
       execution_id: "7c4d3e5f-8a9b-4c0d-9e1f-2a3b4c5d6e7f",
       mission_id: "hidratar-mudas",
@@ -357,7 +357,7 @@ describe("dispositivo virtual — mesma lógica de conversão", () => {
         seq++;
         await collectors.ingestTelemetry(device, {
           device_id: "VIRTUAL-001",
-          collector_code: "EC-001",
+          collector_code: "ECO-001",
           seq,
           uptime_ms: reading.uptimeMs,
           distance_mm: reading.distanceMm,
@@ -370,14 +370,14 @@ describe("dispositivo virtual — mesma lógica de conversão", () => {
       }
     };
 
-    await calibrations.startSession(teacher, "EC-001");
+    await calibrations.startSession(teacher, "ECO-001");
     const volumes: Record<CalibrationStepId, number> = { zero: 0, one: 1, two: 2, three: 3, max: VIRTUAL_DEVICE_CONFIG.capacityLiters };
     for (const step of CALIBRATION_STEP_IDS) {
       virtual.setVolume(volumes[step]);
       await feed(20);
-      expect(await calibrations.registerPoint(teacher, "EC-001", step)).toMatchObject({ ok: true });
+      expect(await calibrations.registerPoint(teacher, "ECO-001", step)).toMatchObject({ ok: true });
     }
-    const completed = await calibrations.completeSession(teacher, "EC-001");
+    const completed = await calibrations.completeSession(teacher, "ECO-001");
     expect(completed.ok && completed.value.status).toBe("active");
     const fit = completed.ok ? completed.value.fit : null;
     expect(fit!.effectiveCapacityLiters!).toBeCloseTo(12, 1);
@@ -398,7 +398,7 @@ describe("dispositivo virtual — mesma lógica de conversão", () => {
     expect(getMissionAvailability(findMission("regar-jardim")!, current, false).status).toBe("waiting_water");
 
     // O painel da simulação também aceita distância e volume.
-    await collectors.updateSimulation(teacher, "EC-001", { action: { type: "set_distance", distance_mm: 900 } });
+    await collectors.updateSimulation(teacher, "ECO-001", { action: { type: "set_distance", distance_mm: 900 } });
     clock += 1000;
     const response = await collectors.ingestTelemetry(device, telemetry(1236));
     expect(response.simulation?.action).toMatchObject({ type: "set_distance", distance_mm: 900 });

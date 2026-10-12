@@ -9,6 +9,9 @@ A água de condensação dos aparelhos de ar-condicionado costuma ser descartada
 → MEDIÇÃO REAL → CONFIRMAÇÃO → XP → EVIDÊNCIA → TIMELINE → IMPACTO
 ```
 
+**No ar:** <https://ecohorta-inteligente.vercel.app> — projeto `ecohorta-inteligente` na Vercel
+(plano Hobby), publicado a cada push na `main` de `reginaldovantini/ecohorta`.
+
 > **Princípio de verdade:** o que acontece na tela acontece fisicamente. Enquanto o hardware não está conectado, todo dado vem de um dispositivo virtual e aparece identificado como **SIMULAÇÃO**.
 
 ## Status
@@ -79,7 +82,14 @@ Abra http://localhost:3000 e entre em `/entrar`.
 
 ### Deploy (Vercel)
 
-1. Importe o repositório na Vercel.
+> **Escolha o endereço antes de imprimir qualquer adesivo.** O QR colado no tubo e
+> o `secrets.h` gravado em cada ESP32 carregam a URL da plataforma. Trocar o
+> endereço depois obriga a reimprimir adesivos e regravar placas, e a gerar tudo
+> de novo. Um domínio próprio apontado para a Vercel (ex.: `ecohorta.com.br`)
+> sobrevive a trocar o nome do projeto e até a trocar de hospedagem. A plataforma
+> recusa gerar adesivo e firmware enquanto `NEXT_PUBLIC_APP_URL` for localhost.
+
+1. Importe o repositório na Vercel. O endereço padrão é `<nome-do-projeto>.vercel.app`; se o nome já estiver em uso por outra conta, a Vercel acrescenta o nome do time.
 2. Cadastre em **Settings → Environment Variables**: `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `DATABASE_URL` (Transaction pooler), `IOT_TOKEN_PEPPER` e `STUDENT_EMAIL_DOMAIN`. **Não** cadastre `SUPABASE_SECRET_KEY` nem `DATABASE_MIGRATION_URL`.
 3. Para o dispositivo virtual enviar para a URL pública, defina `ECOHORTA_API_URL=https://<app>.vercel.app` no `.env.local` e rode `npm run device:virtual`.
 4. Rode o teste de ponta a ponta: `SMOKE_BASE_URL=https://<app>.vercel.app npm run smoke`.
@@ -152,7 +162,7 @@ Todas estão documentadas em [.env.example](.env.example). **Nunca coloque crede
 
 | Variável | Onde é usada | Vercel |
 |---|---|---|
-| `NEXT_PUBLIC_APP_URL` | QR Codes e links | ✅ |
+| `NEXT_PUBLIC_APP_URL` | QR Codes impressos, `secrets.h` do ESP32 e links — **definir antes de imprimir adesivos** | ✅ |
 | `NEXT_PUBLIC_SUPABASE_URL` | Sessão (Supabase Auth) | ✅ |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Sessão (protegida pelo RLS) | ✅ |
 | `DATABASE_URL` | Banco (Transaction pooler) | ✅ |

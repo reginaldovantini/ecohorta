@@ -6,7 +6,7 @@ const MM = 72 / 25.4;
 const URL = "https://ecohorta.vercel.app/q/0efae393694a357a699ec21de5cb1248";
 
 const sticker = (url = URL) =>
-  buildStickerPdf({ url, code: "EC-001", location: "Horta dos fundos", schoolName: "EE Prof.ª Clarinda Mendes de Aquino" });
+  buildStickerPdf({ url, code: "ECO-001", location: "Horta dos fundos", schoolName: "EE Prof.ª Clarinda Mendes de Aquino" });
 
 /** O PDF é latin-1, então dá para lê-lo como texto e inspecionar o conteúdo. */
 const ENTER = String.fromCharCode(10);
@@ -170,7 +170,7 @@ describe("o que o adesivo diz", () => {
 
   it("identifica o captador FORA da área colável, para quem vai colar", () => {
     const texto = asText(sticker());
-    expect(texto).toContain("EC-001 \\267 Horta dos fundos");
+    expect(texto).toContain("ECO-001 \\267 Horta dos fundos");
     expect(texto).toContain("EE Prof.");
   });
 

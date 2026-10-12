@@ -76,9 +76,9 @@ Prioridades usadas em todo o documento:
 
 | Camada | O que existe | Onde | Situação |
 |---|---|---|---|
-| Captador físico EC-001 | Tubo vertical estreito em PVC | — | **[EXISTE]** fisicamente; sem calibração |
+| Captador físico ECO-001 | Tubo vertical estreito em PVC | — | **[EXISTE]** fisicamente; sem calibração |
 | Firmware ESP32 DevKit V1 (etapa 1) | Drivers VL53L0X e VL53L1X (sensor escolhido na plataforma) com mediana; telemetria HTTPS no mesmo contrato; **sem válvula** | [`firmware/`](../firmware/) | **[EXISTE]** compila e tem testes do núcleo; não gravado nem validado em placa |
-| Dispositivo virtual EC-001 | Física de condensado e gravidade (Torricelli), ruído + mediana, `NO_FLOW`, `TIMEOUT`, cancelamento, idempotência | [`virtual-device.ts`](../src/lib/iot/virtual-device.ts), [`tools/virtual-device/run.ts`](../tools/virtual-device/run.ts) | **[EXISTE]** 12 testes |
+| Dispositivo virtual ECO-001 | Física de condensado e gravidade (Torricelli), ruído + mediana, `NO_FLOW`, `TIMEOUT`, cancelamento, idempotência | [`virtual-device.ts`](../src/lib/iot/virtual-device.ts), [`tools/virtual-device/run.ts`](../tools/virtual-device/run.ts) | **[EXISTE]** 12 testes |
 | API IoT | `POST /api/iot/telemetry` (token com hash + pepper), canal da simulação | [`src/app/api/iot`](../src/app/api/iot) | **[EXISTE]** |
 | Serviço de captadores | Estado persistido, trava por captador, comandos, expiração, contabilidade hídrica, XP na conclusão | [`collector-service.ts`](../src/lib/server/collector-service.ts) | **[EXISTE]** 24 testes |
 | Contabilidade hídrica | Tendência, transbordamento, descarte **estimado**, balanço de massa | [`water-accounting.ts`](../src/lib/collector/water-accounting.ts) | **[EXISTE]** 6 testes |
@@ -120,7 +120,7 @@ Prioridades usadas em todo o documento:
 
 ```text
 ┌──────────────────────── Dispositivos ────────────────────────┐
-│ ESP32 + VL53L1X (etapa 1)         Dispositivo virtual EC-001  │
+│ ESP32 + VL53L1X (etapa 1)         Dispositivo virtual ECO-001  │
 │ is_simulated = false              is_simulated = true         │
 └───────────────┬────────────────────────────────┬──────────────┘
                 │ POST /api/iot/telemetry  (Bearer token, mesmo contrato)
@@ -160,7 +160,7 @@ participant_age_bands (view): faixa etária por escola, papel e turma, sem datas
 
 ```text
 Estudante segura "Liberar"
-  → POST /api/collectors/EC-001/commands {command_id, execution_id, mission_id}
+  → POST /api/collectors/ECO-001/commands {command_id, execution_id, mission_id}
   → servidor: missão do catálogo · litros (ou plano de resgate pelo nível medido)
               · recusa se offline / ocupado / água insuficiente (fica registrado)
   → device_commands (QUEUED) + mission_executions
@@ -266,7 +266,7 @@ Estes princípios devem ser **preservados** em qualquer evolução:
 1. **Não há lista de materiais com custos**, desenhos, fotos, esquema elétrico nem arquivos 3D.
 2. **A calibração é gravada no firmware** ([`config.h`](../firmware/include/config.h#L27)): não fica registrada na plataforma, não tem versão e não é auditável.
 3. **O cadastro exige credenciais de banco** (linha de comando). Uma escola parceira não consegue se cadastrar sozinha.
-4. **Códigos de captador são globais.** Duas escolas não podem ter `EC-001`.
+4. **Códigos de captador são globais.** Duas escolas não podem ter `ECO-001`.
 5. **Não há versão do hardware** associada ao captador. Dados de captadores diferentes não são comparáveis.
 6. **Não há "certificação" da instalação.** Um captador mal calibrado entraria nos indicadores de impacto.
 7. **Licenças não definidas.** Sem licença explícita, outra escola não tem permissão clara para reutilizar código, projeto e manual. *(Decisão do responsável pelo projeto; ver R11.)*
@@ -298,7 +298,7 @@ MONTAGEM (unidade física construída por uma escola)
 |---|---|---|---|---|
 | 1. Conhecer o projeto | Página pública com impacto real e vídeo | Nenhuma página pública; app exige login | **[NOVO]** | C |
 | 2. Aprender como funciona | Laboratório no navegador com a física do dispositivo virtual, sempre marcado SIMULAÇÃO | `virtual-device.ts` é TypeScript puro, sem dependências de Node: **pode rodar no navegador** | **[EVOLUIR]** | C |
-| 3. Construir | Manual versionado + lista de materiais + arquivos | `HARDWARE.md` (checklists) | **[EVOLUIR]** | B (registrar o EC-001) / C (manual) |
+| 3. Construir | Manual versionado + lista de materiais + arquivos | `HARDWARE.md` (checklists) | **[EVOLUIR]** | B (registrar o ECO-001) / C (manual) |
 | 4. Cadastrar o captador | Formulário da escola → captador + montagem | `register-device` (linha de comando) | **[EVOLUIR]** | C |
 | 5. Conectar o dispositivo | Token exibido uma vez + configuração do firmware | Token gerado uma vez; `secrets.example.h` | **[EVOLUIR]** | C |
 | 6. Calibrar | Assistente: adicionar 0,5 L, registrar `distance_mm`, gerar a tabela e enviar ao dispositivo | Procedimento manual; a telemetria já envia `distance_mm` | **[EVOLUIR]** | C |
@@ -315,7 +315,7 @@ MONTAGEM (unidade física construída por uma escola)
 
 A plataforma já valida a missão de reúso pelo sensor. O mesmo princípio pode valer para as outras áreas: **o servidor confere a resposta do estudante contra o dado real medido.**
 
-Exemplo: "Estime quantos litros o EC-001 vai captar até sexta às 12 h". Na sexta, o servidor compara a estimativa com a medição. O XP depende da qualidade do raciocínio registrado e da proximidade do resultado.
+Exemplo: "Estime quantos litros o ECO-001 vai captar até sexta às 12 h". Na sexta, o servidor compara a estimativa com a medição. O XP depende da qualidade do raciocínio registrado e da proximidade do resultado.
 
 Isso transforma o captador em **laboratório de dados reais**, coerente com o "princípio de verdade" do projeto.
 
@@ -327,7 +327,7 @@ Isso transforma o captador em **laboratório de dados reais**, coerente com o "p
 | **2. Investigação** | **[EVOLUIR]** Histórico de volume; taxa de acúmulo estimada pelo servidor | `telemetry.volume_liters` ao longo do tempo; taxa aprendida só do momento atual | Histórico da taxa de produção; **temperatura e umidade**; cadastro do aparelho de ar-condicionado; registro de hipótese e conclusão | "Em que horário o captador enche mais rápido?" (série de volume) | B |
 | **3. Matemática** | **[EVOLUIR]** Volumes, percentuais, taxas e balanço já calculados | Volume, capacidade, taxa (L/h), aproveitamento | Gráficos, exportação CSV, resposta numérica validada pelo servidor | "Estimativa verificada": prever o volume de amanhã e conferir com o sensor | B |
 | **4. Ciências** | **[EVOLUIR]** A física do dispositivo virtual (vazão ∝ √altura) é um modelo real | Queda de nível na liberação (dados de vazão) | Sensores de temperatura e umidade; ponto de orvalho; qualidade da água | "A vazão cai quando o nível cai?" usando os dados de uma liberação | B/C |
-| **5. Programação e IoT** | **[EXISTE]** Firmware aberto, contrato documentado, dispositivo virtual em TypeScript, teste de API | Contrato JSON, códigos de status e falha | Captador "de bancada" por equipe, separado dos indicadores de impacto; trilha guiada | "Leia a telemetria do EC-002 e explique cada campo" | C |
+| **5. Programação e IoT** | **[EXISTE]** Firmware aberto, contrato documentado, dispositivo virtual em TypeScript, teste de API | Contrato JSON, códigos de status e falha | Captador "de bancada" por equipe, separado dos indicadores de impacto; trilha guiada | "Leia a telemetria do ECO-002 e explique cada campo" | C |
 | **6. Engenharia** | **[EVOLUIR]** Checklists da válvula e dos relés; registro de comandos (alvo × medido, falhas) | `device_commands` | Registro de versões, componentes e testes (seção 12) | "Execute o protocolo de vazão e registre os resultados" | B/C |
 | **7. Design e inovação** | Nenhum | — | Projetos com iterações, custo, comparação entre versões | "Proponha uma melhoria do suporte do sensor e compare com a versão atual" | C |
 
@@ -339,7 +339,7 @@ Isso transforma o captador em **laboratório de dados reais**, coerente com o "p
 - ver a fórmula de Torricelli agir;
 - provocar `NO_FLOW` e investigar por quê.
 
-**Isso não mexe no captador compartilhado**; hoje o painel da simulação altera o EC-001 de todos e é exclusivo de educadores. Tudo continua com o selo SIMULAÇÃO.
+**Isso não mexe no captador compartilhado**; hoje o painel da simulação altera o ECO-001 de todos e é exclusivo de educadores. Tudo continua com o selo SIMULAÇÃO.
 
 ### 6.4 Relação com o currículo
 
@@ -455,7 +455,7 @@ A plataforma usa **banco compartilhado com isolamento por linha** (`school_id` +
 
 | Lacuna | Risco | Correção proposta | Prioridade |
 |---|---|---|---|
-| `collectors.code` único no sistema | Duas escolas não podem ter `EC-001`; o QR Code depende disso | Código público com prefixo da escola (ex.: `CLA-EC-001`) **ou** unicidade por escola + identificador público no QR | C |
+| `collectors.code` único no sistema | Duas escolas não podem ter `ECO-001`; o QR Code depende disso | Código público com prefixo da escola (ex.: `CLA-ECO-001`) **ou** unicidade por escola + identificador público no QR | C |
 | `ensureCollector` com `on conflict (code)` sem checar a escola | Provisionar o mesmo código para outra escola **altera o captador existente e troca o token do dispositivo** | Recusar conflito entre escolas | C (antes da 2ª escola) |
 | `devices` com `on conflict (device_key)` move o dispositivo de captador | Um dispositivo pode ser "sequestrado" por engano | Recusar mudança de escola; exigir desativação explícita | C |
 | `schools.name` único; só o nome | Escolas homônimas; sem município, UF ou código INEP para indicadores | Código INEP, município e UF | C |
@@ -699,8 +699,8 @@ engineering_projects      problema → hipótese → versões → testes → con
 
 | Captador | Montagem | Válvula | Uso nos dados |
 |---|---|---|---|
-| EC-001 | Versão 1.0 (escola de origem) | Esférica motorizada comercial | Referência |
-| EC-002 | Versão 1.1 (montado pelos estudantes seguindo o manual v1) | Comercial | Valida o manual |
+| ECO-001 | Versão 1.0 (escola de origem) | Esférica motorizada comercial | Referência |
+| ECO-002 | Versão 1.1 (montado pelos estudantes seguindo o manual v1) | Comercial | Valida o manual |
 | Escola parceira | Versão 2.0 | Baixo custo (projeto dos estudantes) | Comparação por versão |
 
 Hoje nenhuma dessas diferenças pode ser registrada. **[NOVO]**: uma versão simples de hardware no captador é prioridade **B**; o modelo completo é **C**.
@@ -769,7 +769,7 @@ A plataforma **não deve assumir** um modelo de válvula (regra do projeto). A v
 | 1 — Protótipo (captador + ESP32 + sensor + válvula + plataforma) | **Concordo, com um critério de passagem.** A válvula só entra depois dos checklists físicos. O firmware atual **não controla válvula**. Sem validação até a demonstração, o protótipo mostra sensor real + liberação na SIMULAÇÃO, declarado |
 | 2 — Demonstração (missões + água real + indicadores) | **Juntar com a Fase 1.** A demonstração de setembro **é** o marco do protótipo. Falta uma fase que o mapa não tem: **piloto real na escola**, semanas de operação com dados reais. Sem ele, investigação e indicadores não têm base |
 | 3 — Aprendizagem STEM | **Concordo**, depois do piloto. Missões de dados precisam de dados reais acumulados |
-| 4 — Replicação (manual, vídeos, kits) | **Dividir em duas.** Primeiro **replicação interna** (EC-002 montado pelos estudantes com o manual v1), depois externa. Um manual não testado por outra equipe não está pronto para outra escola |
+| 4 — Replicação (manual, vídeos, kits) | **Dividir em duas.** Primeiro **replicação interna** (ECO-002 montado pelos estudantes com o manual v1), depois externa. Um manual não testado por outra equipe não está pronto para outra escola |
 | 5 — Rede (várias escolas e captadores) | **Começar por um piloto com 2–3 escolas parceiras.** A replicação externa e a rede acontecem juntas: a escola que constrói também precisa estar cadastrada |
 | 6 — Escala (indicadores agregados, comunidade) | **Concordo** como visão de longo prazo |
 | — | **Faltava:** a trilha de **engenharia e redução de custos** é paralela, não uma fase. Começa quando a válvula comercial estiver validada, porque ela é a referência de comparação |
@@ -780,7 +780,7 @@ A plataforma **não deve assumir** um modelo de válvula (regra do projeto). A v
 FASE 0 — PROTÓTIPO DEMONSTRÁVEL                          até 30/09/2026   [A]
   Plataforma em produção (Supabase + HTTPS) · sensor real enviando telemetria
   · missão ponta a ponta (válvula real SE validada; senão SIMULAÇÃO declarada)
-  · registro fotográfico e de custos da montagem do EC-001
+  · registro fotográfico e de custos da montagem do ECO-001
 
 FASE 1 — PILOTO REAL NA ESCOLA                           ~4–8 semanas     [B]
   Operação contínua · dados reais · painel do professor · indicadores reais × simulação
@@ -791,7 +791,7 @@ FASE 2 — APRENDIZAGEM STEM COM DADOS REAIS                                 [B]
   · gráficos e CSV · conquistas gravadas · ranking por turma
 
 FASE 3 — REPLICAÇÃO INTERNA + ENGENHARIA                                   [C]
-  EC-002 montado pelos estudantes com o manual v1 · registro de versões, montagens e testes
+  ECO-002 montado pelos estudantes com o manual v1 · registro de versões, montagens e testes
   · calibração registrada · início da válvula de baixo custo
 
 FASE 4 — PILOTO DE REDE (2–3 ESCOLAS PARCEIRAS)                             [C]
@@ -836,7 +836,7 @@ TRILHA PARALELA — ENGENHARIA E CUSTO   (a partir da válvula comercial validad
 | Laboratório virtual | Parcial: física em TS puro, rodando em Node | Versão no navegador para estudantes | Média | Médio | C |
 | Rede e indicadores agregados | Não | Redes, papéis, anonimização, dados abertos | Alta | Alto | D |
 
-\* **A apenas se o ESP32 real for demonstrado num captador separado** (ex.: EC-002). Hoje a interface mostraria só o EC-001 (simulado). Ver seção 15, item A5.
+\* **A apenas se o ESP32 real for demonstrado num captador separado** (ex.: ECO-002). Hoje a interface mostraria só o ECO-001 (simulado). Ver seção 15, item A5.
 
 ---
 
@@ -850,8 +850,8 @@ Faltam cerca de duas semanas. O critério é: **só entra o que torna a demonstr
 | A2 | Deploy HTTPS + PWA instalado no celular + `npm run smoke` na URL pública | A banca precisa ver o app real, e o service worker só funciona com HTTPS | **[EXISTE]** em código; falta publicar |
 | A3 | ESP32 + VL53L1X enviando telemetria real com calibração mínima (ideal: 5 pontos ou mais) | É a prova física central: água real → sensor → plataforma | **[EXISTE]** firmware etapa 1 (compila); falta gravar, montar e calibrar |
 | A4 | **Decisão sobre a válvula na demonstração** | Liberação real exige firmware com controle de válvula, que **ainda não existe**, e os checklists físicos. Proposta: se a válvula estiver validada até ~23/09, implementar a etapa 2 mínima; senão, liberação na SIMULAÇÃO, **declarada**, ao lado do nível real | **[NOVO]** se válvula real |
-| A5 | **Mostrar o captador real na interface** | O plano atual registra o ESP32 como EC-002; a interface só mostra o primeiro captador (EC-001, simulado). Opções: (a) ESP32 no EC-001, perdendo a simulação de missões; (b) seletor mínimo de captador. **Decisão do responsável** | **[EVOLUIR]** |
-| A6 | Registrar a montagem do EC-001: fotos, medidas, materiais, custos reais, tempo gasto, problemas | Custo zero; se não for feito agora, se perde. Alimenta o relatório, o manual e a linha de base de custo | Processo, sem código |
+| A5 | **Mostrar o captador real na interface** | O plano atual registra o ESP32 como ECO-002; a interface só mostra o primeiro captador (ECO-001, simulado). Opções: (a) ESP32 no ECO-001, perdendo a simulação de missões; (b) seletor mínimo de captador. **Decisão do responsável** | **[EVOLUIR]** |
+| A6 | Registrar a montagem do ECO-001: fotos, medidas, materiais, custos reais, tempo gasto, problemas | Custo zero; se não for feito agora, se perde. Alimenta o relatório, o manual e a linha de base de custo | Processo, sem código |
 | A7 | Roteiro de demonstração e narrativa "existe × roadmap" | Evita apresentar visão como funcionalidade; este documento é a base | Processo |
 
 **Fica fora de setembro** (e por quê):
@@ -878,7 +878,7 @@ Faltam cerca de duas semanas. O critério é: **só entra o que torna a demonstr
 | B4 | Primeiras missões validadas por dado e por resposta (medição, estimativa verificada) | Aprendizagem sem sobrecarregar o professor com revisões |
 | B5 | Limites anti-desperdício nas missões de reúso + conquistas gravadas | Com água real, XP não pode incentivar desperdício |
 | B6 | Sensor de temperatura e umidade + leituras genéricas + gráficos + CSV | Base das investigações científicas e matemáticas |
-| B7 | Vários captadores na interface (seletor/QR) + consulta só do captador aberto | Necessário assim que houver EC-002 ou captador de bancada |
+| B7 | Vários captadores na interface (seletor/QR) + consulta só do captador aberto | Necessário assim que houver ECO-002 ou captador de bancada |
 | B8 | Versão simples de hardware e componente no captador + calibração registrada no banco | Garante que os dados do piloto sejam comparáveis depois |
 | B9 | Firmware etapa 2 (válvula), após checklists; tempo de válvula aberta no relatório | Liberação física real, com métricas de engenharia |
 | B10 | Custo de operação: batimento de telemetria, intervalo menor fora do horário escolar | Operação contínua cabendo em planos gratuitos |
@@ -894,7 +894,7 @@ Faltam cerca de duas semanas. O critério é: **só entra o que torna a demonstr
 
 | Item | Por que é C |
 |---|---|
-| Replicação interna (EC-002 com o manual v1) | Valida o manual antes de outra escola |
+| Replicação interna (ECO-002 com o manual v1) | Valida o manual antes de outra escola |
 | Registro completo de engenharia: designs, versões, montagens, componentes com período, testes | Necessário para comparar versões e custos |
 | Trilha da válvula de baixo custo | Depende da válvula comercial validada como referência |
 | Multi-escola endurecido: códigos, provisionamento seguro, vínculos, INEP/município | Obrigatório antes da segunda escola |

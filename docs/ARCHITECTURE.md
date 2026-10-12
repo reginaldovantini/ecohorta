@@ -47,10 +47,10 @@ Toda tela lê o captador por `CollectorDataSource` (`src/lib/iot/data-source.ts`
 
 O perfil (identidade, XP e histórico) vem de `GET /api/me` (`src/lib/student/profile-store.ts`).
 
-- **Convenção:** **EC-001** é o captador FÍSICO (ESP32-001 + sensor VL53L0X ou VL53L1X configurado na plataforma, REAL). **SIM-001** é o captador da SIMULAÇÃO (VIRTUAL-001). As telas mostram sempre o selo **REAL** ou **SIMULAÇÃO**. Com mais de um captador, um seletor escolhe qual exibir; a escolha fica só no aparelho, como preferência de tela.
+- **Convenção:** **ECO-001** é o captador FÍSICO (ESP32-001 + sensor VL53L0X ou VL53L1X configurado na plataforma, REAL). **SIM-001** é o captador da SIMULAÇÃO (VIRTUAL-001). As telas mostram sempre o selo **REAL** ou **SIMULAÇÃO**. Com mais de um captador, um seletor escolhe qual exibir; a escolha fica só no aparelho, como preferência de tela.
 - **Dispositivo virtual do SIM-001** (`tools/virtual-device/run.ts`, `is_simulated = true`): processo Node que se comporta como o ESP32 e usa a **mesma API**. Emula a física (Torricelli) e o firmware (ruído, mediana, `NO_FLOW`, `TIMEOUT`, cancelamento, idempotência) e converte distância em volume com a **mesma função do servidor**. O token vem do `.env.local` (gerado por `npm run db:seed`); o banco guarda só o hash.
 - **Tempo na simulação:** a velocidade do painel (1×, 30×, 120×) acelera **apenas o acúmulo de condensado**. Enquanto uma liberação está em curso, a física e a medição correm em **tempo real**: a válvula e o regador não podem encher mais rápido do que o estudante consegue ver, e o condensado de minutos acelerados distorceria a leitura final. Vazões em `src/lib/iot/simulation-config.ts` — entrada padrão de 60 L/h (demonstração; o painel traz 1,2 L/h como ritmo real) e saída de 30 L/min no cheio, que entrega 3 L em ~10 s. **Nenhuma das duas é medição.**
-- **ESP32 real (EC-001):** `is_simulated = false`, token próprio (`npm run admin -- register-device --collector EC-001 …`). Envia a distância e o diagnóstico do sensor configurado; as telas não mudam.
+- **ESP32 real (ECO-001):** `is_simulated = false`, token próprio (`npm run admin -- register-device --collector ECO-001 …`). Envia a distância e o diagnóstico do sensor configurado; as telas não mudam.
 - **Troca de tipo:** ligar um dispositivo REAL a um captador que era da SIMULAÇÃO (ou o contrário) recomeça o estado, as leituras e o balanço desse captador. A calibração ativa passa a substituída; o histórico fica preservado.
 - `DataOrigin` (`"device" | "simulation"`) acompanha cada leitura, comando e execução. Um dado simulado nunca é exibido sem o selo SIMULAÇÃO.
 
@@ -213,11 +213,14 @@ Migrations em `supabase/migrations/` (aplicar com `npm run db:migrate`), validad
 
 | Grupo | Tabelas |
 |---|---|
-| Organização | `schools`, `school_classes`, `profiles`, `person_records`, `guardian_consents` |
-| Hardware | `collectors`, `devices` (hash do token, `is_simulated`), `collector_state` |
+| Organização | `schools` (com município e estado), `school_members` (uma pessoa em várias escolas), `profiles`, `person_records`, `guardian_consents` |
+| Hardware | `collectors` (código, QR, rede do captador), `devices` (hash do token, `is_simulated`), `collector_state` |
+| Presença física | `collector_scans` (leitura do QR), `collector_stewards` (código de dentro da caixa) |
+| Construção | `collector_setup_marks` (as duas etapas que a plataforma não tem como ver) |
 | Dados | `telemetry` |
 | Missões | `device_commands`, `mission_executions` |
 | Jogo | `xp_transactions` (+ view `profile_xp`) |
+| Mural | `mission_posts`, `mission_post_likes` (engajamento, nunca XP), `mission_post_reports` |
 
 **RLS** ativo em todas as tabelas: `anon` sem acesso; `authenticated` só leitura, restrita à escola e ao próprio usuário; `devices` nunca legível por usuários. Toda escrita passa pela API.
 
@@ -296,7 +299,7 @@ CONFIGURAR NA PLATAFORMA (Ligações) → CONSULTAR O MANUAL DE LIGAÇÕES → M
 - **Firmware:** recebe `hardware` na resposta de cada telemetria, guarda na NVS e usa o driver correspondente, pela interface comum `DistanceSensor` (`firmware/lib/distance_core`).
   - Os dois sensores usam o mesmo **endereço I²C (0x29, 7 bits)**, que por isso não os distingue.
   - Antes de iniciar, o driver lê a **identificação** em um registrador do sensor: **0xEE** no registrador 0xC0 (VL53L0X, model ID) ou **0xEACC** no registrador 0x010F (VL53L1X, sensor ID). O valor lido vai em `sensor_diagnostics.model_id`. Identificação não é endereço.
-- **Módulo do EC-001:** CJMCU-531, baseado no **VL53L1X** (configurado como VL53L1X). A opção VL53L0X é para outro módulo compatível.
+- **Módulo do ECO-001:** CJMCU-531, baseado no **VL53L1X** (configurado como VL53L1X). A opção VL53L0X é para outro módulo compatível.
 - **Configurado × reportado** (`assessSensorCompatibility`, `src/lib/collector/distance-sensors.ts`): `compatible`, `incompatible`, `sensor_missing`, `sensor_fault`, `awaiting_config`, `not_reported` ou `offline`.
   - Com **incompatibilidade** (driver diferente do configurado, ou dispositivo no I²C que não se identifica como o sensor configurado), a plataforma mostra **⚠️ INCOMPATIBILIDADE DE HARDWARE** e o captador aparece em `ERROR`.
   - Nesse caso, a leitura não vira volume (`volume_source = none`) e calibração e validação são recusadas.
@@ -311,7 +314,63 @@ CONFIGURAR NA PLATAFORMA (Ligações) → CONSULTAR O MANUAL DE LIGAÇÕES → M
 
 Tela: `/admin/captadores/{code}/ligacoes` (**Sensores e Ligações** + manual de ligações dinâmico por sensor), lida por `src/lib/iot/hardware-source.ts`. O conteúdo do manual está em `src/lib/collector/wiring-guide.ts`, com as especificações documentadas de `distance-sensors.ts`.
 
-## 13. Estrutura de pastas
+## 13. Construção de um captador: do tubo à rede
+
+Replicar o projeto é construir mais captadores, e quem constrói raramente já
+programou. A plataforma conduz isso como uma jornada de seis etapas, com **uma
+acesa por vez** e as seguintes bloqueadas com o motivo escrito
+(`src/lib/collector/setup-journey.ts`, tela em
+`src/components/admin/collector-setup-screen.tsx`).
+
+| Etapa | Como se cumpre |
+|---|---|
+| 1. Cadastro | escola (município e estado), localização e dimensões do tubo |
+| 2. Montagem | **marcada à mão** — a plataforma não enxerga um tubo montado |
+| 3. Personalização | **marcada à mão** — artes e o adesivo com o QR do captador |
+| 4. Programa do ESP32 | a placa aparece no banco quando a plataforma gera o `secrets.h` dela |
+| 5. Conexão | o ESP32 enviou telemetria (nenhum botão marca isto) |
+| 6. Calibração | existe calibração aceita e válida para o dispositivo atual |
+
+**O estado vem de fatos, não de botões.** Só montagem e personalização são
+marcadas por pessoas; as outras quatro a plataforma observa. A etapa atual é a
+primeira não cumprida — trocar o sensor derruba a calibração e devolve a jornada
+à etapa 6 sozinha.
+
+### 13.1 O código se conquista calibrando
+
+Um captador nasce **PROTO-nnn** e assume **ECO-nnn** — sequencial dentro da escola
+— quando a calibração é aceita, na mesma transação que a aceita
+(`activateCollector`, chamado por `completeSession`). Um tubo que ainda não mede
+nada não é um captador da escola, e assim "ECO-001 a ECO-004" significa quatro
+captadores medindo, não quatro tubos no pátio. O código de protótipo fica
+guardado em `collectors.proto_code`: a placa foi gravada **antes** da ativação e
+continua enviando o código antigo, que a autenticação aceita para sempre.
+
+### 13.2 A rede do captador, com dois usos
+
+Cada captador nasce com um nome e uma senha de rede próprios
+(`collectors.hotspot_ssid` / `hotspot_password`). O mesmo par serve duas vezes:
+
+1. **instalação** — o ESP32 cria essa rede e serve uma página com as redes do
+   lugar; quem instala escolhe a da escola e digita a senha, que fica na NVS da
+   placa. A senha do Wi-Fi da escola **nunca** entra no `secrets.h` gerado, que
+   é um arquivo baixado (ver HARDWARE.md §7.1);
+2. **resgate** — com a internet da escola fora do ar, um estudante liga o ponto
+   de acesso do celular com esse nome e essa senha, e a placa entra nele sozinha.
+
+A senha de resgate chega ao app **somente** quando o captador está offline
+(`CollectorSnapshot.rescueNetwork`): é a única hora em que serve.
+
+### 13.3 Captador calado
+
+Offline, a tela diz desde quando ele está calado e estima o volume pela média de
+litros por hora que o próprio captador aprendeu medindo
+(`src/lib/collector/offline-estimate.ts`). A estimativa sai sempre com o selo
+**ESTIMATIVA** e `countsForImpact: false`: ela não entra em impacto, não entra em
+ranking e não conclui missão. Ela serve para trazer alguém até o captador — e
+quem conclui a missão continua sendo o volume **medido** pelo sensor.
+
+## 14. Estrutura de pastas
 
 ```text
 src/
@@ -324,7 +383,7 @@ src/
 ├── lib/
 │   ├── server/          serviços, autenticação, banco, provisionamento
 │   ├── iot/             contrato, fonte de dados, dispositivo virtual
-│   ├── collector/       estados de nível e contabilidade hídrica
+│   ├── collector/       nível, contabilidade hídrica, jornada de construção, modo offline
 │   ├── missions/        catálogo, resgate, execução
 │   ├── gamification/    níveis e conquistas
 │   ├── student/         perfil vindo da API
@@ -333,5 +392,6 @@ src/
 scripts/                 admin.ts (migrate, seed, contas, dispositivos) · smoke.ts (teste de ponta a ponta)
 tools/virtual-device/    dispositivo virtual
 supabase/migrations/     schema + RLS
-firmware/                PlatformIO ESP32 DevKit V1 (etapa 1: medição + telemetria; drivers VL53L0X e VL53L1X)
+firmware/                PlatformIO ESP32 DevKit V1 (etapa 1: medição + telemetria; drivers VL53L0X e VL53L1X; rede do captador em wifi_portal)
+public/documentos-captador/  manual e artes do captador (ver LEIA-ME da pasta)
 ```

@@ -50,7 +50,7 @@ function specific(model: DistanceSensorModel): GuideSection {
       id: "especificos",
       title: "Cuidados específicos do VL53L0X",
       bullets: [
-        "O alcance de 2 m vale só no perfil de longo alcance e em condições favoráveis. No EC-001, a distância da tampa até o ZERO fica perto de 1,6–1,7 m: com o tubo vazio, o sensor pode ficar fora do alcance. Valide na bancada antes de calibrar.",
+        "O alcance de 2 m vale só no perfil de longo alcance e em condições favoráveis. No ECO-001, a distância da tampa até o ZERO fica perto de 1,6–1,7 m: com o tubo vazio, o sensor pode ficar fora do alcance. Valide na bancada antes de calibrar.",
         "Leituras acima de 2 m são descartadas pelo firmware como fora da faixa.",
         "A biblioteca usada não informa sinal, luz ambiente nem status por amostra: o diagnóstico mostra amostras aceitas, dispersão e timeouts.",
         "Não tem ROI: o cone de visão não pode ser estreitado por software.",
@@ -94,7 +94,7 @@ export function wiringGuide(model: DistanceSensorModel): WiringGuide {
         label: "Módulo",
         value: spec.knownModules.length
           ? `${spec.knownModules.join(", ")}: baseado no ${model}. Configure ${model}.`
-          : `Outro módulo compatível com o ${model}. O CJMCU-531 do EC-001 é um VL53L1X: não o configure como ${model}.`,
+          : `Outro módulo compatível com o ${model}. O CJMCU-531 do ECO-001 é um VL53L1X: não o configure como ${model}.`,
       },
       ...(spec.roi ? [{ label: "ROI", value: spec.roi }] : []),
       { label: "Driver no firmware", value: spec.firmwareDriver },

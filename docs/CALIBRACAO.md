@@ -1,6 +1,6 @@
 # Calibração experimental de volume — sensores VL53L0X e VL53L1X
 
-> **Fases 2 e 3** · 17/09/2026. O volume em litros de cada captador vem de uma calibração **experimental e específica** daquele captador, feita no app: **Administração → Captadores → {código} → Calibração de volume**. A validação independente fica em **Bancada** (§13). O protocolo completo de montagem e testes do EC-001 físico está em [HARDWARE.md §8](./HARDWARE.md).
+> **Fases 2 e 3** · 17/09/2026. O volume em litros de cada captador vem de uma calibração **experimental e específica** daquele captador, feita no app: **Administração → Captadores → {código} → Calibração de volume**. A validação independente fica em **Bancada** (§13). O protocolo completo de montagem e testes do ECO-001 físico está em [HARDWARE.md §8](./HARDWARE.md).
 
 ## 1. Princípio da medição
 
@@ -47,7 +47,7 @@ O tubo é PVC **DN100**. O diâmetro interno real é ligeiramente menor que 100 
 - **A zona de decantação** (abaixo da saída) nunca faz parte do volume útil.
 - **Mudar a definição do ZERO exige nova calibração.** Ela gera nova versão; o histórico fica preservado. Nunca se "desloca" o zero de uma calibração existente.
 
-## 3. Procedimento físico com o EC-001
+## 3. Procedimento físico com o ECO-001
 
 ### Preparação
 
@@ -223,7 +223,7 @@ Tabela `collector_calibrations`.
 ```json
 {
   "device_id": "ESP32-001",
-  "collector_code": "EC-001",
+  "collector_code": "ECO-001",
   "seq": 1842,
   "uptime_ms": 3600000,
   "distance_mm": 1236,
@@ -257,7 +257,7 @@ Nesta fase **a conclusão e o XP continuam pelo relatório medido do dispositivo
 
 ## 10. Dispositivo virtual (SIMULAÇÃO)
 
-- **Captador SIM-001** (dispositivo `VIRTUAL-001`), separado do captador físico **EC-001**.
+- **Captador SIM-001** (dispositivo `VIRTUAL-001`), separado do captador físico **ECO-001**.
 - **Mesma conversão:** usa `volumeFromDistance()` e `distanceFromVolume()` com a sua geometria: D0 = 1.589 mm, Dmax = 60 mm, 12 L.
 - **Envia distância, volume, `sensor_model` e diagnóstico no formato do firmware** (amostras válidas, faixa mín.–máx., status). Envia também as distâncias inicial e final de cada liberação. Sinal e luz ambiente não são simulados: vão como `null`.
 - **Novas ações da simulação** (professor/admin):

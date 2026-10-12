@@ -7,14 +7,22 @@ import type { Queryable } from "./db/types";
  * CADASTRO DE CAPTADORES — operação de administração, invisível no app do usuário.
  *
  * Três coisas nascem aqui e nunca mais mudam:
- *   1. o CÓDIGO, sequencial dentro da escola (EC-001, EC-002, ...). Não é digitado:
- *      quem cadastra informa a LOCALIZAÇÃO, que é o que a pessoa lê no app. O código
- *      é só identificação técnica (URL, firmware, etiqueta);
- *   2. o TOKEN DO QR, colado no tubo. Quem lê entra na escola daquele captador e
+ *   1. o TOKEN DO QR, colado no tubo. Quem lê entra na escola daquele captador e
  *      pode fazer missão nele;
- *   3. o CÓDIGO DE RESPONSÁVEL, impresso para guardar DENTRO da caixa eletrônica.
+ *   2. o CÓDIGO DE RESPONSÁVEL, impresso para guardar DENTRO da caixa eletrônica.
  *      Quem abre a caixa e digita o código passa a calibrar e configurar aquele
- *      captador. Só o hash é guardado — como já acontece com o token do dispositivo.
+ *      captador. Só o hash é guardado — como já acontece com o token do dispositivo;
+ *   3. a REDE DO CAPTADOR (nome e senha), que serve duas vezes: é a rede que o ESP32
+ *      cria para ser configurado, e é a rede que um estudante liga no celular para
+ *      atender o captador quando a internet da escola falha.
+ *
+ * O CÓDIGO, por outro lado, MUDA UMA VEZ — e de propósito.
+ *
+ * Um tubo recém-cadastrado ainda não mede nada: é uma obra. Ele nasce PROTO-nnn e só
+ * assume o sequencial da escola, ECO-nnn, quando a calibração é aceita. Quem habilita
+ * um captador na plataforma é quem consegue calibrá-lo, e o número ECO é a prova
+ * disso — por isso não é dado antes. Assim, a escola que tem "ECO-001 a ECO-004" tem
+ * quatro captadores medindo de verdade, e não quatro tubos no pátio.
  *
  * A capacidade informada aqui é ESTIMADA pela geometria do tubo. A capacidade que o
  * app usa passa a ser a medida, assim que a calibração daquele captador é aceita
@@ -23,13 +31,19 @@ import type { Queryable } from "./db/types";
  */
 
 /**
- * Prefixo do código. Cada um tem a PRÓPRIA sequência dentro da escola, para que o
- * captador da simulação não ocupe o número do físico:
- *   EC-nnn  → captador físico (ESP32 + sensor)
- *   SIM-nnn → captador da simulação (dispositivo virtual)
+ * Prefixo do código. Cada um tem a PRÓPRIA sequência dentro da escola, para que um
+ * protótipo abandonado — ou o captador da simulação — não ocupe o número de um
+ * captador que mede de verdade:
+ *   PROTO-nnn → em construção: cadastrado, ainda sem calibração aceita
+ *   ECO-nnn   → captador da rede: calibrado, medindo, aparecendo em missão
+ *   SIM-nnn   → captador da simulação (dispositivo virtual, uso administrativo)
  */
-export const COLLECTOR_PREFIXES = ["EC", "SIM"] as const;
+export const COLLECTOR_PREFIXES = ["ECO", "PROTO", "SIM"] as const;
 export type CollectorPrefix = (typeof COLLECTOR_PREFIXES)[number];
+
+/** Prefixo de quem acaba de ser cadastrado: ninguém nasce ECO. */
+export const INITIAL_PREFIX = "PROTO";
+
 const MAX_SEQ = 999;
 
 /** Sem 0/O e 1/I: o código é lido de um papel dentro da caixa, muitas vezes com pouca luz. */
@@ -37,7 +51,7 @@ const STEWARD_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const STEWARD_GROUPS = 3;
 const STEWARD_GROUP_SIZE = 4;
 
-export const formatCollectorCode = (seq: number, prefix: CollectorPrefix = "EC") => `${prefix}-${String(seq).padStart(3, "0")}`;
+export const formatCollectorCode = (seq: number, prefix: CollectorPrefix = "ECO") => `${prefix}-${String(seq).padStart(3, "0")}`;
 
 export const hashStewardCode = (code: string, pepper: string) => createHash("sha256").update(`steward:${pepper}:${normalizeStewardCode(code) ?? code}`).digest("hex");
 
@@ -54,6 +68,47 @@ export function generateStewardCode() {
   return groups.join("-");
 }
 
+/*
+ * A REDE DO CAPTADOR — um nome e uma senha, dois usos.
+ *
+ * Uso 1, na instalação: o ESP32 liga e cria essa rede. Quem está na frente dele
+ * conecta o celular nela, aparece a lista de Wi-Fi do lugar, escolhe a da escola e
+ * digita a senha. A senha da escola fica na memória da placa — nunca num arquivo,
+ * nunca neste banco.
+ *
+ * Uso 2, quando a internet da escola falha: o estudante liga o ponto de acesso do
+ * próprio celular com ESTE nome e ESTA senha, e o captador entra nele sozinho —
+ * porque já os conhece. Sem isso, atender um captador offline exigiria configurar
+ * a placa no pátio, no sol, pelo celular.
+ *
+ * Por isso o nome é curto: alguém vai DIGITAR isso na tela de ponto de acesso do
+ * celular. E por isso ele não contém o código do captador: o código muda quando o
+ * captador é habilitado (PROTO → ECO), e a placa já estaria gravada.
+ *
+ * A senha fica legível no banco de propósito: ela é combinada entre a placa e quem
+ * está na frente dela, e o app precisa mostrá-la ao estudante. Ela não protege dado
+ * nenhum — a telemetria vai por HTTPS com o token do dispositivo, que continua
+ * guardado só como hash.
+ */
+
+/** Etiqueta de 4 caracteres que nomeia a rede. Mesmo alfabeto sem 0/O e 1/I. */
+const NETWORK_TAG_SIZE = 4;
+
+export interface CollectorNetwork {
+  ssid: string;
+  password: string;
+}
+
+/** Ex.: `{ ssid: "EcoHorta-7KQ3", password: "horta7kq3mp" }`. */
+export function generateCollectorNetwork(): CollectorNetwork {
+  let tag = "";
+  for (let i = 0; i < NETWORK_TAG_SIZE; i++) tag += STEWARD_ALPHABET[randomInt(0, STEWARD_ALPHABET.length)];
+  // 12 caracteres minúsculos: WPA2 exige 8, e quem digita está no pátio, no celular.
+  let rest = "";
+  for (let i = 0; i < 3; i++) rest += STEWARD_ALPHABET[randomInt(0, STEWARD_ALPHABET.length)];
+  return { ssid: `EcoHorta-${tag}`, password: `horta${tag}${rest}`.toLowerCase() };
+}
+
 /** Aceita o código digitado com ou sem hífen, em qualquer caixa. `null` se não reconhecer. */
 export function normalizeStewardCode(input: string): string | null {
   const compact = input.toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -66,7 +121,7 @@ export function normalizeStewardCode(input: string): string | null {
  * Próximo número da escola. Trava a linha da escola para que dois cadastros
  * simultâneos não recebam o mesmo número; a unique (school_id, seq) é a rede de segurança.
  */
-export async function nextCollectorSeq(tx: Queryable, schoolId: string, prefix: CollectorPrefix = "EC"): Promise<number> {
+export async function nextCollectorSeq(tx: Queryable, schoolId: string, prefix: CollectorPrefix = "ECO"): Promise<number> {
   await tx.query("select 1 from public.schools where id = $1 for update", [schoolId]);
   const { rows } = await tx.query<{ next: number | string | null }>(
     "select max(seq) + 1 as next from public.collectors where school_id = $1 and prefix = $2",
@@ -86,13 +141,19 @@ export interface CollectorRegistrationInput {
   nominalDiameterMm: number;
   nominalUsefulHeightMm: number;
   reserveLiters: number;
-  /** "EC" (físico, padrão) ou "SIM" (simulação). Cada um numera por conta própria. */
+  /** Padrão "PROTO": só vira ECO ao ser habilitado. "SIM" é a simulação. */
   prefix?: CollectorPrefix;
+  /** Como este captador se conecta. Escola sem rede nenhuma usa "hotspot_only". */
+  connectivity?: CollectorConnectivity;
   distanceSensor?: DistanceSensorModel | string | null;
   createdBy: string | null;
   /** Segredo do ambiente usado no hash do código de responsável. */
   pepper: string;
 }
+
+/** Pela rede da escola, ou só pelo celular de quem vai atender a missão. */
+export const CONNECTIVITY_MODES = ["school_network", "hotspot_only"] as const;
+export type CollectorConnectivity = (typeof CONNECTIVITY_MODES)[number];
 
 export interface CollectorRegistration {
   id: string;
@@ -108,6 +169,9 @@ export interface CollectorRegistration {
   qrToken: string;
   /** Mostrado UMA vez, para imprimir e guardar dentro da caixa eletrônica. */
   stewardCode: string;
+  /** Nome e senha da rede do captador: configuração e resgate offline. */
+  network: CollectorNetwork;
+  connectivity: CollectorConnectivity;
 }
 
 /**
@@ -126,23 +190,30 @@ export async function registerCollector(tx: Queryable, input: CollectorRegistrat
   }
 
   const sensor = isDistanceSensorModel(input.distanceSensor) ? input.distanceSensor : DEFAULT_DISTANCE_SENSOR;
-  const prefix = input.prefix ?? "EC";
+  const prefix = input.prefix ?? INITIAL_PREFIX;
+  // ECO não se cadastra: ele se conquista calibrando (ver activateCollector). O banco
+  // também recusa, pela restrição `activated_is_eco`; aqui a recusa tem explicação.
+  if (prefix === "ECO") throw new Error("O código ECO é atribuído quando a calibração é aceita, não no cadastro.");
   const seq = await nextCollectorSeq(tx, input.schoolId, prefix);
   const code = formatCollectorCode(seq, prefix);
   const qrToken = generateQrToken();
   const stewardCode = generateStewardCode();
+  const network = generateCollectorNetwork();
+  const connectivity = input.connectivity ?? "school_network";
 
   const { rows } = await tx.query<{ id: string }>(
     `insert into public.collectors
-       (school_id, prefix, seq, code, name, location, capacity_liters, reserve_liters, nominal_diameter_mm,
-        nominal_useful_height_mm, distance_sensor, qr_token, steward_code_hash, created_by)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+       (school_id, prefix, seq, code, proto_code, name, location, capacity_liters, reserve_liters, nominal_diameter_mm,
+        nominal_useful_height_mm, distance_sensor, qr_token, steward_code_hash, created_by,
+        hotspot_ssid, hotspot_password, connectivity)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
      returning id`,
     [
       input.schoolId,
       prefix,
       seq,
       code,
+      prefix === "PROTO" ? code : null,
       name,
       location,
       Math.round(estimated * 1000) / 1000,
@@ -153,6 +224,9 @@ export async function registerCollector(tx: Queryable, input: CollectorRegistrat
       qrToken,
       hashStewardCode(stewardCode, input.pepper),
       input.createdBy,
+      network.ssid,
+      network.password,
+      connectivity,
     ],
   );
   const id = rows[0]!.id;
@@ -170,7 +244,47 @@ export async function registerCollector(tx: Queryable, input: CollectorRegistrat
     distanceSensor: sensor,
     qrToken,
     stewardCode,
+    network,
+    connectivity,
   };
+}
+
+/*
+ * HABILITAR UM CAPTADOR — o momento em que ele entra na rede.
+ *
+ * Isto não é um botão. É a consequência de a calibração ter sido aceita, chamada
+ * de dentro da mesma transação que a aceitou (src/lib/server/calibration-service.ts):
+ * ou o captador passa a medir e a ter número, ou nada aconteceu.
+ *
+ * É idempotente de propósito. Recalibrar um captador já habilitado acontece toda
+ * vez que se troca um sensor, e nessas horas ele não pode ganhar um número novo:
+ * ECO-002 é ECO-002 para sempre, inclusive no adesivo colado no tubo.
+ */
+
+export interface CollectorActivation {
+  /** O número que o captador passa a ter: ECO-nnn. */
+  code: string;
+  seq: number;
+  /** O código de protótipo que ele deixa de usar. */
+  previousCode: string;
+}
+
+/** `null` quando não havia nada a fazer: já habilitado, ou captador de simulação. */
+export async function activateCollector(tx: Queryable, collectorId: string): Promise<CollectorActivation | null> {
+  const { rows } = await tx.query<{ school_id: string; prefix: CollectorPrefix; code: string; activated_at: Date | string | null }>(
+    "select school_id, prefix, code, activated_at from public.collectors where id = $1",
+    [collectorId],
+  );
+  const collector = rows[0];
+  if (!collector || collector.activated_at !== null || collector.prefix !== "PROTO") return null;
+
+  const seq = await nextCollectorSeq(tx, collector.school_id, "ECO");
+  const code = formatCollectorCode(seq, "ECO");
+  await tx.query(
+    "update public.collectors set prefix = 'ECO', seq = $2, code = $3, activated_at = now() where id = $1",
+    [collectorId, seq, code],
+  );
+  return { code, seq, previousCode: collector.code };
 }
 
 export interface ScanResult {

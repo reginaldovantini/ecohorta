@@ -103,7 +103,7 @@ interface Range {
 }
 
 /**
- * Limites de aceitação da calibração. Valores escolhidos para o DN100 do EC-001:
+ * Limites de aceitação da calibração. Valores escolhidos para o DN100 do ECO-001:
  * ~127 mm de coluna por litro, resolução prática do sensor de ±2 mm e erro de
  * uma proveta de ±10–20 mL. Documentados em docs/CALIBRACAO.md.
  */

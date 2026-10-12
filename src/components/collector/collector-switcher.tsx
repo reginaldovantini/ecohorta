@@ -4,7 +4,7 @@ import { selectedCollectorStore } from "@/lib/collector/selected-collector";
 import { cn } from "@/lib/utils/cn";
 import { useCollectorCodes, useCollectorSnapshot, usePrimaryCollectorCode } from "./collector-source";
 
-/** Escolha do captador exibido (ex.: EC-001 real × SIM-001 simulação). Só aparece com mais de um. */
+/** Escolha do captador exibido (ex.: ECO-001 real × SIM-001 simulação). Só aparece com mais de um. */
 export function CollectorSwitcher({ className }: { className?: string }) {
   const codes = useCollectorCodes();
   const current = usePrimaryCollectorCode();

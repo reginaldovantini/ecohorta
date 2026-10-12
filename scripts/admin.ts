@@ -3,11 +3,11 @@
  * Lê as credenciais do .env.local.
  *
  *   npm run db:migrate
- *   npm run db:seed [--school "Nome"]        (cria só a escola; captador se cadastra à parte)
+ *   npm run db:seed [--school "Nome"] [--city "Três Lagoas"] [--state MS]   (cria só a escola)
  *   npm run admin -- create-admin --email voce@escola.exemplo --name "Rê" [--platform] [--school "Nome"]
  *   npm run admin -- list-collectors
- *   npm run admin -- register-collector --location "Horta dos fundos" [--school "Nome"] [--diameter 100] [--height 1500] [--reserve 0.5] [--sensor VL53L1X]
- *   npm run admin -- register-device --collector EC-001 --key ESP32-001
+ *   npm run admin -- register-collector --location "Horta dos fundos" [--school "Nome"] [--diameter 100] [--height 1500] [--reserve 0.5] [--sensor VL53L1X] [--connectivity hotspot_only]
+ *   npm run admin -- register-device --collector ECO-001 --key ESP32-001
  *
  * PESSOAS NÃO SÃO CRIADAS AQUI. O cadastro é aberto: estudantes, professores e
  * funcionários entram pelo app (Google) e declaram a função. Só `create-admin`
@@ -16,8 +16,10 @@
  * CAPTADOR normalmente se cadastra DENTRO da plataforma (Administração → Captadores).
  * `register-collector` existe para o primeiro captador, antes de haver administrador.
  *
- * Convenção: EC-001, EC-002... são sequenciais DENTRO de cada escola. O prefixo SIM
- * existe só para o captador virtual de DESENVOLVIMENTO, nunca em dados de produção.
+ * Convenção: um captador nasce PROTO-nnn (obra) e assume ECO-nnn — sequencial DENTRO
+ * da escola — quando a calibração é aceita: quem habilita um captador é quem consegue
+ * calibrá-lo. O prefixo SIM existe só para o captador virtual de DESENVOLVIMENTO,
+ * nunca em dados de produção.
  *
  * Senhas, códigos de responsável e tokens aparecem UMA única vez e não são salvos,
  * exceto o token do dispositivo virtual, gravado apenas no .env.local deste computador.
@@ -29,8 +31,9 @@ import { parseArgs } from "node:util";
 import { DEFAULT_DISTANCE_SENSOR, DISTANCE_SENSOR_MODELS, isDistanceSensorModel } from "@/lib/collector/distance-sensors";
 import { openScriptDatabase } from "@/lib/server/db/pg";
 import type { Queryable } from "@/lib/server/db/types";
-import { registerCollector } from "@/lib/server/collector-registry";
+import { CONNECTIVITY_MODES, registerCollector, type CollectorConnectivity } from "@/lib/server/collector-registry";
 import { createAdministrator, ensureDevice, ensureSchool } from "@/lib/server/provisioning";
+import { registerSchool, type Uf } from "@/lib/server/school-registry";
 import { createAuthAdmin } from "@/lib/server/supabase-admin";
 
 try {
@@ -57,6 +60,9 @@ const { values } = parseArgs({
     height: { type: "string" },
     key: { type: "string" },
     sensor: { type: "string" },
+    city: { type: "string" },
+    state: { type: "string" },
+    connectivity: { type: "string" },
   },
 });
 
@@ -119,8 +125,15 @@ async function migrate() {
 
 async function seed() {
   await withDatabase(async (db) => {
-    const schoolId = await ensureSchool(db, values.school ?? DEFAULT_SCHOOL);
-    console.log(`Escola: ${values.school ?? DEFAULT_SCHOOL}`);
+    const name = values.school ?? DEFAULT_SCHOOL;
+    // Município e estado são o que permite dizer "27 captadores em 9 municípios".
+    // Sem eles a escola entra igual, e a próxima vez que alguem rodar com --city
+    // e --state completa o que faltava.
+    const schoolId =
+      values.city && values.state
+        ? (await db.transaction((tx) => registerSchool(tx, { name, city: values.city!, state: values.state!.toUpperCase() as Uf }))).id
+        : await ensureSchool(db, name);
+    console.log(`Escola: ${name}${values.city ? ` — ${values.city} (${values.state?.toUpperCase()})` : ""}`);
     const quantos = await db.query<{ n: string }>("select count(*)::text as n from public.collectors where school_id = $1", [schoolId]);
     console.log(`Captadores cadastrados nesta escola: ${quantos.rows[0]!.n}`);
     console.log("");
@@ -174,6 +187,15 @@ async function createAdmin() {
   });
 }
 
+/** Modo de conexão: rede da escola (padrão) ou só pelo celular de quem atende a missão. */
+function connectivity(): CollectorConnectivity {
+  const value = values.connectivity ?? "school_network";
+  if (!(CONNECTIVITY_MODES as readonly string[]).includes(value)) {
+    throw new Error(`--connectivity inválido "${value}". Use ${CONNECTIVITY_MODES.join(" ou ")}.`);
+  }
+  return value as CollectorConnectivity;
+}
+
 async function registerCollectorCommand() {
   const devicePepper = pepper();
   const location = need("--location", values.location);
@@ -191,6 +213,7 @@ async function registerCollectorCommand() {
         nominalUsefulHeightMm: Number(values.height ?? "1500"),
         reserveLiters: Number(values.reserve ?? "0.5"),
         distanceSensor: sensor,
+        connectivity: connectivity(),
         createdBy: null,
         pepper: devicePepper,
       }),
@@ -200,13 +223,19 @@ async function registerCollectorCommand() {
     console.log(`  Sensor:              ${criado.distanceSensor}`);
     console.log(`  Capacidade estimada: ${criado.estimatedCapacityLiters} L (a real sai da calibração)`);
     console.log("");
+    console.log("Rede deste captador (o app mostra; serve para configurar e para o resgate offline):");
+    console.log(`  Rede:  ${criado.network.ssid}`);
+    console.log(`  Senha: ${criado.network.password}`);
+    console.log("");
     console.log("Imprima e cole no tubo o QR Code deste token:");
     console.log(`  ${criado.qrToken}`);
     console.log("");
     console.log("Guarde DENTRO da caixa eletrônica (aparece só agora):");
     console.log(`  Código de responsável: ${criado.stewardCode}`);
     console.log("");
-    console.log("O captador só entrega litros depois de calibrado.");
+    console.log(`O código ${criado.code} é provisório: o captador assume o sequencial da escola`);
+    console.log("(ECO-nnn) quando a calibração for aceita. Até lá não entrega litros nem aparece em missão.");
+    console.log("Siga pela plataforma: Administração → Captadores → Construção e conexão.");
   });
 }
 

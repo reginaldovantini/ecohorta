@@ -3,12 +3,12 @@ import { normalizeCollectorCode } from "./code";
 
 describe("normalizeCollectorCode", () => {
   it.each([
-    ["EC-001", "EC-001"],
-    ["EC001", "EC-001"],
-    ["ec001", "EC-001"],
-    ["ec-1", "EC-001"],
-    [" EC 012 ", "EC-012"],
-    ["EC-1234", "EC-1234"],
+    ["ECO-001", "ECO-001"],
+    ["ECO001", "ECO-001"],
+    ["eco001", "ECO-001"],
+    ["eco-1", "ECO-001"],
+    [" ECO 012 ", "ECO-012"],
+    ["ECO-1234", "ECO-1234"],
   ])("%s → %s", (input, expected) => {
     expect(normalizeCollectorCode(input)).toBe(expected);
   });

@@ -5,6 +5,7 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { CollectorAlertBanner } from "@/components/collector/collector-alert";
 import { CollectorHero } from "@/components/collector/collector-hero";
+import { CollectorOfflineCard } from "@/components/collector/collector-offline-card";
 import { WaterBalance } from "@/components/collector/water-balance";
 import { MyImpactCard } from "@/components/gamification/my-impact-card";
 import { MissionCard } from "@/components/missions/mission-card";
@@ -71,7 +72,18 @@ export function HomeScreen() {
         <CollectorHero snapshot={snapshot} href="/agua" />
       </motion.div>
 
-      {plan ? <RescueCard snapshot={snapshot} plan={plan} /> : alert && <CollectorAlertBanner alert={alert} />}
+      {/*
+        Captador calado vem antes do alerta de nível: um alerta calculado sobre a
+        última medição de ontem seria urgência inventada.
+      */}
+      {snapshot.telemetry.status === "OFFLINE" && (
+        <motion.div variants={item}>
+          <CollectorOfflineCard snapshot={snapshot} network={snapshot.rescueNetwork} />
+        </motion.div>
+      )}
+
+      {snapshot.telemetry.status !== "OFFLINE" &&
+        (plan ? <RescueCard snapshot={snapshot} plan={plan} /> : alert && <CollectorAlertBanner alert={alert} />)}
 
       {featured && (
         <motion.section variants={item} className="space-y-3">

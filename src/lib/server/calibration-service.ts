@@ -21,6 +21,7 @@ import {
 } from "@/lib/collector/volume-calibration";
 import { accountingFromJson, rebaseVolume } from "@/lib/collector/water-accounting";
 import { isEducator, type Actor } from "./actor";
+import { activateCollector } from "./collector-registry";
 import {
   activeVolumeModel,
   BENCH_MODE_TTL_MS,
@@ -444,10 +445,20 @@ export function createCalibrationService({ db, now = Date.now }: { db: Database;
           );
         }
 
-        const updated = (await loadCollector(tx, actor, row.code))!;
+        // Calibração aceita é o que habilita um captador: só agora ele assume ECO-nnn.
+        // Dentro desta transação de propósito — ou mede e tem número, ou nada aconteceu.
+        const activation = fit.accepted ? await activateCollector(tx, row.id) : null;
+
+        const updated = (await loadCollector(tx, actor, activation?.code ?? row.code))!;
         return {
           ok: true,
-          value: { status: fit.accepted ? "active" : "rejected", version, fit, view: await buildView(tx, updated, nowMs) },
+          value: {
+            status: fit.accepted ? "active" : "rejected",
+            version,
+            fit,
+            view: await buildView(tx, updated, nowMs),
+            ...(activation ? { activation: { code: activation.code, previousCode: activation.previousCode } } : {}),
+          },
         };
       });
     },

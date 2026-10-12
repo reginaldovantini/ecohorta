@@ -141,7 +141,7 @@ describe("compatibilidade: sensor configurado × firmware", () => {
   });
 });
 
-describe("endereço I²C × identificação e módulo do EC-001", () => {
+describe("endereço I²C × identificação e módulo do ECO-001", () => {
   it("os dois sensores usam o endereço 0x29; a identificação vem de registradores diferentes", () => {
     expect(SENSOR_WIRING.address).toBe("0x29");
     expect(DISTANCE_SENSORS.VL53L0X.identification).toEqual({ name: "model ID", register: "0xC0", registerBits: 8, value: "0xEE" });
@@ -153,11 +153,11 @@ describe("endereço I²C × identificação e módulo do EC-001", () => {
     }
   });
 
-  it("o CJMCU-531 do EC-001 é documentado como VL53L1X, nunca como VL53L0X", () => {
+  it("o CJMCU-531 do ECO-001 é documentado como VL53L1X, nunca como VL53L0X", () => {
     expect(DISTANCE_SENSORS.VL53L1X.knownModules.join(" ")).toContain("CJMCU-531");
     expect(DISTANCE_SENSORS.VL53L0X.knownModules).toEqual([]);
     const moduleOf = (model: "VL53L0X" | "VL53L1X") => wiringGuide(model).specs.find((item) => item.label === "Módulo")!.value;
-    expect(moduleOf("VL53L1X")).toBe("CJMCU-531 (módulo do EC-001): baseado no VL53L1X. Configure VL53L1X.");
-    expect(moduleOf("VL53L0X")).toContain("O CJMCU-531 do EC-001 é um VL53L1X: não o configure como VL53L0X.");
+    expect(moduleOf("VL53L1X")).toBe("CJMCU-531 (módulo do ECO-001): baseado no VL53L1X. Configure VL53L1X.");
+    expect(moduleOf("VL53L0X")).toContain("O CJMCU-531 do ECO-001 é um VL53L1X: não o configure como VL53L0X.");
   });
 });

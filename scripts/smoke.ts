@@ -92,20 +92,20 @@ async function main() {
   check("GET /api/me sem login → 401", (await anon.call("GET", "/api/me")).status === 401);
   check(
     "POST commands sem login → 401",
-    (await anon.call("POST", "/api/collectors/EC-001/commands", { command_id: fakeId, execution_id: randomUUID(), mission_id: MISSION.id })).status === 401,
+    (await anon.call("POST", "/api/collectors/ECO-001/commands", { command_id: fakeId, execution_id: randomUUID(), mission_id: MISSION.id })).status === 401,
   );
-  check("POST cancel sem login → 401", (await anon.call("POST", `/api/collectors/EC-001/commands/${fakeId}/cancel`)).status === 401);
-  check("POST simulation sem login → 401", (await anon.call("POST", "/api/collectors/EC-001/simulation", { settings: { timeScale: 1 } })).status === 401);
-  check("GET calibração sem login → 401", (await anon.call("GET", "/api/admin/collectors/EC-001/calibration")).status === 401);
-  check("GET bancada sem login → 401", (await anon.call("GET", "/api/admin/collectors/EC-001/bench")).status === 401);
-  check("GET ligações sem login → 401", (await anon.call("GET", "/api/admin/collectors/EC-001/hardware")).status === 401);
+  check("POST cancel sem login → 401", (await anon.call("POST", `/api/collectors/ECO-001/commands/${fakeId}/cancel`)).status === 401);
+  check("POST simulation sem login → 401", (await anon.call("POST", "/api/collectors/ECO-001/simulation", { settings: { timeScale: 1 } })).status === 401);
+  check("GET calibração sem login → 401", (await anon.call("GET", "/api/admin/collectors/ECO-001/calibration")).status === 401);
+  check("GET bancada sem login → 401", (await anon.call("GET", "/api/admin/collectors/ECO-001/bench")).status === 401);
+  check("GET ligações sem login → 401", (await anon.call("GET", "/api/admin/collectors/ECO-001/hardware")).status === 401);
   check(
     "PUT troca de sensor sem login → 401",
-    (await anon.call("PUT", "/api/admin/collectors/EC-001/hardware", { distance_sensor: "VL53L0X", confirm_physical_match: true })).status === 401,
+    (await anon.call("PUT", "/api/admin/collectors/ECO-001/hardware", { distance_sensor: "VL53L0X", confirm_physical_match: true })).status === 401,
   );
   check(
     "POST validação sem login → 401",
-    (await anon.call("POST", "/api/admin/collectors/EC-001/bench/validations", { known_volume_liters: 5, measurement_method: "balanca" })).status === 401,
+    (await anon.call("POST", "/api/admin/collectors/ECO-001/bench/validations", { known_volume_liters: 5, measurement_method: "balanca" })).status === 401,
   );
   check(
     "Telemetria com token inválido → 401",
@@ -130,7 +130,7 @@ async function main() {
   const codes = list.body.collectors?.map((item) => item.code) ?? [];
   check("Lista de captadores da escola", list.status === 200 && codes.length > 0, codes.join(", "));
 
-  // Missões são testadas no captador da SIMULAÇÃO (a válvula do EC-001 físico ainda não está integrada).
+  // Missões são testadas no captador da SIMULAÇÃO (a válvula do ECO-001 físico ainda não está integrada).
   let code = process.env.SMOKE_COLLECTOR_CODE || undefined;
   for (const candidate of codes) {
     if (code) break;

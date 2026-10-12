@@ -38,7 +38,7 @@ describe("fillRatio", () => {
 });
 
 describe("getCollectorAlert", () => {
-  const base = { collectorCode: "EC-001", trend: "stable" as const, overflowing: false };
+  const base = { collectorCode: "ECO-001", trend: "stable" as const, overflowing: false };
 
   it("prioriza transbordamento sobre qualquer outro estado", () => {
     expect(getCollectorAlert({ ...base, ratio: 1, overflowing: true })?.kind).toBe("overflow");

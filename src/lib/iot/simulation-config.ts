@@ -3,7 +3,7 @@ import type { VirtualDeviceConfig } from "./virtual-device";
 
 /*
  * Captador SIM-001 em modo SIMULAÇÃO (is_simulated = true).
- * EC-001 é o captador FÍSICO (ESP32 + VL53L0X ou VL53L1X); SIM-001 existe só para testes e demonstração.
+ * ECO-001 é o captador FÍSICO (ESP32 + VL53L0X ou VL53L1X); SIM-001 existe só para testes e demonstração.
  *
  * Os valores são plausíveis para um tubo vertical estreito (DN100 ≈ 78,5 cm²
  * de seção: 12 L ≈ 1,53 m de coluna), mas NÃO são medições. Substituir pela

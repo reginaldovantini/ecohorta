@@ -3,6 +3,7 @@ import { normalizeCollectorCode } from "@/lib/collector/code";
 import { assessSensorCompatibility, sensorMatchesConfiguration, type DistanceSensorModel } from "@/lib/collector/distance-sensors";
 import { appendDistanceSample, parseDistanceSamples } from "@/lib/collector/distance-stability";
 import { fillRatio, getLevelState } from "@/lib/collector/level-state";
+import { OFFLINE_AFTER_MS } from "@/lib/collector/offline-estimate";
 import { measuredReuse, volumeFromDistance, type VolumeModel } from "@/lib/collector/volume-calibration";
 import {
   accountingFromJson,
@@ -67,6 +68,8 @@ interface SimulationState {
 }
 
 interface CollectorRow {
+  hotspot_ssid: string | null;
+  hotspot_password: string | null;
   id: string;
   school_id: string;
   code: string;
@@ -141,7 +144,9 @@ interface CommandRow {
   finished_at: Date | string | null;
 }
 
-export const OFFLINE_AFTER_MS = 15_000;
+// Definido no módulo do modo offline: é a mesma fronteira que a tela usa para dizer
+// "sem conexão há tanto tempo", e um limite diferente dos dois lados seria um bug.
+export { OFFLINE_AFTER_MS };
 export const QUEUE_TIMEOUT_MS = 30_000;
 /** Intervalos de envio do dispositivo: econômicos parado, rápidos com liberação ativa. */
 export const IDLE_POLL_MS = 3_000;
@@ -164,6 +169,7 @@ const notFound = fail(404, "Captador não encontrado.");
 
 export const COLLECTOR_SELECT = `
   select c.id, c.school_id, c.code, c.name, c.location, c.capacity_liters, c.reserve_liters, c.valve_kind,
+         c.hotspot_ssid, c.hotspot_password,
          c.nominal_diameter_mm, c.nominal_useful_height_mm,
          c.distance_sensor, c.hardware_revision, c.hardware_updated_at, c.hardware_updated_by,
          d.id as device_id, d.device_key, d.is_simulated, d.firmware_version,
@@ -403,6 +409,9 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
         trend: flow.trend,
         overflowing: online && accounting.overflowing,
         measuredAt: lastSeen,
+        // Sem arredondar para 2 casas como a taxa atual: 1,2 L/h de condensado
+        // real é um número pequeno, e ele multiplica horas de silêncio.
+        learnedInflowLitersPerHour: Math.round(accounting.learnedInflowLitersPerHour * 1000) / 1000,
       },
       totals: {
         capturedLiters: round2(totals.capturedLiters),
@@ -410,6 +419,8 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
         discardedEstimatedLiters: round2(totals.discardedEstimatedLiters),
       },
       simulation: parseSimulation(row.simulation)?.settings ?? null,
+      // Só com o captador calado: é quando alguem precisa dar internet a ele.
+      rescueNetwork: !online && row.hotspot_ssid && row.hotspot_password ? { ssid: row.hotspot_ssid, password: row.hotspot_password } : null,
     };
   }
 
@@ -558,8 +569,16 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
     async authenticateDevice(authorization: string | null, deviceKey: string, collectorCode?: string): Promise<AuthenticatedDevice | null> {
       const token = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
       if (!token || !deviceKey) return null;
-      const { rows } = await db.query<{ id: string; device_key: string; token_hash: string; is_simulated: boolean; collector_id: string; code: string }>(
-        `select d.id, d.device_key, d.token_hash, d.is_simulated, c.id as collector_id, c.code
+      const { rows } = await db.query<{
+        id: string;
+        device_key: string;
+        token_hash: string;
+        is_simulated: boolean;
+        collector_id: string;
+        code: string;
+        proto_code: string | null;
+      }>(
+        `select d.id, d.device_key, d.token_hash, d.is_simulated, c.id as collector_id, c.code, c.proto_code
          from public.devices d join public.collectors c on c.id = d.collector_id
          where d.device_key = $1 and d.active`,
         [deviceKey],
@@ -567,7 +586,13 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
       const row = rows[0];
       const matches = timingSafeEqual(Buffer.from(hashToken(token), "hex"), Buffer.from(row?.token_hash ?? "0".repeat(64), "hex"));
       if (!row || !matches) return null;
-      if (collectorCode && normalizeCollectorCode(collectorCode) !== row.code) return null;
+      // O código enviado é conferência de que a placa certa está no tubo certo — e o
+      // de protótipo continua valendo: a placa foi gravada ANTES de o captador ser
+      // habilitado, e regravar a placa só para trocar o rótulo seria crueldade.
+      if (collectorCode) {
+        const sent = normalizeCollectorCode(collectorCode);
+        if (sent !== row.code && sent !== row.proto_code) return null;
+      }
       return { deviceId: row.id, deviceKey: row.device_key, collectorId: row.collector_id, collectorCode: row.code, isSimulated: row.is_simulated };
     },
 

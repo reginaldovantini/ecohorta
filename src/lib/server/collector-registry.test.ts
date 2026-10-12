@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { PGlite } from "@electric-sql/pglite";
 import {
+  activateCollector,
   checkScan,
   claimStewardship,
   formatCollectorCode,
@@ -53,21 +54,22 @@ describe("código sequencial por escola", () => {
     const segundo = await registrar(escolaA, "Pátio coberto");
     const terceiro = await registrar(escolaA, "Sala de aula 12");
 
-    expect([primeiro.code, segundo.code, terceiro.code]).toEqual(["EC-001", "EC-002", "EC-003"]);
+    // Nascem protótipos: ECO só vem com a calibração aceita.
+    expect([primeiro.code, segundo.code, terceiro.code]).toEqual(["PROTO-001", "PROTO-002", "PROTO-003"]);
     expect([primeiro.seq, segundo.seq, terceiro.seq]).toEqual([1, 2, 3]);
   });
 
-  it("cada escola tem a própria sequência: duas escolas podem ter o EC-001 delas", async () => {
+  it("cada escola tem a própria sequência: duas escolas podem ter o PROTO-001 delas", async () => {
     const outraEscola = await registrar(escolaB, "Quadra");
-    expect(outraEscola.code).toBe("EC-001");
+    expect(outraEscola.code).toBe("PROTO-001");
 
-    const { rows } = await db.query<{ n: number }>("select count(*)::int as n from public.collectors where code = 'EC-001'");
+    const { rows } = await db.query<{ n: number }>("select count(*)::int as n from public.collectors where code = 'PROTO-001'");
     expect(rows[0]!.n).toBe(2);
   });
 
   it("o banco recusa a repetição do número dentro da mesma escola", async () => {
     await expect(
-      db.query("insert into public.collectors (school_id, seq, code, name, location, capacity_liters, reserve_liters) values ($1, 1, 'EC-009', 'x', 'y', 10, 0)", [escolaA]),
+      db.query("insert into public.collectors (school_id, seq, code, name, location, capacity_liters, reserve_liters) values ($1, 1, 'PROTO-009', 'x', 'y', 10, 0)", [escolaA]),
     ).rejects.toThrow();
   });
 
@@ -75,13 +77,13 @@ describe("código sequencial por escola", () => {
     await db.query("update public.collectors set active = false where school_id = $1 and seq = 2", [escolaA]);
     const novo = await registrar(escolaA, "Refeitório");
     expect(novo.seq).toBeGreaterThan(3);
-    expect(novo.code).not.toBe("EC-002");
+    expect(novo.code).not.toBe("PROTO-002");
   });
 
   it("formata o código com três dígitos", () => {
-    expect(formatCollectorCode(1)).toBe("EC-001");
-    expect(formatCollectorCode(42)).toBe("EC-042");
-    expect(formatCollectorCode(137)).toBe("EC-137");
+    expect(formatCollectorCode(1)).toBe("ECO-001");
+    expect(formatCollectorCode(42)).toBe("ECO-042");
+    expect(formatCollectorCode(137)).toBe("ECO-137");
   });
 
   it("o próximo número de uma escola sem captador é 1", async () => {
@@ -339,7 +341,7 @@ describe("presença física: a leitura que autoriza a válvula", () => {
   });
 });
 
-describe("prefixo: EC é físico, SIM é simulação", () => {
+describe("prefixo: PROTO é obra, ECO é rede, SIM é simulação", () => {
   it("cada prefixo numera por conta própria — a simulação não ocupa o número do físico", async () => {
     const escola = (await db.query<{ id: string }>("insert into public.schools (name) values ('Escola Prefixo') returning id")).rows[0]!.id;
 
@@ -351,24 +353,24 @@ describe("prefixo: EC é físico, SIM é simulação", () => {
     );
 
     expect(simulado.code).toBe("SIM-001");
-    expect(fisico.code).toBe("EC-001"); // e não EC-002
+    expect(fisico.code).toBe("PROTO-001"); // e não PROTO-002
     expect([simulado.seq, fisico.seq]).toEqual([1, 1]);
   });
 
   it("segue sequencial dentro de cada prefixo", async () => {
     const escola = (await db.query<{ id: string }>("insert into public.schools (name) values ('Escola Duas Faixas') returning id")).rows[0]!.id;
     const codigos: string[] = [];
-    for (const prefix of ["EC", "EC", "SIM", "EC", "SIM"] as const) {
+    for (const prefix of ["PROTO", "PROTO", "SIM", "PROTO", "SIM"] as const) {
       const criado = await db.transaction((tx) =>
         registerCollector(tx, { schoolId: escola, location: `Local ${codigos.length}`, ...TUBO, prefix, createdBy: null, pepper: PEPPER }),
       );
       codigos.push(criado.code);
     }
-    expect(codigos).toEqual(["EC-001", "EC-002", "SIM-001", "EC-003", "SIM-002"]);
+    expect(codigos).toEqual(["PROTO-001", "PROTO-002", "SIM-001", "PROTO-003", "SIM-002"]);
   });
 
   it("formata o código com o prefixo pedido", () => {
-    expect(formatCollectorCode(1)).toBe("EC-001");
+    expect(formatCollectorCode(1)).toBe("ECO-001");
     expect(formatCollectorCode(2, "SIM")).toBe("SIM-002");
   });
 });
@@ -423,5 +425,95 @@ describe("o estudante que visita outra escola", () => {
       checkScan(tx, { scanId: visita.scanId, profileId: estudante, collectorId: daMinhaEscola.id, nowMs: Date.now() }),
     );
     expect(recusa).toBe("other_collector");
+  });
+});
+
+describe("habilitar: o captador assume o número da escola", () => {
+  const habilitar = (collectorId: string) => db.transaction((tx) => activateCollector(tx, collectorId));
+
+  it("PROTO vira ECO e guarda o código de protótipo", async () => {
+    const escola = (await db.query<{ id: string }>("insert into public.schools (name) values ('Escola Habilita') returning id")).rows[0]!.id;
+    const obra = await db.transaction((tx) =>
+      registerCollector(tx, { schoolId: escola, location: "Horta nova", ...TUBO, createdBy: null, pepper: PEPPER }),
+    );
+    expect(obra.code).toBe("PROTO-001");
+
+    const habilitado = await habilitar(obra.id);
+    expect(habilitado).toMatchObject({ code: "ECO-001", previousCode: "PROTO-001", seq: 1 });
+
+    const { rows } = await db.query<{ code: string; proto_code: string; prefix: string; activated_at: Date | null }>(
+      "select code, proto_code, prefix, activated_at from public.collectors where id = $1",
+      [obra.id],
+    );
+    // O código de protótipo fica: a placa gravada antes da calibração ainda o envia.
+    expect(rows[0]).toMatchObject({ code: "ECO-001", proto_code: "PROTO-001", prefix: "ECO" });
+    expect(rows[0]!.activated_at).not.toBeNull();
+  });
+
+  it("a numeração ECO é a da ordem de habilitação, não a do cadastro", async () => {
+    const escola = (await db.query<{ id: string }>("insert into public.schools (name) values ('Escola Ordem') returning id")).rows[0]!.id;
+    const criar = (local: string) =>
+      db.transaction((tx) => registerCollector(tx, { schoolId: escola, location: local, ...TUBO, createdBy: null, pepper: PEPPER }));
+
+    const primeiro = await criar("Tubo A");
+    const segundo = await criar("Tubo B");
+    const terceiro = await criar("Tubo C");
+    expect([primeiro.code, segundo.code, terceiro.code]).toEqual(["PROTO-001", "PROTO-002", "PROTO-003"]);
+
+    // O terceiro tubo foi o primeiro a ficar de pé: ele é o ECO-001 da escola.
+    expect((await habilitar(terceiro.id))!.code).toBe("ECO-001");
+    expect((await habilitar(primeiro.id))!.code).toBe("ECO-002");
+    // O segundo nunca calibrou: segue PROTO-002, e não ocupa número de captador que mede.
+    const parado = await db.query<{ code: string }>("select code from public.collectors where id = $1", [segundo.id]);
+    expect(parado.rows[0]!.code).toBe("PROTO-002");
+  });
+
+  it("habilitar de novo não dá número novo — recalibrar é rotina", async () => {
+    const escola = (await db.query<{ id: string }>("insert into public.schools (name) values ('Escola Recalibra') returning id")).rows[0]!.id;
+    const captador = await db.transaction((tx) =>
+      registerCollector(tx, { schoolId: escola, location: "Pátio", ...TUBO, createdBy: null, pepper: PEPPER }),
+    );
+    expect((await habilitar(captador.id))!.code).toBe("ECO-001");
+    // Trocou o sensor, calibrou outra vez: continua ECO-001, inclusive no adesivo.
+    expect(await habilitar(captador.id)).toBeNull();
+    const { rows } = await db.query<{ code: string }>("select code from public.collectors where id = $1", [captador.id]);
+    expect(rows[0]!.code).toBe("ECO-001");
+  });
+
+  it("o captador da simulação nunca entra na numeração da escola", async () => {
+    const escola = (await db.query<{ id: string }>("insert into public.schools (name) values ('Escola Simula') returning id")).rows[0]!.id;
+    const simulado = await db.transaction((tx) =>
+      registerCollector(tx, { schoolId: escola, location: "Bancada", ...TUBO, prefix: "SIM", createdBy: null, pepper: PEPPER }),
+    );
+    expect(await habilitar(simulado.id)).toBeNull();
+    const { rows } = await db.query<{ code: string }>("select code from public.collectors where id = $1", [simulado.id]);
+    expect(rows[0]!.code).toBe("SIM-001");
+  });
+
+  it("não se cadastra um ECO direto: o número se conquista calibrando", async () => {
+    const escola = (await db.query<{ id: string }>("insert into public.schools (name) values ('Escola Atalho') returning id")).rows[0]!.id;
+    await expect(
+      db.transaction((tx) => registerCollector(tx, { schoolId: escola, location: "Atalho", ...TUBO, prefix: "ECO", createdBy: null, pepper: PEPPER })),
+    ).rejects.toThrow(/calibração/);
+  });
+
+  it("cada captador nasce com a própria rede de configuração", async () => {
+    const escola = (await db.query<{ id: string }>("insert into public.schools (name) values ('Escola Rede') returning id")).rows[0]!.id;
+    const criar = (local: string) =>
+      db.transaction((tx) => registerCollector(tx, { schoolId: escola, location: local, ...TUBO, createdBy: null, pepper: PEPPER }));
+    const um = await criar("Tubo 1");
+    const dois = await criar("Tubo 2");
+
+    expect(um.network.ssid).toMatch(/^EcoHorta-[A-Z2-9]{4}$/);
+    expect(um.network.password.length).toBeGreaterThanOrEqual(8);
+    expect(um.network.ssid).not.toBe(dois.network.ssid);
+    // O nome da rede não carrega o código: o código muda, e a placa já estaria gravada.
+    expect(um.network.ssid).not.toContain("PROTO");
+
+    const { rows } = await db.query<{ hotspot_ssid: string; connectivity: string }>(
+      "select hotspot_ssid, connectivity from public.collectors where id = $1",
+      [um.id],
+    );
+    expect(rows[0]).toMatchObject({ hotspot_ssid: um.network.ssid, connectivity: "school_network" });
   });
 });

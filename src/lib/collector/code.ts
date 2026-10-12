@@ -1,5 +1,5 @@
 /**
- * Normaliza o código do captador lido do QR ou digitado: "ec001", "EC001", "ec-1" → "EC-001".
+ * Normaliza o código do captador lido do QR ou digitado: "ec001", "EC001", "ec-1" → "ECO-001".
  * Retorna `null` se não houver formato reconhecível.
  */
 export function normalizeCollectorCode(input: string): string | null {

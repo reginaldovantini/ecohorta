@@ -1,5 +1,5 @@
 /*
- * Captador escolhido neste aparelho (ex.: EC-001 real ou SIM-001 de simulação).
+ * Captador escolhido neste aparelho (ex.: ECO-001 real ou SIM-001 de simulação).
  * É só uma preferência de tela: não é autoridade sobre nenhum dado.
  */
 

@@ -45,3 +45,44 @@ export async function parseBody<T extends z.ZodType>(
   if (!body.ok) return { error: body.response };
   return validate(schema, body.value);
 }
+
+/*
+ * A URL pública da plataforma — e por que ela não pode ser `localhost`.
+ *
+ * Esta URL não fica só no navegador. Ela é gravada em duas coisas que saem do
+ * computador e não voltam:
+ *
+ *   o QR do adesivo, impresso em vinil e colado num tubo de PVC;
+ *   o `secrets.h` de um ESP32, que depois é gravado na placa.
+ *
+ * Gerar qualquer um dos dois a partir do preview local produziria um adesivo com
+ * `http://localhost:3000` dentro — que não abre em celular nenhum — e uma placa
+ * que nunca alcança a plataforma, porque `localhost`, para o ESP32, é ele mesmo.
+ * São erros que só aparecem depois da gráfica e da gravação. Melhor recusar.
+ */
+
+const LOCAL_HOSTS = ["localhost", "127.0.0.1", "0.0.0.0", "[::1]", "::1"];
+
+/**
+ * Base para artefatos permanentes (QR impresso, firmware gravado).
+ * `NEXT_PUBLIC_APP_URL` quando definida; senão a origem da requisição.
+ */
+export function publicBaseUrl(request: Request): { url: string; error?: never } | { url?: never; error: Response } {
+  const raw = (process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin).replace(/\/$/, "");
+  let host: string;
+  try {
+    host = new URL(raw).hostname;
+  } catch {
+    return { error: jsonError(503, `NEXT_PUBLIC_APP_URL inválida no servidor: "${raw}".`) };
+  }
+  if (LOCAL_HOSTS.includes(host)) {
+    return {
+      error: jsonError(
+        503,
+        "A plataforma está respondendo em localhost. O QR do adesivo e o programa do ESP32 levam esta URL para " +
+          "dentro do vinil e da placa, então defina NEXT_PUBLIC_APP_URL com o endereço público antes de gerar.",
+      ),
+    };
+  }
+  return { url: raw };
+}

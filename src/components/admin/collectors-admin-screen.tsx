@@ -1,6 +1,6 @@
 "use client";
 
-import { Cable, Microscope, QrCode, Ruler } from "lucide-react";
+import { Cable, Hammer, Microscope, QrCode, Ruler } from "lucide-react";
 import Link from "next/link";
 import { useCollectorCodes, useCollectorSnapshot } from "@/components/collector/collector-source";
 import { ScreenHeader } from "@/components/student/screen-header";
@@ -83,6 +83,18 @@ function CollectorRow({ code }: { code: string }) {
           Cole o adesivo no tubo e calibre: até lá este captador não entrega litros nem aparece em missão.
         </p>
       )}
+      {/*
+        A porta de entrada de quem está construindo: manual, artes, programa da
+        placa, rede de configuração e calibração, na ordem. Fica em primeiro lugar
+        e em largura cheia porque é a única tela em que alguém pode se perder.
+      */}
+      <Link
+        href={`${base}/construcao`}
+        className="flex h-12 w-full items-center justify-center gap-2 rounded-control bg-white/[0.07] text-sm font-semibold text-mist-50 ring-1 ring-inset ring-white/10"
+      >
+        <Hammer className="size-4" aria-hidden />
+        Construção e conexão
+      </Link>
       <div className="grid grid-cols-4 gap-2">
         <StickerLink code={info.code} />
         {[

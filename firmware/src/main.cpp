@@ -26,6 +26,7 @@
 #include "sensor_manager.h"
 #include "vl53l0x_driver.h"
 #include "vl53l1x_driver.h"
+#include "wifi_portal.h"
 
 // Os dois drivers existem; o gerenciador usa só o do sensor configurado na plataforma.
 static VL53L0XDriver vl53l0x(Wire, SENSOR_TIMING_BUDGET_MS);
@@ -94,17 +95,6 @@ static void applyHardwareConfig(const char *sensorName, uint32_t revision) {
     hardware.revision = revision;
     saveHardwareConfig(hardware);
   }
-}
-
-static void ensureWifi() {
-  if (WiFi.status() == WL_CONNECTED) return;
-  Serial.printf("[wifi] conectando a %s...\n", WIFI_SSID);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  uint32_t started = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - started < 15000) delay(250);
-  if (WiFi.status() == WL_CONNECTED) Serial.printf("[wifi] conectado, IP %s, RSSI %d\n", WiFi.localIP().toString().c_str(), WiFi.RSSI());
-  else Serial.println("[wifi] falhou; nova tentativa no próximo ciclo");
 }
 
 static void sendTelemetry() {
@@ -206,6 +196,7 @@ void setup() {
   Serial.begin(115200);
   delay(1500);
   Serial.printf("\nEcoHorta %s | %s -> %s\n", FW_VERSION, DEVICE_ID, COLLECTOR_CODE);
+  Serial.printf("[rede] rede de configuração e resgate: %s\n", SETUP_AP_SSID);
   Serial.printf("[i2c] SDA=GPIO%d SCL=GPIO%d %lu kHz\n", PIN_I2C_SDA, PIN_I2C_SCL, (unsigned long)(I2C_CLOCK_HZ / 1000));
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
   Wire.setClock(I2C_CLOCK_HZ);
@@ -218,16 +209,20 @@ void setup() {
     sensors.select(hardware.model);
   }
   logSensorState();
-  ensureWifi();
+  net::begin();
 }
 
 void loop() {
   uint32_t started = millis();
-  ensureWifi();
+  net::loop();
   sensors.ensureReady();
   logSensorState();
-  if (WiFi.status() == WL_CONNECTED) sendTelemetry();
+  if (net::online()) sendTelemetry();
   // O intervalo pedido pelo servidor conta a partir do início do ciclo (leitura + HTTPS incluídos).
-  uint32_t elapsed = millis() - started;
-  if (elapsed < nextPollMs) delay(nextPollMs - elapsed);
+  // A espera é fatiada porque a página de configuração é servida por esta mesma placa:
+  // um delay inteiro de 15 s deixaria quem está configurando olhando para uma tela travada.
+  while (millis() - started < nextPollMs) {
+    net::loop();
+    delay(20);
+  }
 }

@@ -19,7 +19,7 @@ import { ensureDevice } from "./provisioning";
 const { otherSchoolTeacher, student, teacher } = ACTORS;
 
 /*
- * Fase 3 — integração física: EC-001 REAL (ESP32 + VL53L1X) e SIM-001 (dispositivo virtual),
+ * Fase 3 — integração física: ECO-001 REAL (ESP32 + VL53L1X) e SIM-001 (dispositivo virtual),
  * bancada, observações, validação experimental e separação REAL × SIMULAÇÃO. PostgreSQL real (PGlite).
  */
 
@@ -61,7 +61,7 @@ function real(distance: number | null, patch: Partial<TelemetryPayload> = {}): T
   seq++;
   return {
     device_id: "ESP32-001",
-    collector_code: "EC-001",
+    collector_code: "ECO-001",
     seq,
     uptime_ms: seq * 1000,
     distance_mm: distance,
@@ -85,19 +85,19 @@ async function holdReal(distance: number | null, readings = 20) {
 }
 
 async function calibrateReal() {
-  expect((await calibrations.startSession(teacher, "EC-001")).ok).toBe(true);
+  expect((await calibrations.startSession(teacher, "ECO-001")).ok).toBe(true);
   for (const step of CALIBRATION_STEP_IDS) {
     await holdReal(POINTS[step]);
-    expect(await calibrations.registerPoint(teacher, "EC-001", step)).toMatchObject({ ok: true });
+    expect(await calibrations.registerPoint(teacher, "ECO-001", step)).toMatchObject({ ok: true });
   }
-  const completed = await calibrations.completeSession(teacher, "EC-001");
+  const completed = await calibrations.completeSession(teacher, "ECO-001");
   if (!completed.ok) throw new Error(completed.message);
   return completed.value;
 }
 
-const snapshot = async (code = "EC-001") => (await collectors.getSnapshot(student, code))!;
+const snapshot = async (code = "ECO-001") => (await collectors.getSnapshot(student, code))!;
 const benchView = async () => {
-  const result = await bench.getView(teacher, "EC-001");
+  const result = await bench.getView(teacher, "ECO-001");
   if (!result.ok) throw new Error(result.message);
   return result.value;
 };
@@ -114,38 +114,38 @@ beforeEach(async () => {
   calibrations = createCalibrationService({ db, now: () => clock });
   bench = createBenchService({ db, now: () => clock });
 
-  // Convenção da Fase 3 aplicada sobre o cenário de teste (EC-001 começou simulado):
-  // SIM-001 recebe o dispositivo virtual e EC-001 passa a ser o captador físico.
+  // Convenção da Fase 3 aplicada sobre o cenário de teste (ECO-001 começou simulado):
+  // SIM-001 recebe o dispositivo virtual e ECO-001 passa a ser o captador físico.
   await seedPhysicalScenario(db, ESP32_TOKEN);
-  esp32 = (await collectors.authenticateDevice(`Bearer ${ESP32_TOKEN}`, "ESP32-001", "EC-001"))!;
+  esp32 = (await collectors.authenticateDevice(`Bearer ${ESP32_TOKEN}`, "ESP32-001", "ECO-001"))!;
   virtual = (await collectors.authenticateDevice(`Bearer ${TEST_DEVICE_TOKEN}`, "VIRTUAL-001", "SIM-001"))!;
 });
 
 describe("REAL × SIMULAÇÃO", () => {
-  it("EC-001 é físico e SIM-001 é simulação, com credenciais próprias", async () => {
-    expect(esp32).toMatchObject({ collectorCode: "EC-001", isSimulated: false, deviceKey: "ESP32-001" });
+  it("ECO-001 é físico e SIM-001 é simulação, com credenciais próprias", async () => {
+    expect(esp32).toMatchObject({ collectorCode: "ECO-001", isSimulated: false, deviceKey: "ESP32-001" });
     expect(virtual).toMatchObject({ collectorCode: "SIM-001", isSimulated: true, deviceKey: "VIRTUAL-001" });
-    expect(await collectors.authenticateDevice(`Bearer ${TEST_DEVICE_TOKEN}`, "VIRTUAL-001", "EC-001")).toBeNull();
+    expect(await collectors.authenticateDevice(`Bearer ${TEST_DEVICE_TOKEN}`, "VIRTUAL-001", "ECO-001")).toBeNull();
 
     await holdReal(1236, 2);
-    const physical = await snapshot("EC-001");
+    const physical = await snapshot("ECO-001");
     expect(physical.telemetry.origin).toBe("device");
     expect(physical.simulation).toBeNull();
-    expect(await collectors.updateSimulation(teacher, "EC-001", { action: { type: "set_level", ratio: 0.5 } })).toMatchObject({ ok: false, status: 403 });
+    expect(await collectors.updateSimulation(teacher, "ECO-001", { action: { type: "set_level", ratio: 0.5 } })).toMatchObject({ ok: false, status: 403 });
   });
 
-  it("ao virar físico, o EC-001 não herda estado, balanço nem calibração da simulação", async () => {
-    // Recria o cenário antigo: EC-001 simulado com telemetria, balanço e calibração ativa.
+  it("ao virar físico, o ECO-001 não herda estado, balanço nem calibração da simulação", async () => {
+    // Recria o cenário antigo: ECO-001 simulado com telemetria, balanço e calibração ativa.
     await resetTestDatabase(db);
-    const old = (await collectors.authenticateDevice(`Bearer ${TEST_DEVICE_TOKEN}`, "VIRTUAL-001", "EC-001"))!;
+    const old = (await collectors.authenticateDevice(`Bearer ${TEST_DEVICE_TOKEN}`, "VIRTUAL-001", "ECO-001"))!;
     for (const [liters, index] of [[0, 0], [1, 1], [2, 2], [3, 3], [11.04, 4]] as const) {
-      if (index === 0) await calibrations.startSession(teacher, "EC-001");
+      if (index === 0) await calibrations.startSession(teacher, "ECO-001");
       for (let i = 0; i < 20; i++) {
         clock += 1000;
         seq++;
         await collectors.ingestTelemetry(old, {
           device_id: "VIRTUAL-001",
-          collector_code: "EC-001",
+          collector_code: "ECO-001",
           seq,
           uptime_ms: seq * 1000,
           distance_mm: tube(liters) + NOISE[i % 10]!,
@@ -155,9 +155,9 @@ describe("REAL × SIMULAÇÃO", () => {
           fw_version: "sim",
         });
       }
-      await calibrations.registerPoint(teacher, "EC-001", CALIBRATION_STEP_IDS[index]!);
+      await calibrations.registerPoint(teacher, "ECO-001", CALIBRATION_STEP_IDS[index]!);
     }
-    expect((await calibrations.completeSession(teacher, "EC-001")).ok).toBe(true);
+    expect((await calibrations.completeSession(teacher, "ECO-001")).ok).toBe(true);
     expect((await snapshot()).calibration).toMatchObject({ isSimulated: true, appliesToDevice: true });
 
     await seedPhysicalScenario(db, ESP32_TOKEN);
@@ -173,20 +173,20 @@ describe("REAL × SIMULAÇÃO", () => {
 
   it("calibração de outro dispositivo (ou da simulação) não converte leituras do físico", async () => {
     await calibrateReal();
-    await bench.endBench(teacher, "EC-001");
+    await bench.endBench(teacher, "ECO-001");
     await holdReal(tube(4), 2);
     expect((await snapshot()).telemetry.volumeSource).toBe("calibration");
 
     // Troca do ESP32: a calibração do sensor antigo deixa de valer.
     await db.query("update devices set active = false where device_key = 'ESP32-001'");
     await ensureDevice(db, { collectorId: IDS.collector, deviceKey: "ESP32-002", isSimulated: false, token: `${ESP32_TOKEN}-2`, pepper: TEST_PEPPER });
-    const replacement = (await collectors.authenticateDevice(`Bearer ${ESP32_TOKEN}-2`, "ESP32-002", "EC-001"))!;
+    const replacement = (await collectors.authenticateDevice(`Bearer ${ESP32_TOKEN}-2`, "ESP32-002", "ECO-001"))!;
     clock += 1000;
     await collectors.ingestTelemetry(replacement, { ...real(tube(4)), device_id: "ESP32-002" });
     const current = await snapshot();
     expect(current.telemetry.volumeSource).toBe("none");
     expect(current.calibration).toMatchObject({ version: 1, appliesToDevice: false, isSimulated: false });
-    expect((await calibrations.getView(teacher, "EC-001")).ok && (await benchView()).calibration?.appliesToDevice).toBe(false);
+    expect((await calibrations.getView(teacher, "ECO-001")).ok && (await benchView()).calibration?.appliesToDevice).toBe(false);
   });
 });
 
@@ -219,7 +219,7 @@ describe("telemetria do VL53L1X físico", () => {
 
   it("sensor sem leitura: distância ausente vira leitura inválida, nunca volume", async () => {
     await calibrateReal();
-    await bench.endBench(teacher, "EC-001");
+    await bench.endBench(teacher, "ECO-001");
     await holdReal(null, 15);
     const view = await benchView();
     expect(view.live.stability.state).toBe("invalid");
@@ -230,7 +230,7 @@ describe("telemetria do VL53L1X físico", () => {
   it("com calibração ativa grava altura, volume, percentual, origem e versão da calibração", async () => {
     const calibration = await calibrateReal();
     expect(calibration.view.active).toMatchObject({ version: 1, isSimulated: false, sensorModel: "VL53L1X" });
-    await bench.endBench(teacher, "EC-001");
+    await bench.endBench(teacher, "ECO-001");
     await holdReal(tube(5), 1);
 
     const { rows } = await pg.query<{
@@ -298,13 +298,13 @@ describe("ensaio de bancada", () => {
   });
 
   it("observa o sensor como ele está: instável ou inválido, com diagnóstico e referência da mangueira", async () => {
-    await bench.startBench(teacher, "EC-001");
+    await bench.startBench(teacher, "ECO-001");
     // Nível oscilando (reflexão nas paredes): registrado como instável.
     for (let i = 0; i < 15; i++) {
       clock += 1000;
       await collectors.ingestTelemetry(esp32, real(1236 + (i % 2 === 0 ? 0 : 35)));
     }
-    const unstable = await bench.recordObservation(teacher, "EC-001", { condition: "com_agua", reference_height_mm: 412, note: "nível na luva" });
+    const unstable = await bench.recordObservation(teacher, "ECO-001", { condition: "com_agua", reference_height_mm: 412, note: "nível na luva" });
     expect(unstable.ok && unstable.value.observation).toMatchObject({
       stabilityState: "stabilizing",
       referenceHeightMm: 412,
@@ -315,7 +315,7 @@ describe("ensaio de bancada", () => {
     expect(unstable.ok && unstable.value.observation.sensorDiagnostics).toMatchObject({ valid_samples: 8 });
 
     await holdReal(null, 15);
-    const invalid = await bench.recordObservation(teacher, "EC-001", { condition: "sem_agua" });
+    const invalid = await bench.recordObservation(teacher, "ECO-001", { condition: "sem_agua" });
     expect(invalid.ok && invalid.value.observation).toMatchObject({ stabilityState: "invalid", distanceMm: null });
 
     const { rows } = await pg.query<{ samples: unknown[] }>("select samples from sensor_observations order by created_at limit 1");
@@ -329,7 +329,7 @@ describe("ensaio de bancada", () => {
 
     // Ainda dentro do ensaio iniciado pela calibração: 5,00 L colocados; sensor lê um pouco abaixo.
     await holdReal(tube(4.92));
-    const result = await bench.recordValidation(teacher, "EC-001", { known_volume_liters: 5, measurement_method: "balanca", known_mass_kg: 5.003 });
+    const result = await bench.recordValidation(teacher, "ECO-001", { known_volume_liters: 5, measurement_method: "balanca", known_mass_kg: 5.003 });
     if (!result.ok) throw new Error(result.message);
     const validation = result.value.validation;
     expect(validation).toMatchObject({ calibrationVersion: 1, sensorModel: "VL53L1X", isSimulated: false, knownVolumeLiters: 5, knownMassKg: 5.003 });
@@ -340,7 +340,7 @@ describe("ensaio de bancada", () => {
     expect(validation.absolutePercentError).toBeCloseTo(Math.abs(validation.percentError!), 3);
 
     await holdReal(tube(0.01));
-    const zero = await bench.recordValidation(teacher, "EC-001", { known_volume_liters: 0, measurement_method: "outro" });
+    const zero = await bench.recordValidation(teacher, "ECO-001", { known_volume_liters: 0, measurement_method: "outro" });
     expect(zero.ok && zero.value.validation).toMatchObject({ percentError: null, absolutePercentError: null });
 
     const after = await pg.query("select * from collector_calibrations where id = $1", [calibrationId]);
@@ -351,37 +351,37 @@ describe("ensaio de bancada", () => {
   });
 
   it("validação exige ensaio ativo, calibração deste dispositivo e leitura estável", async () => {
-    await bench.startBench(teacher, "EC-001");
+    await bench.startBench(teacher, "ECO-001");
     await holdReal(tube(5));
-    expect(await bench.recordValidation(teacher, "EC-001", { known_volume_liters: 5, measurement_method: "balanca" })).toMatchObject({ ok: false, status: 409 });
+    expect(await bench.recordValidation(teacher, "ECO-001", { known_volume_liters: 5, measurement_method: "balanca" })).toMatchObject({ ok: false, status: 409 });
 
     await calibrateReal();
     for (let i = 0; i < 20; i++) {
       clock += 1000;
       await collectors.ingestTelemetry(esp32, real(tube(5) - i * 6)); // água ainda entrando
     }
-    expect(await bench.recordValidation(teacher, "EC-001", { known_volume_liters: 5, measurement_method: "balanca" })).toMatchObject({ ok: false, status: 409 });
+    expect(await bench.recordValidation(teacher, "ECO-001", { known_volume_liters: 5, measurement_method: "balanca" })).toMatchObject({ ok: false, status: 409 });
 
-    await bench.endBench(teacher, "EC-001");
+    await bench.endBench(teacher, "ECO-001");
     await holdReal(tube(5));
-    expect(await bench.recordValidation(teacher, "EC-001", { known_volume_liters: 5, measurement_method: "balanca" })).toMatchObject({ ok: false, status: 409 });
+    expect(await bench.recordValidation(teacher, "ECO-001", { known_volume_liters: 5, measurement_method: "balanca" })).toMatchObject({ ok: false, status: 409 });
   });
 
   it("é exclusiva de professores e administradores da escola e exporta CSV para análise", async () => {
-    expect(await bench.getView(student, "EC-001")).toMatchObject({ ok: false, status: 403 });
-    expect(await bench.startBench(otherSchoolTeacher, "EC-001")).toMatchObject({ ok: false, status: 404 });
-    expect(await bench.exportCsv(student, "EC-001", "readings")).toMatchObject({ ok: false, status: 403 });
+    expect(await bench.getView(student, "ECO-001")).toMatchObject({ ok: false, status: 403 });
+    expect(await bench.startBench(otherSchoolTeacher, "ECO-001")).toMatchObject({ ok: false, status: 404 });
+    expect(await bench.exportCsv(student, "ECO-001", "readings")).toMatchObject({ ok: false, status: 403 });
 
     await calibrateReal();
     await holdReal(tube(5));
-    await bench.recordValidation(teacher, "EC-001", { known_volume_liters: 5, measurement_method: "recipiente_graduado" });
+    await bench.recordValidation(teacher, "ECO-001", { known_volume_liters: 5, measurement_method: "recipiente_graduado" });
 
-    const readings = await bench.exportCsv(teacher, "EC-001", "readings");
+    const readings = await bench.exportCsv(teacher, "ECO-001", "readings");
     const lines = readings.ok ? readings.value.split("\n") : [];
     expect(lines[0]).toContain("distance_mm;height_mm;volume_liters");
     expect(lines.at(-1)).toMatch(/;false;true;MAINTENANCE;1\d{3},\d;/); // REAL, em ensaio, vírgula decimal
 
-    const validations = await bench.exportCsv(teacher, "EC-001", "validations");
+    const validations = await bench.exportCsv(teacher, "ECO-001", "validations");
     expect(validations.ok && validations.value).toMatch(/volume_conhecido_l.*erro_percentual_absoluto/);
   });
 });

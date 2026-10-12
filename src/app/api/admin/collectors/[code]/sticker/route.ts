@@ -3,7 +3,7 @@ import { normalizeCollectorCode } from "@/lib/collector/code";
 import { isAdministrator, isStewardOf } from "@/lib/server/actor";
 import { authenticate } from "@/lib/server/auth";
 import { getDatabase } from "@/lib/server/db/pg";
-import { jsonError, withErrors } from "@/lib/server/http";
+import { jsonError, publicBaseUrl, withErrors } from "@/lib/server/http";
 
 /**
  * PDF do adesivo do captador, para imprimir e colar no tubo.
@@ -40,9 +40,11 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/admin/colle
       return jsonError(403, "Somente a administração e quem é responsável pelo captador imprimem o adesivo.");
     }
 
-    const base = (process.env.NEXT_PUBLIC_APP_URL || new URL(_request.url).origin).replace(/\/$/, "");
+    // O QR vai para o vinil: a URL precisa ser a pública, nunca a do preview local.
+    const base = publicBaseUrl(_request);
+    if (base.error) return base.error;
     const pdf = buildStickerPdf({
-      url: `${base}/q/${captador.qr_token}`,
+      url: `${base.url}/q/${captador.qr_token}`,
       code: captador.code,
       location: captador.location,
       schoolName: captador.school_name,

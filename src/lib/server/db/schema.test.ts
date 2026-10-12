@@ -209,9 +209,9 @@ describe("Row Level Security", () => {
 
   it("captadores e telemetria ficam restritos à escola", async () => {
     const mine = await asUser(pg, IDS.student, (q) => q.query<{ code: string }>("select code from collectors"));
-    expect(mine.rows.map((row) => row.code)).toEqual(["EC-001"]);
+    expect(mine.rows.map((row) => row.code)).toEqual(["ECO-001"]);
     const other = await asUser(pg, IDS.otherStudent, (q) => q.query<{ code: string }>("select code from collectors"));
-    expect(other.rows.map((row) => row.code)).toEqual(["EC-900"]);
+    expect(other.rows.map((row) => row.code)).toEqual(["ECO-900"]);
   });
 
   it("XP e execuções: participante vê os próprios; educador vê os da escola", async () => {
@@ -538,18 +538,18 @@ describe("pertencer a várias escolas", () => {
     await db.query("insert into collector_stewards (collector_id, profile_id) values ($1, $2)", [IDS.otherCollector, IDS.teacher]);
 
     const vistos = await asUser(pg, IDS.teacher, (q) => q.query<{ code: string }>("select code from collectors order by code"));
-    expect(vistos.rows.map((r) => r.code)).toEqual(["EC-001", "EC-900"]);
+    expect(vistos.rows.map((r) => r.code)).toEqual(["ECO-001", "ECO-900"]);
   });
 
   it("sem o vínculo, a autoridade sozinha não mostra o captador da outra escola", async () => {
     await db.query("insert into collector_stewards (collector_id, profile_id) values ($1, $2)", [IDS.otherCollector, IDS.teacher]);
     const vistos = await asUser(pg, IDS.teacher, (q) => q.query<{ code: string }>("select code from collectors"));
-    expect(vistos.rows.map((r) => r.code)).toEqual(["EC-001"]);
+    expect(vistos.rows.map((r) => r.code)).toEqual(["ECO-001"]);
   });
 
   it("estudante continua vendo só a escola a que pertence", async () => {
     const vistos = await asUser(pg, IDS.student, (q) => q.query<{ code: string }>("select code from collectors"));
-    expect(vistos.rows.map((r) => r.code)).toEqual(["EC-001"]);
+    expect(vistos.rows.map((r) => r.code)).toEqual(["ECO-001"]);
     const escolas = await asUser(pg, IDS.student, (q) => q.query<{ name: string }>("select name from schools"));
     expect(escolas.rows.map((r) => r.name)).toEqual(["Escola de Teste"]);
   });

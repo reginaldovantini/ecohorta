@@ -98,8 +98,8 @@ export const DISTANCE_SENSORS: Record<DistanceSensorModel, DistanceSensorSpec> =
     chipSupply: "2,6 V a 3,5 V no chip",
     i2cMaxClock: "até 1 MHz",
     identification: { name: "sensor ID", register: "0x010F", registerBits: 16, value: "0xEACC" },
-    // O módulo CJMCU-531 do EC-001 é baseado no VL53L1X: configurar VL53L1X, nunca VL53L0X.
-    knownModules: ["CJMCU-531 (módulo do EC-001)"],
+    // O módulo CJMCU-531 do ECO-001 é baseado no VL53L1X: configurar VL53L1X, nunca VL53L0X.
+    knownModules: ["CJMCU-531 (módulo do ECO-001)"],
     roi: "programável, de 16×16 a 4×4 SPADs (um ROI menor estreita o cone)",
     firmwareDriver: "VL53L1XDriver (biblioteca Pololu VL53L1X)",
     firmwareSettings: "modo longo, 50 ms por amostra, ROI 16×16",

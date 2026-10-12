@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { DISTANCE_SENSOR_MODELS } from "@/lib/collector/distance-sensors";
-import { registerCollector } from "@/lib/server/collector-registry";
+import { CONNECTIVITY_MODES, registerCollector } from "@/lib/server/collector-registry";
+import { registerSchool, UF_LIST } from "@/lib/server/school-registry";
 import { isAdministrator } from "@/lib/server/actor";
 import { authenticate } from "@/lib/server/auth";
 import { getDatabase } from "@/lib/server/db/pg";
@@ -9,9 +10,21 @@ import { jsonError, jsonOk, parseBody, withErrors } from "@/lib/server/http";
 /*
  * Cadastro de captador — operação de administração, invisível no app do usuário.
  *
- * Ninguém digita o código: ele é sequencial dentro da escola. O que se informa é
- * a LOCALIZAÇÃO, que é o que a pessoa lê no app para saber a que tubo ir.
+ * Ninguém digita o código: ele é sequencial dentro da escola, e nasce PROTO
+ * porque um tubo que ainda não mede nada não é um captador da escola. O ECO-nnn
+ * vem quando a calibração é aceita.
+ *
+ * Aqui também entra a ESCOLA, com município e estado. Escalar é cadastrar
+ * captadores em escolas novas, então o cadastro aceita uma escola que ainda não
+ * existe — e só a administração da plataforma pode criá-la. Um administrador de
+ * uma escola cadastra captador na escola dele, e em nenhuma outra.
  */
+const schoolSchema = z.object({
+  name: z.string().trim().min(3).max(120),
+  city: z.string().trim().min(2).max(80),
+  state: z.enum(UF_LIST),
+});
+
 const bodySchema = z.object({
   location: z.string().trim().min(2, "Informe onde o captador será instalado.").max(80),
   name: z.string().trim().min(2).max(60).nullable().optional(),
@@ -19,26 +32,41 @@ const bodySchema = z.object({
   nominalUsefulHeightMm: z.number().positive().max(5000),
   reserveLiters: z.number().min(0).max(100),
   distanceSensor: z.enum(DISTANCE_SENSOR_MODELS).optional(),
+  connectivity: z.enum(CONNECTIVITY_MODES).optional(),
+  /** Escola já cadastrada. Sem isso e sem `school`, usa a escola de quem cadastra. */
+  schoolId: z.string().uuid().optional(),
+  /** Escola nova, com município e estado. Só a administração da plataforma. */
+  school: schoolSchema.optional(),
 });
 
 export async function POST(request: Request) {
   return withErrors(async () => {
     const auth = await authenticate();
     if (auth.response) return auth.response;
-    if (!isAdministrator(auth.actor)) return jsonError(403, "Somente a administração cadastra captadores.");
-    if (!auth.actor.schoolId) return jsonError(409, "Esta conta ainda não está vinculada a uma escola.");
+    const { actor } = auth;
+    if (!isAdministrator(actor)) return jsonError(403, "Somente a administração cadastra captadores.");
 
     const pepper = process.env.IOT_TOKEN_PEPPER;
     if (!pepper || pepper.length < 32) return jsonError(503, "IOT_TOKEN_PEPPER não configurado no servidor.");
 
     const body = await parseBody(request, bodySchema);
     if (body.error) return body.error;
+    const { school, schoolId, ...collector } = body.data;
+
+    if ((school || (schoolId && schoolId !== actor.schoolId)) && !actor.platformAdmin) {
+      return jsonError(403, "Somente a administração da plataforma cadastra captadores em outras escolas.");
+    }
+    if (!school && !schoolId && !actor.schoolId) return jsonError(409, "Informe a escola do captador.");
 
     try {
-      const criado = await getDatabase().transaction((tx) =>
-        registerCollector(tx, { ...body.data, schoolId: auth.actor.schoolId!, createdBy: auth.actor.profileId, pepper }),
-      );
-      // O código de responsável aparece UMA vez: o banco guarda só o hash.
+      const criado = await getDatabase().transaction(async (tx) => {
+        const alvo = school ? (await registerSchool(tx, school)).id : (schoolId ?? actor.schoolId!);
+        return registerCollector(tx, { ...collector, schoolId: alvo, createdBy: actor.profileId, pepper });
+      });
+      // O código de responsável e a senha da rede aparecem para quem cadastrou:
+      // o primeiro é impresso e guardado dentro da caixa, o segundo o app mostra
+      // depois a quem precisar socorrer o captador offline. Do código de
+      // responsável, o banco guarda só o hash — não há como mostrá-lo de novo.
       return jsonOk(
         {
           code: criado.code,
@@ -47,6 +75,8 @@ export async function POST(request: Request) {
           estimatedCapacityLiters: criado.estimatedCapacityLiters,
           distanceSensor: criado.distanceSensor,
           stewardCode: criado.stewardCode,
+          network: criado.network,
+          connectivity: criado.connectivity,
         },
         201,
       );

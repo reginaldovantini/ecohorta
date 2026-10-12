@@ -9,7 +9,7 @@ function record(missionId: string, status: ExecutionRecord["status"] = "COMPLETE
     executionId: `e${counter}`,
     missionId,
     commandId: `c${counter}`,
-    collectorCode: "EC-001",
+    collectorCode: "ECO-001",
     status,
     targetLiters: 3,
     deliveredLiters,

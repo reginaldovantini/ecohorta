@@ -100,9 +100,9 @@ export const IDS = {
 
 /**
  * Cenário padrão: duas escolas, pessoas já com o primeiro acesso concluído e o
- * captador EC-001 (SIMULAÇÃO) na primeira escola.
+ * captador ECO-001 (SIMULAÇÃO) na primeira escola.
  *
- * `teacher` é PROFESSOR DECLARADO e responsável pelo EC-001 — é a segunda coisa,
+ * `teacher` é PROFESSOR DECLARADO e responsável pelo ECO-001 — é a segunda coisa,
  * e não a primeira, que lhe dá calibração e bancada. `staff` declarou funcionário
  * e não é responsável por captador nenhum: serve para provar que função declarada
  * não abre porta.
@@ -130,8 +130,8 @@ export async function seedTestSchool(db: Queryable) {
   await db.query(
     `insert into collectors (id, school_id, seq, code, name, location, capacity_liters, reserve_liters,
        nominal_diameter_mm, nominal_useful_height_mm, qr_token) values
-     ($1, $2, 1, 'EC-001', 'EcoCaptador', 'Horta', 12, 0.5, 100, 1500, $5),
-     ($3, $4, 1, 'EC-900', 'Captador Externo', 'Pátio', 12, 0.5, null, null, $6)`,
+     ($1, $2, 1, 'ECO-001', 'EcoCaptador', 'Horta', 12, 0.5, 100, 1500, $5),
+     ($3, $4, 1, 'ECO-900', 'Captador Externo', 'Pátio', 12, 0.5, null, null, $6)`,
     [IDS.collector, IDS.school, IDS.otherCollector, IDS.otherSchool, "a".repeat(32), "b".repeat(32)],
   );
   // Pertencer à escola é o que dá visibilidade; é o que a leitura do QR cria.
@@ -169,7 +169,7 @@ export const ACTORS = {
   /** Estudante comum. */
   student: { profileId: IDS.student, schoolId: IDS.school, role: "student", platformAdmin: false, stewardOf: [] },
   student2: { profileId: IDS.student2, schoolId: IDS.school, role: "student", platformAdmin: false, stewardOf: [] },
-  /** Professor declarado E responsável pelo EC-001: calibra e usa a bancada. */
+  /** Professor declarado E responsável pelo ECO-001: calibra e usa a bancada. */
   teacher: { profileId: IDS.teacher, schoolId: IDS.school, role: "teacher", platformAdmin: false, stewardOf: [IDS.collector] },
   /** Funcionário declarado, sem responsabilidade: a função sozinha não abre porta. */
   staff: { profileId: IDS.staff, schoolId: IDS.school, role: "staff", platformAdmin: false, stewardOf: [] },
@@ -180,7 +180,7 @@ export const ACTORS = {
 } as const satisfies Record<string, Actor>;
 
 /**
- * Cenário físico da Fase 3 sobre o cenário padrão: o EC-001 passa a ser o captador
+ * Cenário físico da Fase 3 sobre o cenário padrão: o ECO-001 passa a ser o captador
  * REAL (ESP32-001) e o SIM-001 nasce como o captador da SIMULAÇÃO (VIRTUAL-001).
  *
  * Os dois códigos são escritos direto, e não pela sequência: aqui eles são a
@@ -196,14 +196,14 @@ export async function seedPhysicalScenario(db: Database, esp32Token: string) {
     [IDS.school, "c".repeat(32)],
   );
   const simId = sim.rows[0]!.id;
-  // VIRTUAL-001 larga o EC-001 e assume o SIM-001; o EC-001 recebe o ESP32.
+  // VIRTUAL-001 larga o ECO-001 e assume o SIM-001; o ECO-001 recebe o ESP32.
   await ensureDevice(db, { collectorId: simId, deviceKey: "VIRTUAL-001", isSimulated: true, token: TEST_DEVICE_TOKEN, pepper: TEST_PEPPER });
   await ensureDevice(db, { collectorId: IDS.collector, deviceKey: "ESP32-001", isSimulated: false, token: esp32Token, pepper: TEST_PEPPER });
   return { simCollectorId: simId };
 }
 
 /**
- * Torna o EC-001 do cenário um captador FÍSICO.
+ * Torna o ECO-001 do cenário um captador FÍSICO.
  *
  * O cenário padrão o deixa ligado ao dispositivo virtual, que é o que a maioria
  * dos testes precisa. Testes sobre XP, impacto e ranking precisam do contrário:

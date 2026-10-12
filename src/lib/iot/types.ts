@@ -63,7 +63,7 @@ export type FailureReason = DeviceFailure | "DEVICE_OFFLINE" | "CONNECTION_ERROR
 export interface CollectorInfo {
   /** collector_id — UUID no banco; identificador estável. */
   id: string;
-  /** Identificação legível, ex.: "EC-001". NÃO é o conteúdo do QR, que é um token opaco. */
+  /** Identificação legível, ex.: "ECO-001". NÃO é o conteúdo do QR, que é um token opaco. */
   code: string;
   name: string;
   location: string;
@@ -134,6 +134,14 @@ export interface CollectorTelemetry {
   overflowing: boolean;
   /** epoch ms da última leitura recebida; `null` antes da primeira conexão. */
   measuredAt: number | null;
+  /**
+   * Média de entrada que o captador aprendeu MEDINDO (L/h).
+   *
+   * Diferente de `netFlowLitersPerHour`, que é a taxa de agora: esta sobrevive ao
+   * captador ficar offline, e é com ela que a plataforma estima quanta água deve
+   * haver no tubo de um captador calado (src/lib/collector/offline-estimate.ts).
+   */
+  learnedInflowLitersPerHour: number;
 }
 
 export interface WaterTotals {
@@ -168,6 +176,14 @@ export interface CollectorSnapshot {
    */
   verified?: boolean;
   hardware?: CollectorHardwareStatus;
+  /**
+   * Nome e senha da rede que o captador conhece, para quem estiver no pátio ligar
+   * o ponto de acesso do celular e dar internet a ele.
+   *
+   * Vem apenas quando o captador está OFFLINE: é a única hora em que serve, e
+   * assim a senha não fica circulando em toda consulta de toda pessoa.
+   */
+  rescueNetwork?: { ssid: string; password: string } | null;
 }
 
 /** Comando de liberação de água. `commandId` é único: repetir o envio nunca executa duas vezes. */

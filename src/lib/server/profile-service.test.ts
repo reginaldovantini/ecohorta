@@ -51,11 +51,11 @@ describe("perfil do usuário autenticado", () => {
     let clock = 1_000_000;
     const service = createCollectorService({ db, pepper: TEST_PEPPER, now: () => clock });
     const device = (await service.authenticateDevice(`Bearer ${TEST_DEVICE_TOKEN}`, "VIRTUAL-001"))!;
-    const base = { device_id: "VIRTUAL-001", collector_code: "EC-001", distance_mm: 700, valve: "closed" as const, status: "READY" as const, fw_version: "t" };
+    const base = { device_id: "VIRTUAL-001", collector_code: "ECO-001", distance_mm: 700, valve: "closed" as const, status: "READY" as const, fw_version: "t" };
     await service.ingestTelemetry(device, { ...base, seq: 1, uptime_ms: 1000, volume_liters: 8 });
     const commandId = "0b7c6a8e-1f2d-4c3b-9a8e-7f6d5c4b3a21";
     const executionId = "2d9e8c0a-3f4e-4e5d-9c0a-9f8e7d6c5b43";
-    await service.requestDispense(student, "EC-001", { command_id: commandId, execution_id: executionId, mission_id: "irrigar-horta" });
+    await service.requestDispense(student, "ECO-001", { command_id: commandId, execution_id: executionId, mission_id: "irrigar-horta" });
     clock += 60_000;
     await service.ingestTelemetry(device, {
       ...base,
@@ -188,11 +188,11 @@ describe("jogar em uma escola por vez", () => {
     await db.query("insert into school_members (profile_id, school_id) values ($1, $2)", [IDS.student, IDS.otherSchool]);
     const service = createCollectorService({ db, pepper: TEST_PEPPER });
 
-    expect((await service.listCollectors(student)).map((c) => c.code)).toEqual(["EC-001"]);
+    expect((await service.listCollectors(student)).map((c) => c.code)).toEqual(["ECO-001"]);
 
     await switchSchool(db, student, IDS.otherSchool);
     const depois = (await findActor(db, IDS.student))!;
-    expect((await service.listCollectors(depois)).map((c) => c.code)).toEqual(["EC-900"]);
+    expect((await service.listCollectors(depois)).map((c) => c.code)).toEqual(["ECO-900"]);
   });
 
   it("trocar de escola muda o que o perfil mostra como atual", async () => {
@@ -227,7 +227,7 @@ describe("jogar em uma escola por vez", () => {
     ]);
     const me = await getMe(db, student);
     const visitada = me.schools.find((s) => s.id === IDS.otherSchool)!;
-    expect(visitada.joinedVia).toEqual({ code: "EC-900", location: "Pátio" });
+    expect(visitada.joinedVia).toEqual({ code: "ECO-900", location: "Pátio" });
   });
 });
 
@@ -235,7 +235,7 @@ describe("captador apagado até a verificação", () => {
   it("o captador aparece apagado enquanto esta pessoa nunca leu o QR dele", async () => {
     const service = createCollectorService({ db, pepper: TEST_PEPPER });
     const [captador] = await service.listCollectors(student);
-    expect(captador).toMatchObject({ code: "EC-001", verified: false });
+    expect(captador).toMatchObject({ code: "ECO-001", verified: false });
   });
 
   it("depois de ler o QR, ele acende — e só para quem leu", async () => {
@@ -254,7 +254,7 @@ describe("captador apagado até a verificação", () => {
 
     const service = createCollectorService({ db, pepper: TEST_PEPPER });
     const naOutra = await service.listCollectors((await findActor(db, IDS.student))!);
-    expect(naOutra).toEqual([expect.objectContaining({ code: "EC-900", verified: false })]);
+    expect(naOutra).toEqual([expect.objectContaining({ code: "ECO-900", verified: false })]);
   });
 
   it("captador desativado some da lista", async () => {
@@ -293,7 +293,7 @@ describe("vínculo criado pela administração", () => {
 
     const service = createCollectorService({ db, pepper: TEST_PEPPER });
     const lista = await service.listCollectors((await findActor(db, IDS.student))!);
-    expect(lista).toEqual([expect.objectContaining({ code: "EC-900", verified: false })]);
+    expect(lista).toEqual([expect.objectContaining({ code: "ECO-900", verified: false })]);
   });
 
   it("quem não é administração não vincula ninguém", async () => {

@@ -8,7 +8,7 @@ const mission: MissionDefinition = { ...MISSION_CATALOG[0]!, liters: 3, xp: 50 }
 
 function snapshot(volumeLiters: number, status: CollectorSnapshot["telemetry"]["status"] = "READY"): CollectorSnapshot {
   return {
-    info: { id: "c1", code: "EC-001", name: "", location: "", capacityLiters: 12, reserveLiters: 0.5, valveKind: "undefined" },
+    info: { id: "c1", code: "ECO-001", name: "", location: "", capacityLiters: 12, reserveLiters: 0.5, valveKind: "undefined" },
     telemetry: {
       deviceId: "d1",
       origin: "simulation",
@@ -20,6 +20,7 @@ function snapshot(volumeLiters: number, status: CollectorSnapshot["telemetry"]["
       trend: "stable",
       overflowing: false,
       measuredAt: 0,
+      learnedInflowLitersPerHour: 1.2,
     },
     totals: { capturedLiters: 0, reusedLiters: 0, discardedEstimatedLiters: 0 },
     simulation: null,

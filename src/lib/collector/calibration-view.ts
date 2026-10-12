@@ -101,4 +101,10 @@ export interface CalibrationCompletion {
   version: number;
   fit: CalibrationFit;
   view: CalibrationView;
+  /**
+   * Presente só na primeira calibração aceita: o captador deixou de ser protótipo e
+   * assumiu o número da escola. É a notícia que a tela comemora — "PROTO-003 agora
+   * é ECO-002" — e o sinal de que ele já aparece em missão.
+   */
+  activation?: { code: string; previousCode: string };
 }

@@ -5,7 +5,7 @@ import { buildRescueMission, getRescuePlan } from "./rescue";
 
 function snapshot(volumeLiters: number, { overflowing = false, status = "READY" as DeviceStatus } = {}): CollectorSnapshot {
   return {
-    info: { id: "c", code: "EC-001", name: "", location: "", capacityLiters: 12, reserveLiters: 0.5, valveKind: "undefined" },
+    info: { id: "c", code: "ECO-001", name: "", location: "", capacityLiters: 12, reserveLiters: 0.5, valveKind: "undefined" },
     telemetry: {
       deviceId: "d",
       origin: "simulation",
@@ -17,6 +17,7 @@ function snapshot(volumeLiters: number, { overflowing = false, status = "READY" 
       trend: "rising",
       overflowing,
       measuredAt: 0,
+      learnedInflowLitersPerHour: 1.2,
     },
     totals: { capturedLiters: 0, reusedLiters: 0, discardedEstimatedLiters: 0 },
     simulation: null,

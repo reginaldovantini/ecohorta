@@ -1,14 +1,14 @@
 # Hardware — decisões, riscos e validação física
 
 > Status (17/09/2026):
-> - o captador físico **EC-001** em PVC DN100 está sendo montado (~1,80 m de tubo, ~1,50 m úteis);
+> - o captador físico **ECO-001** em PVC DN100 está sendo montado (~1,80 m de tubo, ~1,50 m úteis);
 > - ESP32 DevKit V1 (ESP32 clássico) na caixa eletrônica e **um único** sensor de distância dentro da tampa, ligados por **cabo de 4 vias (~50 cm)**: **prontos para a primeira validação física** (§8);
 > - sensor: **VL53L0X ou VL53L1X**, escolhido na plataforma (**Administração → Captadores → {código} → Ligações**). O firmware tem os dois drivers e usa o do sensor configurado (§3.1);
-> - módulo físico do EC-001: **CJMCU-531, baseado no VL53L1X** → o EC-001 é configurado como **VL53L1X** (nunca como VL53L0X);
+> - módulo físico do ECO-001: **CJMCU-531, baseado no VL53L1X** → o ECO-001 é configurado como **VL53L1X** (nunca como VL53L0X);
 > - válvula esférica motorizada DC 12 V de 3 fios e dois relés: adquiridos, **NÃO integrados** (§2);
 > - firmware da etapa 1 (distância + diagnóstico + telemetria, **sem válvula**) em `firmware/`: compila para o ESP32 DevKit V1 e tem testes do núcleo de sensores no computador; ainda **não foi gravado em uma placa** (§6).
 
-> **Convenção de identificação:** **EC-001** = captador FÍSICO (dispositivo `ESP32-001`, REAL).
+> **Convenção de identificação:** **ECO-001** = captador FÍSICO (dispositivo `ESP32-001`, REAL).
 > **SIM-001** = captador da SIMULAÇÃO (dispositivo `VIRTUAL-001`), só para testes e demonstração.
 > O app mostra sempre o selo **REAL** ou **SIMULAÇÃO**.
 
@@ -16,10 +16,10 @@
 
 | Componente | Função | Status |
 |---|---|---|
-| Captador EC-001 em PVC (DN100, ~1,80 m de tubo, ~1,50 m úteis) | Acúmulo do condensado | Em montagem — calibração e bancada no app prontas (§4, §8) |
+| Captador ECO-001 em PVC (DN100, ~1,80 m de tubo, ~1,50 m úteis) | Acúmulo do condensado | Em montagem — calibração e bancada no app prontas (§4, §8) |
 | Mangueira transparente lateral | Indicador visual de nível (referência independente do sensor) | Em montagem |
 | ESP32 DevKit V1 — ESP32 clássico, ESP32-WROOM-32 (na caixa eletrônica) | Wi-Fi, leitura do sensor, telemetria | Pronto para validação — firmware etapa 1 (compila; ainda não gravado) |
-| Sensor de distância ToF **VL53L0X ou VL53L1X** — um único sensor, dentro da tampa superior, apontado para baixo. No EC-001: módulo **CJMCU-531 (VL53L1X)** | Distância até a superfície da água | Pronto para validação. Modelo escolhido na plataforma (§3.1, §8.3) |
+| Sensor de distância ToF **VL53L0X ou VL53L1X** — um único sensor, dentro da tampa superior, apontado para baixo. No ECO-001: módulo **CJMCU-531 (VL53L1X)** | Distância até a superfície da água | Pronto para validação. Modelo escolhido na plataforma (§3.1, §8.3) |
 | Cabo de 4 vias, ~50 cm instalado (VCC, GND, SDA, SCL) | Liga o sensor da tampa ao ESP32 na caixa eletrônica | Em montagem — ligação em §8.3 |
 | Válvula esférica motorizada DC 12 V, 3 fios | Liberação por gravidade | Adquirida — **não integrada; modelo elétrico a identificar (§2.2)** |
 | 2 módulos relé | Acionamento da válvula | **Compatibilidade a verificar (§2.3)** |
@@ -105,7 +105,7 @@ O projeto suporta **dois** sensores, mas cada captador usa **um**, escolhido na 
 | Endereço I²C padrão (7 bits) | **0x29** | **0x29** |
 | Frequência I²C máxima | 400 kHz | 1 MHz |
 | Identificação lida de registrador (conferida pelo firmware) | **model ID 0xEE**, registrador `IDENTIFICATION_MODEL_ID` = 0xC0 (índice de 8 bits, 1 byte lido) | **sensor ID 0xEACC**, registrador `IDENTIFICATION__MODEL_ID` = 0x010F (índice de 16 bits, 2 bytes lidos) |
-| Módulo | outro módulo compatível com o VL53L0X | **CJMCU-531** (módulo do EC-001) |
+| Módulo | outro módulo compatível com o VL53L0X | **CJMCU-531** (módulo do ECO-001) |
 | Driver no firmware | `VL53L0XDriver` (biblioteca Pololu VL53L0X) | `VL53L1XDriver` (biblioteca Pololu VL53L1X) |
 | Configuração do firmware | longo alcance (limite de sinal 0,1 MCPS, pulsos VCSEL 18/14), 50 ms por amostra | modo longo, 50 ms por amostra, ROI 16×16 |
 | Diagnóstico por amostra | amostras aceitas, faixa e timeouts (a biblioteca não informa status nem sinal) | status, sinal e luz ambiente (MCPS) |
@@ -118,10 +118,10 @@ O projeto suporta **dois** sensores, mas cada captador usa **um**, escolhido na 
   - VL53L1X: o firmware lê 2 bytes a partir do registrador 0x010F (índice de 16 bits) e espera **0xEACC** (sensor ID).
 - Os mesmos registradores e valores são conferidos pelas bibliotecas Pololu no `init()` de cada sensor. O firmware confere antes de configurar, com o driver do sensor configurado, e informa o valor lido em `sensor_diagnostics.model_id`.
 
-**Módulo do EC-001: CJMCU-531 = VL53L1X.** O CJMCU-531 é um módulo baseado no **VL53L1X** e deve ser configurado como **VL53L1X** em Ligações. A opção VL53L0X continua existindo para **outro** módulo compatível com o VL53L0X. Se o CJMCU-531 for configurado como VL53L0X, o firmware lê o registrador 0xC0, não encontra 0xEE e não inicia o sensor, e a plataforma mostra a incompatibilidade.
+**Módulo do ECO-001: CJMCU-531 = VL53L1X.** O CJMCU-531 é um módulo baseado no **VL53L1X** e deve ser configurado como **VL53L1X** em Ligações. A opção VL53L0X continua existindo para **outro** módulo compatível com o VL53L0X. Se o CJMCU-531 for configurado como VL53L0X, o firmware lê o registrador 0xC0, não encontra 0xEE e não inicia o sensor, e a plataforma mostra a incompatibilidade.
 
 - Os alcances valem para alvo branco em condições controladas. Sobre a água, dentro do tubo, precisam ser medidos na bancada.
-- **VL53L0X no EC-001:** a distância da tampa até o ZERO fica perto de 1,6–1,7 m. Com o tubo vazio o sensor pode ficar fora do alcance: valide antes de calibrar.
+- **VL53L0X no ECO-001:** a distância da tampa até o ZERO fica perto de 1,6–1,7 m. Com o tubo vazio o sensor pode ficar fora do alcance: valide antes de calibrar.
 - O manual de ligações de cada sensor (ilustração, especificações, diagrama, alimentação, testes e calibração) está no app, em **Ligações**.
 
 **Como a escolha chega ao firmware:**
@@ -192,7 +192,8 @@ firmware/
 ├── src/vl53l1x_driver.*        DistanceSensor com a biblioteca Pololu VL53L1X
 ├── src/i2c_probe.*             leitura da identificação do sensor, antes de configurá-lo
 ├── src/sensor_config_store.*   configuração recebida da plataforma, guardada na NVS
-└── src/main.cpp                Wi-Fi e telemetria; só conhece a interface DistanceSensor
+├── src/wifi_portal.*           rede do captador: portal de configuração e resgate por celular
+└── src/main.cpp                telemetria; só conhece a interface DistanceSensor
 ```
 
 - **Sensor:** o configurado na plataforma, recebido na resposta de cada telemetria (`hardware.distance_sensor`) e guardado na NVS para os próximos reinícios (§3.1).
@@ -226,17 +227,18 @@ firmware/
 
 **Passos:**
 
-1. Registrar o ESP32 no captador físico **EC-001** (o `npm run db:seed` cria o **SIM-001** da simulação):
+1. Cadastrar o captador (Administração → Captadores, ou `npm run admin -- register-collector --location "Horta dos fundos"`). Ele nasce **PROTO-nnn** e assume **ECO-nnn** quando a calibração for aceita.
+   Fora da plataforma, a placa também pode ser registrada à mão — o token aparece **uma vez**:
    ```bash
-   npm run admin -- register-device --collector EC-001 --name "EcoCaptador" --location "Horta" --capacity 11.8 --reserve 0.5 --diameter 100 --height 1500 --key ESP32-001
+   npm run admin -- register-device --collector PROTO-001 --key ESP32-001
    ```
-   O token aparece **uma vez**. Se o EC-001 já tinha sido usado pela simulação, o estado, o balanço e a calibração simulados deixam de valer para ele (o histórico fica guardado). Um captador novo pode ser criado com `--sensor VL53L0X` (padrão: VL53L1X); em um captador existente, o sensor só muda em **Ligações**.
-2. Copiar `firmware/include/secrets.example.h` para `secrets.h` e preencher Wi-Fi, URL, `DEVICE_ID`, `COLLECTOR_CODE` e o token.
+2. Baixar o `secrets.h` **gerado pela plataforma** (Administração → Captadores → Construção e conexão → Programa do ESP32) e salvar em `firmware/include/`. O arquivo traz `DEVICE_ID`, `COLLECTOR_CODE`, o token, a URL e a rede do captador. **A senha do Wi-Fi da escola não vai nele** (§7.1); o modelo versionado é `secrets.example.h`.
 3. Em **Ligações**, conferir o sensor configurado e seguir o manual de ligações daquele sensor (§8.3). A pinagem está em `config.h` (DevKit V1: SDA=GPIO21, SCL=GPIO22 — confirmar na placa).
 4. Compilar e gravar: `pio run -d firmware -t upload` e acompanhar com `pio device monitor -d firmware`.
    - Se a porta COM não aparecer no Windows, instale o driver do conversor USB-serial da placa (CP210x ou CH340).
    - Se o upload parar em `Connecting...`, segure o botão **BOOT** da placa até a gravação começar.
-5. Seguir o **protocolo de validação física** (§8): bancada → calibração → validação.
+5. Conectar o captador à rede: ao ligar, a placa cria a rede dela mesma (`SETUP_AP_SSID`) — conecte o celular, escolha a rede da escola e digite a senha (§7.1).
+6. Seguir o **protocolo de validação física** (§8): bancada → calibração → validação.
 
 Testes do núcleo de sensores, sem placa: `pio test -d firmware -e windows_test` (Windows; em Linux ou macOS, troque a plataforma do ambiente por `native`, que exige gcc).
 
@@ -252,11 +254,37 @@ Testes do núcleo de sensores, sem placa: `pio test -d firmware -e windows_test`
 
 ## 7. Credenciais no firmware
 
-- Wi-Fi, URL da API e token ficam em `firmware/include/secrets.h`, **ignorado pelo Git** (`firmware/.gitignore`). O modelo é `secrets.example.h`.
+- URL da API, token e a rede do captador ficam em `firmware/include/secrets.h`, **ignorado pelo Git** (`firmware/.gitignore`), gerado pela plataforma por captador. O modelo é `secrets.example.h`.
 - O servidor guarda somente o **hash** do token (`sha256(IOT_TOKEN_PEPPER:token)`).
 - **TLS:** com `API_ROOT_CA` vazio, o firmware usa TLS **sem verificar o certificado** do servidor. Serve só para a bancada. Antes de instalar na escola, preencha o certificado raiz da URL da API.
 
-## 8. PROTOCOLO DE VALIDAÇÃO FÍSICA DO EC-001
+### 7.1 A rede do captador — por que a senha do Wi-Fi não está no firmware
+
+A plataforma gera o `secrets.h` **para download**. Se a senha do Wi-Fi da escola
+estivesse nele, ela viajaria para a pasta de downloads, para o e-mail e para o
+computador da secretaria — e trocar a senha da rede exigiria recompilar e
+regravar a placa, com um cabo, na escola.
+
+Então a placa pergunta:
+
+1. ao ligar sem rede configurada, ela cria a própria rede Wi-Fi (`SETUP_AP_SSID`,
+   com `SETUP_AP_PASSWORD`);
+2. quem conecta o celular nela recebe uma página (`192.168.4.1`) com as redes do
+   lugar, escolhe a da escola e digita a senha;
+3. a senha fica na **NVS daquela placa** e em nenhum outro lugar. A placa reinicia
+   e passa a enviar telemetria.
+
+**O mesmo nome e senha servem para o resgate.** Quando a internet da escola cai, o
+captador para de reportar. Um estudante liga o ponto de acesso do celular com
+esse nome e essa senha — que o app mostra — e a placa entra nele sozinha, porque
+já os conhece. É assim que uma missão acontece num captador offline: o volume
+que conclui a missão continua sendo o **medido** pelo sensor.
+
+Os dois usos têm o mesmo nome e isso não colide: para procurar o celular, a placa
+desliga a própria rede por alguns segundos, e nunca enquanto alguém está com a
+página de configuração aberta (`src/wifi_portal.cpp`).
+
+## 8. PROTOCOLO DE VALIDAÇÃO FÍSICA DO ECO-001
 
 **Objetivo:**
 - verificar, com medições documentadas, se o sensor configurado (VL53L0X ou VL53L1X) mede a água dentro do tubo DN100;
@@ -298,7 +326,7 @@ Testes do núcleo de sensores, sem placa: `pio test -d firmware -e windows_test`
 
 ### 8.3 Ligação: sensor na tampa → cabo de 4 vias → ESP32 na caixa
 
-Montagem definida para o EC-001: **ESP32 DevKit V1 + um sensor VL53L0X ou VL53L1X (o configurado em Ligações) + cabo de 4 vias com ~50 cm instalado**. A mesma ligação serve para os dois sensores.
+Montagem definida para o ECO-001: **ESP32 DevKit V1 + um sensor VL53L0X ou VL53L1X (o configurado em Ligações) + cabo de 4 vias com ~50 cm instalado**. A mesma ligação serve para os dois sensores.
 
 No app, **Administração → Captadores → {código} → Ligações** mostra o manual visual desta ligação para o sensor configurado: ilustração do módulo, diagrama, tabela de vias, alimentação, cabo, posição, umidade, janela óptica, teste e calibração.
 
@@ -367,9 +395,9 @@ Os módulos já trazem resistores de pull-up em SDA e SCL. Não acrescente outro
 
 - A ligação é a mesma para os dois: 4 vias, mesmos pinos, endereço 0x29.
 - O modelo é escolhido na plataforma (Ligações) e o firmware usa o driver correspondente (§3.1).
-- **EC-001: módulo CJMCU-531 = VL53L1X.** Configure VL53L1X. O VL53L0X é para outro módulo compatível.
+- **ECO-001: módulo CJMCU-531 = VL53L1X.** Configure VL53L1X. O VL53L0X é para outro módulo compatível.
 - Confirme o modelo pela marcação da placa ou pelo anúncio do vendedor antes de configurar. A plataforma exige confirmar que o sensor físico instalado corresponde ao selecionado.
-- VL53L0X: o alcance pode não cobrir o tubo vazio do EC-001 (§3.1).
+- VL53L0X: o alcance pode não cobrir o tubo vazio do ECO-001 (§3.1).
 
 **Se o sensor não for encontrado**
 
@@ -394,7 +422,7 @@ Corrija a ligação com o USB desligado e religue: o firmware inicia o sensor ao
 ### 8.5 Teste sem água
 
 1. Gravar o firmware (§6) e abrir o monitor serial. Devem aparecer `[config] sensor da plataforma: …`, `[sensor] {modelo} pronto (id …)` e linhas `[leitura]`. Em **Ligações**, o estado deve ser **Compatível**. Se o sensor não for encontrado, seguir a verificação da ligação (§8.3).
-2. No app, com conta de professor, abrir **Perfil → Administração → Captadores → EC-001 → Bancada**. Conferir o selo **REAL**.
+2. No app, com conta de professor, abrir **Perfil → Administração → Captadores → ECO-001 → Bancada**. Conferir o selo **REAL**.
 3. Tocar em **Iniciar ensaio de bancada**. As leituras passam a ser gravadas a cada 1 s.
 4. Com o **tubo vazio e seco**, aguardar 60 s e registrar em "Observar o sensor" a condição **Tubo sem água**. Registrar mesmo se a leitura estiver **INSTÁVEL** ou **INVÁLIDA**.
 5. Repetir com a tampa bem fechada e com luz ambiente diferente (dia e noite).
@@ -429,7 +457,7 @@ Corrija a ligação com o USB desligado e religue: o firmware inicia o sensor ao
 
 ### 8.7 Calibração
 
-Seguir [CALIBRACAO.md](./CALIBRACAO.md) §3 no EC-001: 0 L, 1 L, 2 L, 3 L e nível máximo.
+Seguir [CALIBRACAO.md](./CALIBRACAO.md) §3 no ECO-001: 0 L, 1 L, 2 L, 3 L e nível máximo.
 
 - **Distâncias:** capturadas **pelo servidor** a partir da leitura estável. Ninguém digita distância.
 - **Ensaio de bancada:** iniciar a calibração também inicia o ensaio de bancada, que:

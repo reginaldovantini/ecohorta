@@ -1,6 +1,7 @@
 "use client";
 
 import { CollectorLiveCard } from "@/components/collector/collector-live-card";
+import { CollectorOfflineCard } from "@/components/collector/collector-offline-card";
 import { usePrimaryCollectorCode, useCollectorSnapshot } from "@/components/collector/collector-source";
 import { WaterBalance } from "@/components/collector/water-balance";
 import { CollectorSwitcher } from "@/components/collector/collector-switcher";
@@ -93,6 +94,8 @@ export function WaterScreen() {
       )}
 
       <CollectorLiveCard snapshot={snapshot} />
+
+      {telemetry.status === "OFFLINE" && <CollectorOfflineCard snapshot={snapshot} network={snapshot.rescueNetwork} />}
 
       <section className="space-y-3">
         <h2 className="eyebrow">Telemetria</h2>
