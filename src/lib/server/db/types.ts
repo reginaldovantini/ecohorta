@@ -19,5 +19,9 @@ export const millis = (value: unknown): number | null => {
   return new Date(String(value)).getTime();
 };
 
+/** Violação de chave estrangeira: a linha apontada não existe. */
+export const isForeignKeyViolation = (error: unknown) =>
+  typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "23503";
+
 export const isUniqueViolation = (error: unknown) =>
   typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "23505";
