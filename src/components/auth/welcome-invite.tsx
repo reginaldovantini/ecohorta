@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { ArrowRight, Droplet, Droplets, Globe2, Leaf } from "lucide-react";
+import { ArrowRight, Droplets, Gauge, Target, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { EcoHortaLogo } from "@/components/brand/ecohorta-logo";
@@ -52,11 +52,18 @@ export function demoLevel(agoraMs: number): { ratio: number; dispensing: boolean
   return { ratio: 0.08, dispensing: false };
 }
 
-/** O que o projeto entrega, em duas palavras que cabem debaixo de um ícone. */
+/*
+ * As três garantias do projeto, debaixo de um ícone cada.
+ *
+ * Elas falam da AÇÃO de quem usa o aplicativo, não de uma horta que se rega
+ * sozinha: a EcoHorta não irriga nada automaticamente — ela mede a água, abre a
+ * torneira quando um estudante está na frente do captador, e confirma a missão
+ * pelo volume que saiu. Sem estudante, nada acontece.
+ */
 const IMPACTOS = [
-  { icon: Droplet, linha1: "Menos", linha2: "desperdício" },
-  { icon: Leaf, linha1: "Mais", linha2: "alimentos" },
-  { icon: Globe2, linha1: "Um futuro", linha2: "melhor" },
+  { icon: Gauge, linha1: "Medido", linha2: "por sensor" },
+  { icon: Target, linha1: "Vira", linha2: "missão real" },
+  { icon: Users, linha1: "Impacto", linha2: "coletivo" },
 ] as const;
 
 /** O ciclo, nas palavras do próprio tubo, com a foto de cada etapa. Sem rostos. */
@@ -76,7 +83,7 @@ const CICLO = [
   {
     word: "Transformar",
     photo: "/fotos/transformar.jpg",
-    text: "em horta que cresce",
+    text: "em horta cuidada",
     alt: "Regador molhando bandejas de mudas no pátio da escola",
   },
 ] as const;
@@ -107,8 +114,8 @@ export function WelcomeInvite({ onStart }: { onStart: () => void }) {
         <span aria-hidden className="mt-4 block h-1 w-12 rounded-full bg-leaf-400" />
 
         <p className="mt-4 text-[0.98rem] leading-relaxed text-mist-300">
-          O ar-condicionado da sua escola joga água fora todos os dias. A EcoHorta capta, mede e transforma essa água em
-          vida para uma horta mais produtiva.
+          O ar-condicionado da sua escola joga água fora todos os dias. A EcoHorta capta essa água, mede quanto tem e
+          transforma em missões reais para você cumprir.
         </p>
 
         {/* Três selos: o porquê do projeto, antes do como. */}
