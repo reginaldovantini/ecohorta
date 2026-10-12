@@ -1,6 +1,6 @@
 import type { ExecutionRecord } from "@/lib/missions/history";
 import type { AvatarId } from "@/lib/users/avatars";
-import type { DisplayIdentity, UserRole } from "@/lib/users/types";
+import type { DisplayIdentity, OnboardingInput, UserRole } from "@/lib/users/types";
 
 /**
  * Perfil do usuário autenticado, sempre vindo da API (/api/me).
@@ -90,8 +90,27 @@ export const profileStore = {
     return inflight;
   },
 
-  /** Login (estudante: código + PIN; equipe: e-mail + senha). A sessão fica em cookie httpOnly. */
-  async signIn(path: "/api/auth/student" | "/api/auth/login", credentials: Record<string, string>): Promise<ActionResult> {
+  /**
+   * Começa o login com Google.
+   *
+   * O servidor monta a URL de autorização — o navegador nunca vê o segredo do
+   * cliente — e esta função manda o navegador para lá. Não há retorno de
+   * sucesso: a página sai do ar. Só volta aqui quando dá errado.
+   */
+  async startGoogleSignIn(): Promise<ActionResult> {
+    try {
+      const response = await fetch("/api/auth/google", { method: "POST" });
+      if (!response.ok) return { ok: false, message: await errorMessage(response, "Entrada pelo Google indisponível.") };
+      const { url } = (await response.json()) as { url: string };
+      window.location.assign(url);
+      return { ok: true };
+    } catch {
+      return { ok: false, message: "Sem conexão. Tente novamente." };
+    }
+  },
+
+  /** Login por e-mail e senha — contas de administração. A sessão fica em cookie httpOnly. */
+  async signIn(path: "/api/auth/login", credentials: Record<string, string>): Promise<ActionResult> {
     try {
       const response = await fetch(path, {
         method: "POST",
@@ -108,7 +127,28 @@ export const profileStore = {
     return state.status === "ready" ? { ok: true } : { ok: false, message: "Não foi possível carregar o perfil." };
   },
 
-  /** Primeiro acesso: o próprio usuário escolhe apelido e avatar. */
+  /**
+   * Primeiro acesso completo: nome, sexo, nascimento, função, ano/série e avatar.
+   *
+   * A escola NÃO entra aqui — ela vem da primeira leitura do QR de um captador.
+   */
+  async completeOnboarding(input: OnboardingInput): Promise<ActionResult> {
+    try {
+      const response = await fetch("/api/me", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      if (response.status === 401) commit(SIGNED_OUT);
+      if (!response.ok) return { ok: false, message: await errorMessage(response, "Não foi possível concluir o cadastro.") };
+      commit(fromBody((await response.json()) as MeBody));
+      return { ok: true };
+    } catch {
+      return { ok: false, message: "Sem conexão. Tente novamente." };
+    }
+  },
+
+  /** Depois do primeiro acesso: trocar apelido e avatar. */
   async saveIdentity(input: { nickname: string; avatarId: AvatarId }): Promise<ActionResult> {
     try {
       const response = await fetch("/api/me", {

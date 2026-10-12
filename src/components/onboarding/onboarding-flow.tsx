@@ -1,37 +1,76 @@
 "use client";
 
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
-import { ArrowLeft, Check, Lock, ShieldCheck, Users } from "lucide-react";
+import { ArrowLeft, Cake, Check, GraduationCap, Smile, Sparkles, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
-import { CollectorTank } from "@/components/collector/collector-tank";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
-import { Surface } from "@/components/ui/surface";
 import { Avatar } from "@/components/users/avatar";
 import { useProfile } from "@/hooks/use-profile";
 import { profileStore } from "@/lib/student/profile-store";
+import { ageOn } from "@/lib/users/age";
 import { AVATARS, DEFAULT_AVATAR_ID, type AvatarId } from "@/lib/users/avatars";
-import { nicknameSchema, ROLE_LABEL } from "@/lib/users/types";
+import {
+  GRADE_PHASE_LABEL,
+  GRADE_PHASES,
+  nicknameSchema,
+  ROLE_LABEL,
+  SELF_DECLARED_ROLES,
+  SEX_LABEL,
+  SEXES,
+  type GradePhase,
+  type SelfDeclaredRole,
+  type Sex,
+} from "@/lib/users/types";
 import { cn } from "@/lib/utils/cn";
 
-const STEPS = ["intro", "identity", "privacy"] as const;
-type Step = (typeof STEPS)[number];
+/*
+ * PRIMEIRO ACESSO — uma pergunta por tela.
+ *
+ * A pessoa acabou de entrar com o Google e ainda não viu nada da plataforma.
+ * Um formulário único com seis campos pediria que ela decidisse tudo antes de
+ * entender onde se meteu; e num celular de 360 px viraria rolagem.
+ *
+ * Então é uma pergunta de cada vez, com a resposta avançando sozinha quando ela
+ * é um toque (sexo, função, ano) e um botão quando exige digitar. O avatar fica
+ * por último de propósito: é a parte divertida, e serve de recompensa.
+ *
+ * A ESCOLA não é perguntada aqui. Ela vem de ler o QR de um captador — é assim
+ * que alguém entra numa escola, e perguntar agora seria pedir uma informação
+ * que a pessoa ainda não tem como provar.
+ */
 
 const inputClass =
-  "h-12 w-full rounded-control bg-white/[0.05] px-4 text-base text-mist-50 outline-none ring-1 ring-inset ring-white/10 transition-shadow placeholder:text-mist-500 focus:ring-2 focus:ring-aqua-400";
+  "h-14 w-full rounded-control bg-white/[0.05] px-4 text-lg text-mist-50 outline-none ring-1 ring-inset ring-white/10 transition-shadow placeholder:text-mist-500 focus:ring-2 focus:ring-aqua-400";
 
-/**
- * Primeiro acesso: o participante escolhe apelido e avatar.
- * Perfil, escola, turma e função já vêm do cadastro da escola (banco de dados).
- */
+type Step = "nome" | "sexo" | "nascimento" | "funcao" | "ano" | "avatar";
+
+/** Idades plausíveis na escola. Fora disso é quase sempre erro de digitação. */
+const MIN_AGE = 5;
+const MAX_AGE = 100;
+
+/** A data serve; a idade só confere se faz sentido. `ageOn` recusa data futura. */
+function ageOrNull(birthDate: string): number | null {
+  try {
+    return ageOn(birthDate);
+  } catch {
+    return null;
+  }
+}
+
 export function OnboardingFlow() {
   const router = useRouter();
   const profile = useProfile();
+
+  const [name, setName] = useState("");
+  const [sex, setSex] = useState<Sex | null>(null);
+  const [birthDate, setBirthDate] = useState("");
+  const [role, setRole] = useState<SelfDeclaredRole | null>(null);
+  const [gradePhase, setGradePhase] = useState<GradePhase | null>(null);
+  const [avatarId, setAvatarId] = useState<AvatarId>(DEFAULT_AVATAR_ID);
+
   const [stepIndex, setStepIndex] = useState(0);
   const [direction, setDirection] = useState(1);
-  const [nickname, setNickname] = useState("");
-  const [nicknameTouched, setNicknameTouched] = useState(false);
-  const [avatarId, setAvatarId] = useState<AvatarId>(DEFAULT_AVATAR_ID);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -43,31 +82,46 @@ export function OnboardingFlow() {
     else if (profile.status === "ready" && profile.identity !== null) router.replace("/");
   }, [profile.status, profile.identity, router]);
 
-  const step: Step = STEPS[stepIndex]!;
-  const nicknameResult = nicknameSchema.safeParse(nickname);
+  // A etapa do ano/série só existe para estudante: o caminho muda com a resposta.
+  const steps = useMemo<Step[]>(
+    () => ["nome", "sexo", "nascimento", "funcao", ...(role === "student" ? (["ano"] as const) : []), "avatar"],
+    [role],
+  );
+  const step = steps[Math.min(stepIndex, steps.length - 1)]!;
 
-  const canAdvance: Record<Step, boolean> = {
-    intro: profile.status === "ready",
-    identity: nicknameResult.success,
-    privacy: nicknameResult.success && !saving,
-  };
+  const nameResult = nicknameSchema.safeParse(name);
+  const age = birthDate ? ageOrNull(birthDate) : null;
+  const birthOk = age !== null && age >= MIN_AGE && age <= MAX_AGE;
 
   const go = (delta: number) => {
+    setError(null);
     setDirection(delta);
-    setStepIndex((index) => Math.min(STEPS.length - 1, Math.max(0, index + delta)));
+    setStepIndex((index) => Math.max(0, Math.min(steps.length - 1, index + delta)));
+  };
+
+  /** Resposta de um toque: registra e já avança. */
+  const choose = <T,>(set: (value: T) => void) => (value: T) => {
+    set(value);
+    setTimeout(() => go(1), 140);
   };
 
   const finish = async () => {
-    if (!nicknameResult.success) return;
+    if (!nameResult.success || !sex || !birthOk || !role) return;
+    if (role === "student" && !gradePhase) return;
     setSaving(true);
     setError(null);
-    const result = await profileStore.saveIdentity({ nickname: nicknameResult.data, avatarId });
+    const result = await profileStore.completeOnboarding({
+      name: nameResult.data,
+      sex,
+      birthDate,
+      role,
+      gradePhase: role === "student" ? gradePhase : null,
+      avatarId,
+    });
     setSaving(false);
-    // Sucesso: o perfil passa a ter identidade e o efeito acima leva à Home.
+    // Deu certo: o perfil ganha identidade e o efeito lá em cima leva para a Home.
     if (!result.ok) setError(result.message);
   };
-
-  const greetingName = nicknameResult.success ? nicknameResult.data : "…";
 
   return (
     <MotionConfig reducedMotion="user">
@@ -85,12 +139,12 @@ export function OnboardingFlow() {
           ) : (
             <span className="size-10" />
           )}
-          <div className="flex flex-1 justify-center gap-1.5" aria-label={`Etapa ${stepIndex + 1} de ${STEPS.length}`}>
-            {STEPS.map((item, index) => (
+          <div className="flex flex-1 justify-center gap-1.5" aria-label={`Etapa ${stepIndex + 1} de ${steps.length}`}>
+            {steps.map((item, index) => (
               <span
                 key={item}
                 className={cn(
-                  "h-1.5 rounded-full transition-all duration-300",
+                  "h-1.5 rounded-full transition-all",
                   index === stepIndex ? "w-6 bg-leaf-400" : index < stepIndex ? "w-1.5 bg-leaf-400/60" : "w-1.5 bg-white/15",
                 )}
               />
@@ -104,147 +158,170 @@ export function OnboardingFlow() {
             <motion.section
               key={step}
               custom={direction}
-              initial={{ opacity: 0, x: direction * 40 }}
+              initial={{ opacity: 0, x: direction * 28 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: direction * -40 }}
-              transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-              className="pb-6"
+              exit={{ opacity: 0, x: direction * -28 }}
+              transition={{ type: "spring", stiffness: 320, damping: 32 }}
+              className="flex h-full flex-col pb-8 pt-2"
             >
-              {step === "intro" && (
-                <div className="flex flex-col items-center pt-4 text-center">
-                  <div className="h-60">
-                    <CollectorTank ratio={0.62} urgency="normal" inflowActive dispensing={false} overflowing={false} />
+              {step === "nome" && (
+                <Question icon={<UserRound className="size-6" aria-hidden />} title="Como quer ser chamado?" hint="Pode ser seu primeiro nome ou um apelido. É o que aparece no ranking e no mural.">
+                  <input
+                    className={inputClass}
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    placeholder="Ex.: Rê"
+                    maxLength={20}
+                    autoFocus
+                    autoComplete="off"
+                    enterKeyHint="next"
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && nameResult.success) go(1);
+                    }}
+                  />
+                  <Button variant="leaf" size="lg" className="mt-5 w-full" disabled={!nameResult.success} onClick={() => go(1)}>
+                    Continuar
+                  </Button>
+                </Question>
+              )}
+
+              {step === "sexo" && (
+                <Question icon={<Smile className="size-6" aria-hidden />} title="Qual é o seu sexo?" hint="Usamos só para os indicadores do projeto. Não aparece para outras pessoas.">
+                  <Options
+                    options={SEXES.map((value) => ({ value, label: SEX_LABEL[value] }))}
+                    selected={sex}
+                    onSelect={choose(setSex)}
+                  />
+                </Question>
+              )}
+
+              {step === "nascimento" && (
+                <Question icon={<Cake className="size-6" aria-hidden />} title="Quando você nasceu?" hint="Guardamos a data, nunca a idade — e ela não aparece para ninguém.">
+                  <input
+                    className={inputClass}
+                    value={birthDate}
+                    onChange={(event) => setBirthDate(event.target.value)}
+                    type="date"
+                    max={new Date().toISOString().slice(0, 10)}
+                    autoFocus
+                  />
+                  {birthDate && !birthOk && (
+                    <p className="mt-2 text-sm text-ember-400">Confira a data: o ano parece errado.</p>
+                  )}
+                  <Button variant="leaf" size="lg" className="mt-5 w-full" disabled={!birthOk} onClick={() => go(1)}>
+                    Continuar
+                  </Button>
+                </Question>
+              )}
+
+              {step === "funcao" && (
+                <Question icon={<GraduationCap className="size-6" aria-hidden />} title="O que você faz na escola?" hint="Isso define o que aparece para você no aplicativo.">
+                  <Options
+                    options={SELF_DECLARED_ROLES.map((value) => ({ value, label: ROLE_LABEL[value] }))}
+                    selected={role}
+                    onSelect={choose((value: SelfDeclaredRole) => {
+                      setRole(value);
+                      if (value !== "student") setGradePhase(null);
+                    })}
+                  />
+                </Question>
+              )}
+
+              {step === "ano" && (
+                <Question icon={<GraduationCap className="size-6" aria-hidden />} title="Qual ano você cursa?" hint="Seu ano/série nesta escola.">
+                  <Options
+                    options={GRADE_PHASES.map((value) => ({ value, label: GRADE_PHASE_LABEL[value] }))}
+                    selected={gradePhase}
+                    onSelect={choose(setGradePhase)}
+                    columns={2}
+                  />
+                </Question>
+              )}
+
+              {step === "avatar" && (
+                <Question icon={<Sparkles className="size-6" aria-hidden />} title={`Escolha seu avatar, ${nameResult.success ? nameResult.data : "você"}!`} hint="É a sua cara na plataforma. Dá para trocar depois, no perfil.">
+                  <div className="grid grid-cols-4 gap-3">
+                    {AVATARS.map((avatar) => (
+                      <button
+                        key={avatar.id}
+                        type="button"
+                        onClick={() => setAvatarId(avatar.id)}
+                        aria-pressed={avatarId === avatar.id}
+                        aria-label={avatar.label}
+                        className={cn(
+                          "grid aspect-square place-items-center rounded-2xl transition-all active:scale-95",
+                          avatarId === avatar.id ? "bg-leaf-400/20 ring-2 ring-leaf-400" : "bg-white/[0.05] ring-1 ring-inset ring-white/10",
+                        )}
+                      >
+                        <Avatar avatarId={avatar.id} className="size-12" />
+                      </button>
+                    ))}
                   </div>
-                  <p className="eyebrow mt-6 text-leaf-300">EcoHorta Inteligente</p>
-                  <h1 className="mt-2 font-display text-3xl font-bold leading-tight text-mist-50">Conheça a EcoHorta</h1>
-                  <p className="mt-3 max-w-xs text-[0.95rem] leading-relaxed text-mist-300">
-                    A água do ar-condicionado pode ganhar uma nova função. Ela é captada, medida por um sensor e liberada
-                    em missões reais na escola.
-                  </p>
-                  {profile.role && (
-                    <p className="mt-5 rounded-full bg-white/[0.06] px-3 py-1.5 text-sm font-semibold text-mist-100 ring-1 ring-inset ring-white/10">
-                      {ROLE_LABEL[profile.role]}
-                      {profile.schoolName && ` · ${profile.schoolName}`}
+
+                  {error && (
+                    <p role="alert" className="mt-4 text-sm text-alert-400">
+                      {error}
                     </p>
                   )}
-                </div>
-              )}
 
-              {step === "identity" && (
-                <StepBody title="Como você quer aparecer?" subtitle="Seu apelido aparece na timeline e no ranking.">
-                  <Surface className="flex items-center gap-3 p-4">
-                    <Avatar avatarId={avatarId} />
-                    <p className="min-w-0 truncate font-display text-xl font-bold text-mist-50">
-                      Olá, {greetingName}! <span aria-hidden>🌱</span>
-                    </p>
-                  </Surface>
-
-                  <label className="block space-y-2">
-                    <span className="text-sm font-semibold text-mist-100">Apelido</span>
-                    <input
-                      className={inputClass}
-                      value={nickname}
-                      onChange={(event) => setNickname(event.target.value)}
-                      onBlur={() => setNicknameTouched(true)}
-                      maxLength={20}
-                      autoComplete="off"
-                      autoCapitalize="words"
-                      placeholder="Ex.: Jhow"
-                      aria-invalid={nicknameTouched && !nicknameResult.success}
-                    />
-                    <span className={cn("block text-xs", nicknameTouched && !nicknameResult.success ? "text-ember-400" : "text-mist-500")}>
-                      {nicknameTouched && !nicknameResult.success
-                        ? nicknameResult.error.issues[0]?.message
-                        : "Não use seu nome completo."}
-                    </span>
-                  </label>
-
-                  <div className="space-y-2">
-                    <span className="text-sm font-semibold text-mist-100">Avatar</span>
-                    <div role="radiogroup" aria-label="Avatar" className="grid grid-cols-4 gap-3">
-                      {AVATARS.map((avatar) => (
-                        <button
-                          key={avatar.id}
-                          type="button"
-                          role="radio"
-                          aria-checked={avatarId === avatar.id}
-                          aria-label={avatar.label}
-                          onClick={() => setAvatarId(avatar.id)}
-                          className={cn(
-                            "grid place-items-center rounded-2xl p-2 transition-all",
-                            avatarId === avatar.id ? "bg-white/10 ring-2 ring-leaf-400" : "bg-white/[0.03] ring-1 ring-white/[0.06]",
-                          )}
-                        >
-                          <Avatar avatarId={avatar.id} />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </StepBody>
-              )}
-
-              {step === "privacy" && (
-                <StepBody title="Seus dados" subtitle="Transparência sobre o que fica guardado.">
-                  <Surface tone="leaf" className="space-y-3 p-4">
-                    <p className="flex items-center gap-2 font-display font-semibold text-mist-50">
-                      <Users className="size-5 text-leaf-300" aria-hidden /> Visível na escola
-                    </p>
-                    <ul className="space-y-1.5 text-sm text-mist-300">
-                      {["Apelido e avatar", "Turma ou função, definida pela escola", "XP e missões concluídas"].map((item) => (
-                        <li key={item} className="flex items-center gap-2">
-                          <Check className="size-4 text-leaf-400" aria-hidden /> {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </Surface>
-                  <Surface className="space-y-2 p-4">
-                    <p className="flex items-center gap-2 font-display font-semibold text-mist-50">
-                      <Lock className="size-5 text-aqua-300" aria-hidden /> Protegido
-                    </p>
-                    <p className="text-sm leading-relaxed text-mist-300">
-                      Nome, sobrenome e data de nascimento são cadastrados pela escola, ficam protegidos no banco de dados e
-                      nunca aparecem no ranking ou na timeline.
-                    </p>
-                  </Surface>
-                  <p className="flex items-start gap-2 text-xs leading-relaxed text-mist-500">
-                    <ShieldCheck className="mt-0.5 size-4 shrink-0" aria-hidden />
-                    Seu XP e seu histórico ficam guardados na plataforma, não neste aparelho.
+                  <Button variant="leaf" size="lg" className="mt-6 w-full" disabled={saving} onClick={finish} icon={<Check className="size-5" aria-hidden />}>
+                    {saving ? "Salvando…" : "Começar"}
+                  </Button>
+                  <p className="mt-3 text-center text-xs leading-relaxed text-mist-500">
+                    Para fazer missões, leia o QR Code de um captador da sua escola.
                   </p>
-                </StepBody>
+                </Question>
               )}
             </motion.section>
           </AnimatePresence>
-        </div>
-
-        <div className="sticky bottom-0 bg-linear-to-t from-abyss-900 via-abyss-900/95 to-transparent pb-5 pt-4">
-          {error && (
-            <p role="alert" className="mb-3 text-center text-sm text-ember-400">
-              {error}
-            </p>
-          )}
-          <Button
-            size="lg"
-            variant="leaf"
-            className="w-full"
-            disabled={!canAdvance[step]}
-            onClick={() => (step === "privacy" ? void finish() : go(1))}
-          >
-            {step === "intro" ? "Começar" : step === "privacy" ? (saving ? "Salvando…" : "Entrar na EcoHorta") : "Continuar"}
-          </Button>
         </div>
       </main>
     </MotionConfig>
   );
 }
 
-function StepBody({ title, subtitle, children }: { title: string; subtitle: string; children: ReactNode }) {
+function Question({ icon, title, hint, children }: { icon: ReactNode; title: string; hint: string; children: ReactNode }) {
   return (
-    <div className="space-y-5 pt-2">
-      <div>
-        <h1 className="font-display text-[1.75rem] font-bold leading-tight text-mist-50">{title}</h1>
-        <p className="mt-1 text-sm text-mist-400">{subtitle}</p>
-      </div>
-      {children}
+    <>
+      <span className="grid size-12 place-items-center rounded-2xl bg-leaf-400/15 text-leaf-300">{icon}</span>
+      <h1 className="mt-4 font-display text-[1.6rem] font-bold leading-tight tracking-tight text-mist-50">{title}</h1>
+      <p className="mt-2 text-sm leading-relaxed text-mist-400">{hint}</p>
+      <div className="mt-7">{children}</div>
+    </>
+  );
+}
+
+/** Lista de escolhas de um toque. Resposta curta, alvo grande, sem botão extra. */
+function Options<T extends string>({
+  options,
+  selected,
+  onSelect,
+  columns = 1,
+}: {
+  options: readonly { value: T; label: string }[];
+  selected: T | null;
+  onSelect: (value: T) => void;
+  columns?: 1 | 2;
+}) {
+  return (
+    <div className={cn("grid gap-2.5", columns === 2 && "grid-cols-2")}>
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          onClick={() => onSelect(option.value)}
+          aria-pressed={selected === option.value}
+          className={cn(
+            "flex h-14 items-center justify-between rounded-control px-5 text-left text-base font-semibold transition-all active:scale-[0.98]",
+            selected === option.value
+              ? "bg-leaf-400 text-abyss-950"
+              : "bg-white/[0.05] text-mist-100 ring-1 ring-inset ring-white/10",
+          )}
+        >
+          {option.label}
+          {selected === option.value && <Check className="size-5" aria-hidden />}
+        </button>
+      ))}
     </div>
   );
 }
