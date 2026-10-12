@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { ArrowRight, Droplets, Gauge, Target, Users } from "lucide-react";
+import { ArrowRight, Droplets, Gauge, Sprout, Target, Users } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { EcoHortaLogo } from "@/components/brand/ecohorta-logo";
@@ -200,6 +200,19 @@ export function WelcomeInvite({ onStart }: { onStart: () => void }) {
             <ArrowRight className="size-5" aria-hidden />
           </Button>
         </div>
+
+        {/*
+          A porta da rede. Quem chega aqui pode ser de outra escola — e sem este
+          convite não teria por onde começar, já que entrar no jogo exige um
+          captador que alguém precisa construir antes.
+        */}
+        <Link
+          href="/parceria"
+          className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-control bg-white/[0.05] text-sm font-semibold text-mist-100 ring-1 ring-inset ring-leaf-400/25"
+        >
+          <Sprout className="size-4 text-leaf-300" aria-hidden />
+          Quero um captador na minha escola
+        </Link>
 
         <p className="mt-4 text-center text-[0.7rem] leading-relaxed text-mist-500">
           EE Prof.ª Clarinda Mendes de Aquino ·{" "}

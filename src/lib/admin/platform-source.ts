@@ -1,4 +1,5 @@
 import type { AdminGrant } from "@/lib/server/admin-grants";
+import type { PartnershipRequest } from "@/lib/server/partnership-service";
 
 /*
  * Fonte de dados da mesa de controle da plataforma.
@@ -26,6 +27,8 @@ export interface PlatformState {
   busy: boolean;
   schools: PlatformSchool[];
   grants: AdminGrant[];
+  /** Candidaturas de escolas que querem construir um captador. */
+  requests: PartnershipRequest[];
 }
 
 export type PlatformResult = { ok: true } | { ok: false; message: string };
@@ -40,9 +43,11 @@ export interface PlatformSource {
   updateSchool(id: string, input: { name: string; city: string; state: string }): Promise<PlatformResult>;
   grant(input: { email: string; schoolId: string }): Promise<PlatformResult>;
   revoke(email: string): Promise<PlatformResult>;
+  /** Aprovar cria a escola e autoriza o e-mail de uma vez. */
+  answerRequest(id: string, decision: "approve" | "decline"): Promise<PlatformResult>;
 }
 
-const INITIAL: PlatformState = { loading: true, error: null, busy: false, schools: [], grants: [] };
+const INITIAL: PlatformState = { loading: true, error: null, busy: false, schools: [], grants: [], requests: [] };
 
 export function createPlatformApiSource({ baseUrl = "" }: { baseUrl?: string } = {}): PlatformSource {
   const listeners = new Set<() => void>();
@@ -70,16 +75,25 @@ export function createPlatformApiSource({ baseUrl = "" }: { baseUrl?: string } =
   }
 
   async function load() {
-    const [escolas, autorizacoes] = await Promise.all([
+    const [escolas, autorizacoes, pedidos] = await Promise.all([
       call<{ schools: PlatformSchool[] }>("/api/admin/schools"),
       call<{ grants: AdminGrant[] }>("/api/admin/grants"),
+      call<{ requests: PartnershipRequest[] }>("/api/admin/partnerships"),
     ]);
     if (!running) return;
-    if (!escolas.ok || !autorizacoes.ok) {
-      commit({ loading: false, error: escolas.ok ? autorizacoes.ok ? null : autorizacoes.message : escolas.message });
+    const falha = [escolas, autorizacoes, pedidos].find((r) => !r.ok);
+    if (falha && !falha.ok) {
+      commit({ loading: false, error: falha.message });
       return;
     }
-    commit({ loading: false, error: null, schools: escolas.body.schools, grants: autorizacoes.body.grants });
+    if (!escolas.ok || !autorizacoes.ok || !pedidos.ok) return;
+    commit({
+      loading: false,
+      error: null,
+      schools: escolas.body.schools,
+      grants: autorizacoes.body.grants,
+      requests: pedidos.body.requests,
+    });
   }
 
   /** Age e relê: a lista volta do servidor, nunca é remendada aqui. */
@@ -117,5 +131,7 @@ export function createPlatformApiSource({ baseUrl = "" }: { baseUrl?: string } =
     updateSchool: (id, input) => mutate(`/api/admin/schools/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
     grant: (input) => mutate("/api/admin/grants", { method: "POST", body: JSON.stringify(input) }),
     revoke: (email) => mutate(`/api/admin/grants/${encodeURIComponent(email)}`, { method: "DELETE" }),
+    answerRequest: (id, decision) =>
+      mutate(`/api/admin/partnerships/${id}`, { method: "PATCH", body: JSON.stringify({ decision }) }),
   };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { AlertTriangle, Building2, Check, Pencil, Plus, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { AlertTriangle, Building2, Check, Inbox, Pencil, Plus, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { ScreenHeader } from "@/components/student/screen-header";
@@ -12,6 +12,7 @@ import { Surface } from "@/components/ui/surface";
 import { useProfile } from "@/hooks/use-profile";
 import { createPlatformApiSource, type PlatformSchool } from "@/lib/admin/platform-source";
 import type { AdminGrant } from "@/lib/server/admin-grants";
+import type { PartnershipRequest } from "@/lib/server/partnership-service";
 import { UF_LIST } from "@/lib/server/school-registry";
 
 /*
@@ -41,7 +42,11 @@ export function PlatformScreen() {
   const { platformAdmin, status } = useProfile();
   const source = useMemo(() => createPlatformApiSource(), []);
   useEffect(() => source.start(), [source]);
-  const { loading, error, busy, schools, grants } = useSyncExternalStore(source.subscribe, source.getState, source.getServerState);
+  const { loading, error, busy, schools, grants, requests } = useSyncExternalStore(
+    source.subscribe,
+    source.getState,
+    source.getServerState,
+  );
 
   if (status === "ready" && !platformAdmin) {
     return (
@@ -73,6 +78,8 @@ export function PlatformScreen() {
           {error}
         </Surface>
       )}
+
+      <RequestsSection requests={loading ? [] : requests} salvando={busy} onAnswer={source.answerRequest} />
 
       <SchoolsSection
         schools={loading ? null : schools}
@@ -184,6 +191,107 @@ function SchoolsSection({
             </li>
           ))}
         </ul>
+      )}
+    </section>
+  );
+}
+
+/*
+ * Pedidos de parceria — a fila de trabalho desta tela.
+ *
+ * Vem antes das escolas de propósito: é a única coisa aqui em que alguém está
+ * esperando resposta. Aprovar cria a escola e autoriza o e-mail de uma vez,
+ * porque fazer em dois passos abriria a chance de autorizar alguém para uma
+ * escola que ninguém cadastrou.
+ */
+function RequestsSection({
+  requests,
+  salvando,
+  onAnswer,
+}: {
+  requests: PartnershipRequest[];
+  salvando: boolean;
+  onAnswer: (id: string, decision: "approve" | "decline") => Promise<{ ok: boolean }>;
+}) {
+  const pendentes = requests.filter((r) => r.status === "pending");
+  const respondidos = requests.filter((r) => r.status !== "pending");
+  if (requests.length === 0) return null;
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center gap-2">
+        <h2 className="eyebrow">Pedidos de parceria</h2>
+        {pendentes.length > 0 && <Chip tone="sun">{pendentes.length} aguardando</Chip>}
+      </div>
+
+      {pendentes.map((pedido) => (
+        <Surface key={pedido.id} tone="leaf" className="space-y-3 p-4">
+          <div className="flex items-start gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-leaf-400/15 text-leaf-300">
+              <Inbox className="size-5" aria-hidden />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate font-display font-semibold text-mist-50">{pedido.schoolName}</p>
+              <p className="truncate text-xs text-mist-300">
+                {pedido.city} · {pedido.state}
+              </p>
+              <p className="mt-1.5 truncate text-xs text-mist-400">
+                {pedido.name}
+                {pedido.jobTitle ? ` · ${pedido.jobTitle}` : ""}
+              </p>
+              <p className="truncate text-xs text-mist-500">{pedido.email}</p>
+            </div>
+          </div>
+
+          {pedido.message && (
+            <p className="rounded-2xl bg-abyss-950/40 px-3.5 py-2.5 text-xs leading-relaxed text-mist-300">{pedido.message}</p>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="flex-1"
+              onClick={() => void onAnswer(pedido.id, "decline")}
+              disabled={salvando}
+            >
+              Recusar
+            </Button>
+            <Button
+              variant="leaf"
+              size="sm"
+              className="flex-1"
+              onClick={() => void onAnswer(pedido.id, "approve")}
+              disabled={salvando}
+              icon={<Check className="size-4" aria-hidden />}
+            >
+              Aprovar
+            </Button>
+          </div>
+          <p className="text-[0.7rem] leading-relaxed text-mist-400">
+            Aprovar cria a escola com município e estado e autoriza este e-mail a administrá-la.
+          </p>
+        </Surface>
+      ))}
+
+      {pendentes.length === 0 && (
+        <Surface className="p-5 text-sm leading-relaxed text-mist-300">Nenhum pedido aguardando resposta.</Surface>
+      )}
+
+      {respondidos.length > 0 && (
+        <details className="rounded-card bg-white/[0.03] px-4 py-3">
+          <summary className="cursor-pointer text-sm font-semibold text-mist-400">
+            Pedidos respondidos ({respondidos.length})
+          </summary>
+          <ul className="mt-3 space-y-2">
+            {respondidos.map((pedido) => (
+              <li key={pedido.id} className="text-xs leading-relaxed text-mist-500">
+                <span className="text-mist-300">{pedido.schoolName}</span> · {pedido.email} ·{" "}
+                {pedido.status === "approved" ? "aprovado" : "recusado"}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </section>
   );
