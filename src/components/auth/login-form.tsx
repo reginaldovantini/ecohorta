@@ -37,9 +37,27 @@ const inputClass =
  */
 const SEEN_KEY = "ecohorta:convite-visto";
 
+/*
+ * O aplicativo instalado tem a própria memória de convite.
+ *
+ * Quem visitou o site antes de instalar já tocou em "Começar" uma vez. Se a
+ * memória fosse uma só, o primeiro toque no ícone recém-instalado cairia direto
+ * na tela de login — e a abertura do aplicativo, que é o momento em que a
+ * pessoa mostra a EcoHorta para alguem, seria um formulário.
+ *
+ * Com chaves separadas, o app instalado dá as boas-vindas na primeira vez que é
+ * aberto pelo ícone, e só na primeira.
+ */
+function chaveDoConvite(): string {
+  const instalado =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  return instalado ? `${SEEN_KEY}-app` : SEEN_KEY;
+}
+
 function conviteJaVisto(): boolean {
   try {
-    return window.localStorage.getItem(SEEN_KEY) === "1";
+    return window.localStorage.getItem(chaveDoConvite()) === "1";
   } catch {
     return false;
   }
@@ -112,7 +130,7 @@ export function LoginForm() {
       <WelcomeInvite
         onStart={() => {
           try {
-            window.localStorage.setItem(SEEN_KEY, "1");
+            window.localStorage.setItem(chaveDoConvite(), "1");
           } catch {
             // Navegador sem armazenamento: o convite aparece de novo, e tudo bem.
           }
