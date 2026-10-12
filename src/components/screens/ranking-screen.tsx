@@ -6,6 +6,8 @@ import { ScreenHeader } from "@/components/student/screen-header";
 import { AnimatedNumber } from "@/components/ui/animated-number";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCollectorCodes, useConnectionState } from "@/components/collector/collector-source";
+import { NoCollectors, semCaptadores } from "@/components/collector/no-collectors";
 import { Surface } from "@/components/ui/surface";
 import { Avatar } from "@/components/users/avatar";
 import { useProfile } from "@/hooks/use-profile";
@@ -22,6 +24,10 @@ import { formatDecimal, formatPercent } from "@/lib/utils/format";
 export function RankingScreen() {
   const { collectorCode, snapshot } = useMissionBoard();
   const profile = useProfile();
+  const codes = useCollectorCodes();
+  const connection = useConnectionState();
+
+  if (semCaptadores(connection, codes.length)) return <NoCollectors />;
 
   if (!collectorCode || !snapshot) {
     return (

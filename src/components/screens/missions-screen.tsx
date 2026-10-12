@@ -13,6 +13,8 @@ import { CollectorSwitcher } from "@/components/collector/collector-switcher";
 import { ScreenHeader } from "@/components/student/screen-header";
 import { Chip } from "@/components/ui/chip";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useCollectorCodes, useConnectionState } from "@/components/collector/collector-source";
+import { NoCollectors, semCaptadores } from "@/components/collector/no-collectors";
 import { Surface } from "@/components/ui/surface";
 import { useNow } from "@/hooks/use-now";
 import { useProfile } from "@/hooks/use-profile";
@@ -40,8 +42,12 @@ export function MissionsScreen() {
   const { collectorCode, snapshot, items, availableCount } = useMissionBoard();
   const { start } = useMissionRunner();
   const profile = useProfile();
+  const codes = useCollectorCodes();
+  const connection = useConnectionState();
   const now = useNow(30_000);
   const [tab, setTab] = useState<Tab>("available");
+
+  if (semCaptadores(connection, codes.length)) return <NoCollectors />;
 
   if (!collectorCode || !snapshot) {
     return (

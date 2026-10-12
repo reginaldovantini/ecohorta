@@ -2,7 +2,7 @@
 
 import { Cable, Hammer, Microscope, QrCode, Ruler } from "lucide-react";
 import Link from "next/link";
-import { useCollectorCodes, useCollectorSnapshot } from "@/components/collector/collector-source";
+import { useCollectorCodes, useCollectorSnapshot, useConnectionState } from "@/components/collector/collector-source";
 import { ScreenHeader } from "@/components/student/screen-header";
 import { Chip } from "@/components/ui/chip";
 import { OriginBadge } from "@/components/ui/real-badge";
@@ -18,6 +18,7 @@ import { StickerLink } from "./collector-sticker-card";
 export function CollectorsAdminScreen() {
   const { status, role, schoolName } = useProfile();
   const codes = useCollectorCodes();
+  const connection = useConnectionState();
 
   if (status === "ready" && role !== "teacher" && role !== "admin") return <RestrictedNotice />;
 
@@ -25,9 +26,21 @@ export function CollectorsAdminScreen() {
     <div className="space-y-5 pt-6">
       <ScreenHeader eyebrow="Administração" title="Captadores" subtitle={schoolName ?? "Carregando…"} isSimulation={false} />
       {codes.length === 0 ? (
-        <div className="space-y-3" aria-busy="true" aria-label="Carregando">
-          <Skeleton className="h-24 w-full rounded-card" />
-        </div>
+        connection === "online" ? (
+          // A API respondeu e não há captador: quem administra precisa cadastrar
+          // o primeiro, e não ficar olhando um esqueleto pulsar.
+          <Surface tone="leaf" className="space-y-2 p-5">
+            <p className="font-display font-semibold text-mist-50">Nenhum captador cadastrado</p>
+            <p className="text-sm leading-relaxed text-mist-300">
+              Cadastre o primeiro captador desta escola para começar. Ele nasce como protótipo e assume o código da
+              escola quando a calibração for aceita.
+            </p>
+          </Surface>
+        ) : (
+          <div className="space-y-3" aria-busy="true" aria-label="Carregando">
+            <Skeleton className="h-24 w-full rounded-card" />
+          </div>
+        )
       ) : (
         <ul className="space-y-3">
           {codes.map((code) => (

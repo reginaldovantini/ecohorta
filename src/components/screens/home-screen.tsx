@@ -5,6 +5,7 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { CollectorAlertBanner } from "@/components/collector/collector-alert";
 import { CollectorHero } from "@/components/collector/collector-hero";
+import { useCollectorCodes, useConnectionState } from "@/components/collector/collector-source";
 import { CollectorOfflineCard } from "@/components/collector/collector-offline-card";
 import { WaterBalance } from "@/components/collector/water-balance";
 import { MyImpactCard } from "@/components/gamification/my-impact-card";
@@ -16,6 +17,7 @@ import { OriginBadge } from "@/components/ui/real-badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar } from "@/components/users/avatar";
 import { useProfile } from "@/hooks/use-profile";
+import { NoCollectors, semCaptadores } from "@/components/collector/no-collectors";
 import { getCollectorAlert } from "@/lib/collector/alerts";
 import { fillRatio } from "@/lib/collector/level-state";
 import { getLevelProgress } from "@/lib/gamification/levels";
@@ -33,7 +35,12 @@ export function HomeScreen() {
   const { collectorCode, snapshot, items, availableCount } = useMissionBoard();
   const { start } = useMissionRunner();
   const profile = useProfile();
+  const codes = useCollectorCodes();
+  const connection = useConnectionState();
 
+  // Sem captador NENHUM, o esqueleto nunca sairia: a API já respondeu, e a
+  // resposta foi "não há". Quem acabou de entrar precisa saber o que fazer.
+  if (semCaptadores(connection, codes.length)) return <NoCollectors />;
   if (!collectorCode || !snapshot) return <HomeSkeleton />;
 
   const { identity } = profile;

@@ -2,7 +2,8 @@
 
 import { CollectorLiveCard } from "@/components/collector/collector-live-card";
 import { CollectorOfflineCard } from "@/components/collector/collector-offline-card";
-import { usePrimaryCollectorCode, useCollectorSnapshot } from "@/components/collector/collector-source";
+import { usePrimaryCollectorCode, useCollectorCodes, useCollectorSnapshot, useConnectionState } from "@/components/collector/collector-source";
+import { NoCollectors, semCaptadores } from "@/components/collector/no-collectors";
 import { WaterBalance } from "@/components/collector/water-balance";
 import { CollectorSwitcher } from "@/components/collector/collector-switcher";
 import { ScreenHeader } from "@/components/student/screen-header";
@@ -24,7 +25,11 @@ const VALVE_KIND: Record<ValveKind, string> = {
 export function WaterScreen() {
   const collectorCode = usePrimaryCollectorCode();
   const snapshot = useCollectorSnapshot(collectorCode);
+  const codes = useCollectorCodes();
+  const connection = useConnectionState();
   const now = useNow(1000);
+
+  if (semCaptadores(connection, codes.length)) return <NoCollectors />;
 
   if (!snapshot) {
     return (
