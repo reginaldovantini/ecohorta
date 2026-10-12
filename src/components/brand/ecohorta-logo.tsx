@@ -1,67 +1,81 @@
+import { useId } from "react";
 import { cn } from "@/lib/utils/cn";
 
 /*
- * A MARCA DA ECOHORTA — a mesma que está na caixa eletrônica do captador.
+ * A MARCA DA ECOHORTA — gota e folha, lado a lado.
  *
- * Três folhas num ramo, cada uma nascendo de um ponto diferente do talo, com a
- * nervura central clara. A primeira versão que desenhei era uma folha só,
- * dividida ao meio, e estava errada: é o ramo que identifica a marca.
+ * A gota vem do ícone do aplicativo: mesma silhueta, mesmo azul, mesmo brilho.
+ * A folha vem do captador. Juntas dizem a tese do projeto numa imagem só —
+ * água que vira horta — e é por isso que nenhuma das duas aparece sozinha.
  *
  * Desenhada em vetor, e não colada como imagem, por um motivo prático: o
  * arquivo que existe do logotipo tem 152 × 216 px, o que basta para um selo de
  * 50 px e borra em qualquer coisa maior. Em vetor ela fica nítida do favicon de
  * 16 px à projeção da banca, sem precisar de três arquivos.
- *
- * Esta é a versão para FUNDO ESCURO: o verde abre um tom para não sumir, e o
- * nome fica claro. No impresso, sobre branco, valem o verde-escuro original e o
- * nome em verde — é a mesma marca, vestida para o lugar onde aparece.
  */
 
-/** Uma folha: base e ponta afinadas, barriga à direita, nervura por dentro. */
-const FOLHA = "M0 0 C 28 -12, 33 -34, 14 -58 C -4 -40, -9 -18, 0 0 Z";
-const NERVURA = "M2 -5 C 8 -23, 12 -41, 13 -53";
+export function EcoHortaMark({ className }: { className?: string }) {
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const id = { gota: `g${uid}`, folha: `f${uid}`, brilho: `b${uid}` };
 
-/** Posição de cada folha ao longo do talo: é o que abre os vãos entre elas. */
-const RAMO = [
-  { x: 4, y: -34, giro: 26, escala: 3.3 },
-  { x: 1, y: -8, giro: -32, escala: 2.5 },
-  { x: -3, y: 10, giro: -72, escala: 1.95 },
-] as const;
-
-interface LeafProps {
-  className?: string;
-  /** Verde das folhas. O padrão é o tom para fundo escuro. */
-  tone?: string;
-}
-
-export function EcoHortaLeaf({ className, tone = "#2f9e44" }: LeafProps) {
   return (
-    <svg viewBox="0 0 512 512" className={className} aria-hidden>
-      <g transform="translate(240 372)" fill={tone}>
-        <path d="M6 -46 C 2 -16, 0 6, -8 40" stroke={tone} strokeWidth="12" strokeLinecap="round" fill="none" />
-        {RAMO.map(({ x, y, giro, escala }) => (
-          <g key={giro} transform={`translate(${x} ${y}) rotate(${giro}) scale(${escala})`}>
-            <path d={FOLHA} />
-            <path d={NERVURA} stroke="#ffffff" strokeOpacity="0.92" strokeWidth="2.4" fill="none" strokeLinecap="round" />
-          </g>
-        ))}
+    <svg viewBox="0 0 136 116" className={className} aria-hidden>
+      <defs>
+        <linearGradient id={id.gota} x1="0.2" y1="0" x2="0.8" y2="1">
+          <stop offset="0" stopColor="#9be6fa" />
+          <stop offset="0.55" stopColor="#2ec5f0" />
+          <stop offset="1" stopColor="#0a82bd" />
+        </linearGradient>
+        <linearGradient id={id.folha} x1="0.15" y1="0" x2="0.85" y2="1">
+          <stop offset="0" stopColor="#6ee88c" />
+          <stop offset="1" stopColor="#2b8a3e" />
+        </linearGradient>
+      </defs>
+
+      {/* Folha, atrás e à direita. */}
+      <g transform="translate(66 106) scale(1.12)" fill={`url(#${id.folha})`}>
+        <path d="M0 0 C 30 -14, 48 -46, 36 -92 C 8 -68, -8 -32, 0 0 Z" />
+        <path d="M3 -6 C 14 -34, 26 -62, 34 -85" stroke="#ffffff" strokeOpacity="0.82" strokeWidth="4" fill="none" strokeLinecap="round" />
+        {/* Nervuras laterais, discretas. */}
+        <g stroke="#ffffff" strokeOpacity="0.4" strokeWidth="2.6" fill="none" strokeLinecap="round">
+          <path d="M9 -22 C 16 -26, 22 -32, 26 -38" />
+          <path d="M17 -44 C 23 -48, 28 -54, 31 -60" />
+        </g>
       </g>
+
+      {/* Gota, à frente e à esquerda — a mesma silhueta do ícone. */}
+      <path
+        d="M36 10 C 36 10, 6 54, 6 74 A 30 30 0 0 0 66 74 C 66 54, 36 10, 36 10 Z"
+        fill={`url(#${id.gota})`}
+      />
+      <path
+        d="M19 64 C 15 73, 14 80, 16 87"
+        fill="none"
+        stroke="#ffffff"
+        strokeOpacity="0.6"
+        strokeWidth="5"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }
 
 /** Assinatura da marca, como está impressa no captador. */
-export const ECOHORTA_SLOGAN = "Água inteligente para um futuro sustentável";
+export const ECOHORTA_SLOGAN = ["Água inteligente", "para um futuro sustentável"] as const;
 
-/** Marca completa: ramo, nome e assinatura. */
+/** Marca completa: símbolo, nome e assinatura. */
 export function EcoHortaLogo({ className }: { className?: string }) {
   return (
     <div className={cn("flex items-center gap-3", className)}>
-      <EcoHortaLeaf className="size-16 shrink-0 drop-shadow-[0_3px_12px_rgb(64_192_90/0.35)]" />
+      <EcoHortaMark className="h-14 w-auto shrink-0 drop-shadow-[0_3px_14px_rgb(46_197_240/0.3)]" />
       <div className="min-w-0">
-        <p className="font-display text-[1.6rem] font-bold leading-none tracking-tight text-mist-50">EcoHorta</p>
-        <p className="mt-2 text-[0.6rem] font-semibold uppercase leading-[1.5] tracking-[0.1em] text-leaf-300/90">
-          {ECOHORTA_SLOGAN}
+        <p className="font-display text-[1.7rem] font-bold leading-none tracking-tight text-mist-50">
+          Eco<span className="text-leaf-300">Horta</span>
+        </p>
+        <p className="mt-1.5 text-[0.58rem] font-semibold uppercase leading-[1.5] tracking-[0.14em] text-mist-400">
+          {ECOHORTA_SLOGAN[0]}
+          <br />
+          {ECOHORTA_SLOGAN[1]}
         </p>
       </div>
     </div>
