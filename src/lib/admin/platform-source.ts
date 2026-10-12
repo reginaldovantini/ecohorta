@@ -37,6 +37,7 @@ export interface PlatformSource {
   /** Carrega escolas e autorizações. Devolve a função de parada. */
   start(): () => void;
   createSchool(input: { name: string; city: string; state: string }): Promise<PlatformResult>;
+  updateSchool(id: string, input: { name: string; city: string; state: string }): Promise<PlatformResult>;
   grant(input: { email: string; schoolId: string }): Promise<PlatformResult>;
   revoke(email: string): Promise<PlatformResult>;
 }
@@ -113,6 +114,7 @@ export function createPlatformApiSource({ baseUrl = "" }: { baseUrl?: string } =
     },
 
     createSchool: (input) => mutate("/api/admin/schools", { method: "POST", body: JSON.stringify(input) }),
+    updateSchool: (id, input) => mutate(`/api/admin/schools/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
     grant: (input) => mutate("/api/admin/grants", { method: "POST", body: JSON.stringify(input) }),
     revoke: (email) => mutate(`/api/admin/grants/${encodeURIComponent(email)}`, { method: "DELETE" }),
   };

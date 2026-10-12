@@ -75,3 +75,27 @@ export async function listSchools(tx: Queryable): Promise<(School & { activeColl
     prototypes,
   }));
 }
+
+/**
+ * Corrige os dados de uma escola.
+ *
+ * Existe porque escola cadastrada antes desta tela — ou digitada com pressa —
+ * fica sem município, e sem município o indicador de replicabilidade não fecha.
+ * O nome também muda: escola trocar de nome é coisa que acontece, e forçar a
+ * criação de uma segunda faria os captadores ficarem na antiga.
+ */
+export async function updateSchool(tx: Queryable, id: string, input: SchoolInput): Promise<School> {
+  const name = input.name.trim();
+  const city = input.city.trim();
+  if (name.length < 3) throw new Error("Informe o nome da escola.");
+  if (city.length < 2) throw new Error("Informe o município da escola.");
+  if (!isUf(input.state)) throw new Error("Informe o estado (sigla de duas letras).");
+
+  const { rows } = await tx.query<School>(
+    "update public.schools set name = $2, city = $3, state = $4 where id = $1 returning id, name, city, state",
+    [id, name, city, input.state],
+  );
+  const escola = rows[0];
+  if (!escola) throw new Error("Escola não encontrada.");
+  return escola;
+}

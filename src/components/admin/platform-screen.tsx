@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { AlertTriangle, Building2, Check, Plus, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { AlertTriangle, Building2, Check, Pencil, Plus, ShieldCheck, Trash2, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { ScreenHeader } from "@/components/student/screen-header";
@@ -26,8 +26,16 @@ import { UF_LIST } from "@/lib/server/school-registry";
  * por isso o formulário de autorização nem aparece enquanto não houver uma.
  */
 
-const inputClass =
-  "h-12 w-full rounded-control bg-white/[0.05] px-4 text-base text-mist-50 outline-none ring-1 ring-inset ring-white/10 transition-shadow placeholder:text-mist-500 focus:ring-2 focus:ring-aqua-400";
+/*
+ * A largura fica FORA da classe base de propósito.
+ *
+ * Com `w-full` embutido, o seletor de UF e o campo de município brigavam pela
+ * mesma linha e o município sumia — duas classes de largura na mesma string não
+ * se resolvem pela ordem em que foram escritas.
+ */
+const inputBase =
+  "h-12 rounded-control bg-white/[0.05] px-4 text-base text-mist-50 outline-none ring-1 ring-inset ring-white/10 transition-shadow placeholder:text-mist-500 focus:ring-2 focus:ring-aqua-400";
+const inputClass = `${inputBase} w-full`;
 
 export function PlatformScreen() {
   const { platformAdmin, status } = useProfile();
@@ -66,7 +74,12 @@ export function PlatformScreen() {
         </Surface>
       )}
 
-      <SchoolsSection schools={loading ? null : schools} salvando={busy} onCreate={source.createSchool} />
+      <SchoolsSection
+        schools={loading ? null : schools}
+        salvando={busy}
+        onCreate={source.createSchool}
+        onUpdate={source.updateSchool}
+      />
 
       <GrantsSection
         grants={loading ? null : grants}
@@ -83,10 +96,12 @@ function SchoolsSection({
   schools,
   salvando,
   onCreate,
+  onUpdate,
 }: {
   schools: PlatformSchool[] | null;
   salvando: boolean;
   onCreate: (input: { name: string; city: string; state: string }) => Promise<{ ok: boolean }>;
+  onUpdate: (id: string, input: { name: string; city: string; state: string }) => Promise<{ ok: boolean }>;
 }) {
   const [aberto, setAberto] = useState(false);
   const [name, setName] = useState("");
@@ -125,9 +140,14 @@ function SchoolsSection({
           <Surface className="space-y-3 p-4">
             <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da escola" />
             <div className="flex gap-2">
-              <input className={inputClass} value={city} onChange={(e) => setCity(e.target.value)} placeholder="Município" />
+              <input
+                className={`${inputBase} min-w-0 flex-1`}
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="Município"
+              />
               <select
-                className={`${inputClass} w-24 shrink-0`}
+                className={`${inputBase} w-[5.5rem] shrink-0`}
                 value={state}
                 onChange={(e) => setState(e.target.value)}
                 aria-label="Estado"
@@ -160,26 +180,101 @@ function SchoolsSection({
         <ul className="space-y-2.5">
           {schools.map((school) => (
             <li key={school.id}>
-              <Surface className="flex items-center gap-3 p-4">
-                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-leaf-400/12 text-leaf-300">
-                  <Building2 className="size-5" aria-hidden />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-display font-semibold text-mist-50">{school.name}</p>
-                  <p className="truncate text-xs text-mist-400">
-                    {school.city && school.state ? `${school.city} · ${school.state}` : "Sem município informado"}
-                  </p>
-                </div>
-                <div className="flex shrink-0 gap-1.5">
-                  {school.activeCollectors > 0 && <Chip tone="leaf">{school.activeCollectors} na rede</Chip>}
-                  {school.prototypes > 0 && <Chip tone="sun">{school.prototypes} em obra</Chip>}
-                </div>
-              </Surface>
+              <SchoolRow school={school} salvando={salvando} onSave={(input) => onUpdate(school.id, input)} />
             </li>
           ))}
         </ul>
       )}
     </section>
+  );
+}
+
+/*
+ * Uma escola da lista — e o formulário dela, no mesmo lugar.
+ *
+ * Escola cadastrada antes desta tela chegou sem município, e sem município o
+ * indicador de replicabilidade não fecha. Em vez de uma tela separada de
+ * edição, a própria linha abre: quem percebe o dado faltando está olhando
+ * exatamente para ele.
+ */
+function SchoolRow({
+  school,
+  salvando,
+  onSave,
+}: {
+  school: PlatformSchool;
+  salvando: boolean;
+  onSave: (input: { name: string; city: string; state: string }) => Promise<{ ok: boolean }>;
+}) {
+  const [editando, setEditando] = useState(false);
+  const [name, setName] = useState(school.name);
+  const [city, setCity] = useState(school.city ?? "");
+  const [state, setState] = useState(school.state ?? "");
+  const incompleta = !school.city || !school.state;
+  const valido = name.trim().length >= 3 && city.trim().length >= 2 && state.length === 2;
+
+  const salvar = async () => {
+    if (!valido) return;
+    const { ok } = await onSave({ name: name.trim(), city: city.trim(), state });
+    if (ok) setEditando(false);
+  };
+
+  if (editando) {
+    return (
+      <Surface className="space-y-3 p-4">
+        <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da escola" />
+        <div className="flex gap-2">
+          <input
+            className={`${inputBase} min-w-0 flex-1`}
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+            placeholder="Município"
+          />
+          <select
+            className={`${inputBase} w-[5.5rem] shrink-0`}
+            value={state}
+            onChange={(e) => setState(e.target.value)}
+            aria-label="Estado"
+          >
+            <option value="">UF</option>
+            {UF_LIST.map((uf) => (
+              <option key={uf} value={uf}>
+                {uf}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="secondary" className="flex-1" onClick={() => setEditando(false)} disabled={salvando}>
+            Cancelar
+          </Button>
+          <Button variant="leaf" className="flex-1" onClick={() => void salvar()} disabled={!valido || salvando}>
+            Salvar
+          </Button>
+        </div>
+      </Surface>
+    );
+  }
+
+  return (
+    <button type="button" onClick={() => setEditando(true)} className="block w-full text-left active:scale-[0.99] transition-transform">
+      <Surface className="flex items-center gap-3 p-4">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-leaf-400/12 text-leaf-300">
+          <Building2 className="size-5" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-display font-semibold text-mist-50">{school.name}</p>
+          <p className={incompleta ? "truncate text-xs text-sun-300" : "truncate text-xs text-mist-400"}>
+            {incompleta ? "Toque para informar o município" : `${school.city} · ${school.state}`}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          {school.activeCollectors > 0 && <Chip tone="leaf">{school.activeCollectors} na rede</Chip>}
+          {school.prototypes > 0 && <Chip tone="sun">{school.prototypes} em obra</Chip>}
+          <Pencil className="size-4 text-mist-500" aria-hidden />
+        </div>
+      </Surface>
+    </button>
   );
 }
 
