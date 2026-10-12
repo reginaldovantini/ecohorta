@@ -2,6 +2,7 @@
 
 import { MotionConfig } from "motion/react";
 import { GraduationCap, ShieldCheck, Users } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
@@ -165,6 +166,23 @@ export function LoginForm() {
               Estudantes não usam e-mail pessoal. Nome e data de nascimento ficam protegidos e nunca aparecem no ranking.
             </p>
           </Surface>
+
+          {/*
+            A política de privacidade precisa estar alcançável ANTES de entrar: quem
+            mais precisa dela é o responsável decidindo se autoriza o filho — e é
+            daqui que o Google verifica o app.
+          */}
+          <p className="mt-6 text-center text-xs text-mist-500">
+            <Link href="/privacidade" className="font-semibold text-mist-400 underline-offset-2 hover:text-mist-100 hover:underline">
+              Privacidade
+            </Link>
+            <span className="mx-2 text-mist-600" aria-hidden>
+              ·
+            </span>
+            <Link href="/termos" className="font-semibold text-mist-400 underline-offset-2 hover:text-mist-100 hover:underline">
+              Termos de uso
+            </Link>
+          </p>
         </div>
       </main>
     </MotionConfig>

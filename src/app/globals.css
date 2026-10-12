@@ -202,6 +202,100 @@
   color: var(--color-mist-400);
 }
 
+/*
+ * Texto corrido longo — política de privacidade e termos de uso.
+ *
+ * São as únicas páginas do aplicativo feitas para serem LIDAS de cabo a rabo,
+ * muitas vezes por um responsável decidindo se autoriza o filho. Linha mais
+ * larga, respiro entre parágrafos e hierarquia clara valem mais aqui do que
+ * qualquer efeito.
+ */
+.legal {
+  color: var(--color-mist-300);
+  font-size: 0.95rem;
+  line-height: 1.75;
+}
+
+.legal h1 {
+  font-family: var(--font-space-grotesk), sans-serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--color-mist-50);
+}
+
+.legal h2 {
+  font-family: var(--font-space-grotesk), sans-serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--color-mist-50);
+  margin-top: 2.25rem;
+  margin-bottom: 0.65rem;
+}
+
+.legal h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-mist-100);
+  margin-top: 1.5rem;
+  margin-bottom: 0.4rem;
+}
+
+.legal p,
+.legal ul,
+.legal ol {
+  margin-bottom: 0.95rem;
+}
+
+.legal ul,
+.legal ol {
+  padding-left: 1.3rem;
+}
+
+.legal ul {
+  list-style: disc;
+}
+
+.legal ol {
+  list-style: decimal;
+}
+
+.legal li {
+  margin-bottom: 0.45rem;
+}
+
+.legal li::marker {
+  color: var(--color-leaf-400);
+}
+
+.legal strong {
+  color: var(--color-mist-100);
+  font-weight: 600;
+}
+
+.legal a {
+  color: var(--color-aqua-300);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Abertura: diz em duas linhas o que a página inteira detalha. */
+.legal .lead {
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: var(--color-mist-100);
+  margin-top: 0.75rem;
+}
+
+/* Data da última revisão. */
+.legal .meta {
+  font-size: 0.8rem;
+  color: var(--color-mist-500);
+  margin-bottom: 0.5rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
