@@ -32,6 +32,7 @@ import { ensureDevice, generateSecret } from "./provisioning";
 
 interface SetupRow {
   id: string;
+  school_id: string;
   code: string;
   proto_code: string | null;
   name: string;
@@ -105,7 +106,7 @@ export function setupFactsFrom(row: SetupRow, collector: CollectorRow): SetupFac
 export function createCollectorSetupService({ db }: { db: Database }) {
   async function load(tx: Queryable, code: string) {
     const setup = await tx.query<SetupRow>(
-      `select c.id, c.code, c.proto_code, c.name, c.location, c.activated_at, c.hotspot_ssid, c.hotspot_password,
+      `select c.id, c.school_id, c.code, c.proto_code, c.name, c.location, c.activated_at, c.hotspot_ssid, c.hotspot_password,
               c.connectivity, s.name as school_name, s.city as school_city, s.state as school_state,
               (select array_agg(m.step::text) from public.collector_setup_marks m where m.collector_id = c.id) as marks
        from public.collectors c join public.schools s on s.id = c.school_id
@@ -140,10 +141,14 @@ export function createCollectorSetupService({ db }: { db: Database }) {
   }
 
   /**
-   * Quem conduz a construção: a administração, ou quem digitou o código impresso
-   * dentro da caixa eletrônica — `isStewardOf` já inclui a administração.
+   * Quem conduz a construção: quem administra a ESCOLA do captador, ou quem
+   * digitou o código impresso dentro da caixa eletrônica dele.
+   *
+   * A escola entra na conta de propósito: sem ela, quem foi autorizado a
+   * administrar uma escola alcançaria o tubo de qualquer outra.
    */
-  const mayConduct = (actor: Actor, collectorId: string) => isStewardOf(actor, collectorId);
+  const mayConduct = (actor: Actor, collectorId: string, schoolId: string) =>
+    isStewardOf(actor, collectorId, schoolId);
 
   return {
     /** A tela inteira: caminho, etapa atual, material e o que fazer agora. */
@@ -151,7 +156,7 @@ export function createCollectorSetupService({ db }: { db: Database }) {
       return db.transaction(async (tx) => {
         const found = await load(tx, code);
         if (!found) return fail(404, "Captador não encontrado.");
-        if (!mayConduct(actor, found.row.id)) return fail(403, "Esta área é de quem conduz a construção do captador.");
+        if (!mayConduct(actor, found.row.id, found.row.school_id)) return fail(403, "Esta área é de quem conduz a construção do captador.");
         return { ok: true, value: view(found.row, found.collector) };
       });
     },
@@ -167,7 +172,7 @@ export function createCollectorSetupService({ db }: { db: Database }) {
       return db.transaction(async (tx) => {
         const found = await load(tx, code);
         if (!found) return fail(404, "Captador não encontrado.");
-        if (!mayConduct(actor, found.row.id)) return fail(403, "Esta área é de quem conduz a construção do captador.");
+        if (!mayConduct(actor, found.row.id, found.row.school_id)) return fail(403, "Esta área é de quem conduz a construção do captador.");
 
         if (done) {
           await tx.query(
@@ -199,7 +204,7 @@ export function createCollectorSetupService({ db }: { db: Database }) {
     ): Promise<ServiceResult<FirmwarePackage>> {
       const found = await db.transaction(async (tx) => load(tx, code));
       if (!found) return fail(404, "Captador não encontrado.");
-      if (!mayConduct(actor, found.row.id)) return fail(403, "Esta área é de quem conduz a construção do captador.");
+      if (!mayConduct(actor, found.row.id, found.row.school_id)) return fail(403, "Esta área é de quem conduz a construção do captador.");
       const { row, collector } = found;
       if (!row.hotspot_ssid || !row.hotspot_password) return fail(409, "Este captador foi cadastrado antes da rede de configuração.");
 

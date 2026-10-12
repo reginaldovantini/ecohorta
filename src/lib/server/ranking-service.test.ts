@@ -260,7 +260,8 @@ describe("o captador de teste não contamina nada", () => {
   it("aparece para a administração, que é quem o usa para testar", async () => {
     await db.query("update collectors set prefix = 'SIM', code = 'SIM-001' where id = $1", [IDS.collector]);
     const service = createCollectorService({ db, pepper: TEST_PEPPER });
-    const admin = { ...student, role: "admin" as const };
+    // Administrar vem da autorização por e-mail — marcar "admin" no perfil não basta.
+    const admin = { ...student, adminOfSchool: IDS.school };
     expect((await service.listCollectors(admin)).map((c) => c.code)).toEqual(["SIM-001"]);
   });
 });

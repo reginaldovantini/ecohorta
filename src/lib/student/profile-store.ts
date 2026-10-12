@@ -17,6 +17,14 @@ export interface ProfileState {
   schoolName: string | null;
   /** Nulo até o primeiro acesso (apelido e avatar ainda não escolhidos). */
   identity: DisplayIdentity | null;
+  /**
+   * A área administrativa aparece? Quem decide é o servidor.
+   *
+   * Isto não é segurança — as rotas recusam por conta própria —, é para não
+   * oferecer a quem não pode uma porta que vai bater na cara.
+   */
+  canAdminister: boolean;
+  platformAdmin: boolean;
   xp: number;
   history: readonly ExecutionRecord[];
 }
@@ -26,13 +34,25 @@ interface MeBody {
   role: UserRole;
   schoolName: string;
   identity: DisplayIdentity | null;
+  canAdminister?: boolean;
+  platformAdmin?: boolean;
   xp: number;
   history: ExecutionRecord[];
 }
 
 type ActionResult = { ok: true } | { ok: false; message: string };
 
-const INITIAL: ProfileState = { status: "loading", profileId: null, role: null, schoolName: null, identity: null, xp: 0, history: [] };
+const INITIAL: ProfileState = {
+  status: "loading",
+  profileId: null,
+  role: null,
+  schoolName: null,
+  identity: null,
+  canAdminister: false,
+  platformAdmin: false,
+  xp: 0,
+  history: [],
+};
 const SIGNED_OUT: ProfileState = { ...INITIAL, status: "signed-out" };
 
 let state = INITIAL;
@@ -50,6 +70,8 @@ const fromBody = (body: MeBody): ProfileState => ({
   role: body.role,
   schoolName: body.schoolName,
   identity: body.identity,
+  canAdminister: body.canAdminister === true,
+  platformAdmin: body.platformAdmin === true,
   xp: body.xp,
   history: body.history,
 });

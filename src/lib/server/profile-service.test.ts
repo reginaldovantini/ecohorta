@@ -274,6 +274,11 @@ describe("vínculo criado pela administração", () => {
       [ADMIN, schoolId, platform],
     );
     if (schoolId) await db.query("insert into school_members (profile_id, school_id) values ($1, $2)", [ADMIN, schoolId]);
+    // A autoridade vem da autorização por e-mail, não da função gravada no perfil.
+    await db.query("insert into admin_grants (email, school_id, platform_admin) values ('adm@escola.exemplo', $1, $2)", [
+      platform ? null : schoolId,
+      platform,
+    ]);
     return (await findActor(db, ADMIN))!;
   }
 

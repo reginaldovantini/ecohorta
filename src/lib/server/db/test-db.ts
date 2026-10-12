@@ -167,16 +167,16 @@ export async function seedTestSchool(db: Queryable) {
  */
 export const ACTORS = {
   /** Estudante comum. */
-  student: { profileId: IDS.student, schoolId: IDS.school, role: "student", platformAdmin: false, stewardOf: [] },
-  student2: { profileId: IDS.student2, schoolId: IDS.school, role: "student", platformAdmin: false, stewardOf: [] },
+  student: { profileId: IDS.student, schoolId: IDS.school, role: "student", platformAdmin: false, adminOfSchool: null, stewardOf: [] },
+  student2: { profileId: IDS.student2, schoolId: IDS.school, role: "student", platformAdmin: false, adminOfSchool: null, stewardOf: [] },
   /** Professor declarado E responsável pelo ECO-001: calibra e usa a bancada. */
-  teacher: { profileId: IDS.teacher, schoolId: IDS.school, role: "teacher", platformAdmin: false, stewardOf: [IDS.collector] },
+  teacher: { profileId: IDS.teacher, schoolId: IDS.school, role: "teacher", platformAdmin: false, adminOfSchool: null, stewardOf: [IDS.collector] },
   /** Funcionário declarado, sem responsabilidade: a função sozinha não abre porta. */
-  staff: { profileId: IDS.staff, schoolId: IDS.school, role: "staff", platformAdmin: false, stewardOf: [] },
+  staff: { profileId: IDS.staff, schoolId: IDS.school, role: "staff", platformAdmin: false, adminOfSchool: null, stewardOf: [] },
   /** Estudante da outra escola. */
-  otherStudent: { profileId: IDS.otherStudent, schoolId: IDS.otherSchool, role: "student", platformAdmin: false, stewardOf: [] },
+  otherStudent: { profileId: IDS.otherStudent, schoolId: IDS.otherSchool, role: "student", platformAdmin: false, adminOfSchool: null, stewardOf: [] },
   /** Professor declarado na outra escola, responsável pelo captador de lá. */
-  otherSchoolTeacher: { profileId: IDS.otherStudent, schoolId: IDS.otherSchool, role: "teacher", platformAdmin: false, stewardOf: [IDS.otherCollector] },
+  otherSchoolTeacher: { profileId: IDS.otherStudent, schoolId: IDS.otherSchool, role: "teacher", platformAdmin: false, adminOfSchool: null, stewardOf: [IDS.otherCollector] },
 } as const satisfies Record<string, Actor>;
 
 /**

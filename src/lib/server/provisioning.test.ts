@@ -111,13 +111,13 @@ describe("conta de administração", () => {
 
 describe("poder não vem da função declarada", () => {
   it("quem declara professor sem ser responsável não é educador", () => {
-    const declarado: Actor = { profileId: IDS.student, schoolId: IDS.school, role: "teacher", platformAdmin: false, stewardOf: [] };
+    const declarado: Actor = { profileId: IDS.student, schoolId: IDS.school, role: "teacher", platformAdmin: false, adminOfSchool: null, stewardOf: [] };
     expect(isEducator(declarado)).toBe(false);
     expect(isStewardOf(declarado, IDS.collector)).toBe(false);
   });
 
   it("quem é responsável por um captador é educador, mesmo declarando ser estudante", () => {
-    const responsavel: Actor = { profileId: IDS.student, schoolId: IDS.school, role: "student", platformAdmin: false, stewardOf: [IDS.collector] };
+    const responsavel: Actor = { profileId: IDS.student, schoolId: IDS.school, role: "student", platformAdmin: false, adminOfSchool: null, stewardOf: [IDS.collector] };
     expect(isEducator(responsavel)).toBe(true);
     expect(isStewardOf(responsavel, IDS.collector)).toBe(true);
     expect(isStewardOf(responsavel, IDS.otherCollector)).toBe(false);

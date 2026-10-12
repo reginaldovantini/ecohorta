@@ -15,8 +15,8 @@ let db: Database;
 let escola: string;
 let service: ReturnType<typeof createCollectorSetupService>;
 
-const admin: Actor = { profileId: "", schoolId: null, role: "admin", platformAdmin: true, stewardOf: [] };
-const estudante: Actor = { profileId: "", schoolId: null, role: "student", platformAdmin: false, stewardOf: [] };
+const admin: Actor = { profileId: "", schoolId: null, role: "admin", platformAdmin: true, adminOfSchool: null, stewardOf: [] };
+const estudante: Actor = { profileId: "", schoolId: null, role: "student", platformAdmin: false, adminOfSchool: null, stewardOf: [] };
 
 async function criarPessoa(email: string, role: "admin" | "student") {
   const { rows } = await db.query<{ id: string }>("insert into auth.users (id, email) values (gen_random_uuid(), $1) returning id", [email]);

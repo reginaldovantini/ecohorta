@@ -7,7 +7,7 @@ import {
   type StaffSector,
   type UserRole,
 } from "@/lib/users/types";
-import { isAdministrator, type Actor } from "./actor";
+import { isAdministrator, isEducator, type Actor } from "./actor";
 import { millis, num, type Database, type Queryable } from "./db/types";
 import { fail, type ServiceResult } from "./errors";
 
@@ -26,6 +26,16 @@ export interface MeResponse {
   identity: DisplayIdentity | null;
   /** Responsável por estes captadores (calibração, bancada, ligações). */
   stewardOf: string[];
+  /**
+   * A área administrativa aparece para esta pessoa?
+   *
+   * Vem do servidor, e não da função declarada no cadastro: com cadastro aberto,
+   * quem marcasse "Professor(a)" veria a administração. Aqui é a autorização por
+   * e-mail — ou a responsabilidade por algum captador — que decide.
+   */
+  canAdminister: boolean;
+  /** Administração da plataforma: autoriza e-mails e cria escolas. */
+  platformAdmin: boolean;
   /** Escolas a que a pessoa pertence. A atual é a que o jogo mostra. */
   schools: MySchool[];
   xp: number;
@@ -70,13 +80,50 @@ export async function ensureProfile(db: Queryable, userId: string): Promise<void
 }
 
 /** Perfil ativo do usuário do Supabase Auth, ou null. */
-export async function findActor(db: Queryable, userId: string): Promise<Actor | null> {
-  const { rows } = await db.query<{ id: string; school_id: string | null; role: UserRole; platform_admin: boolean }>(
-    "select id, school_id, role, platform_admin from public.profiles where id = $1 and status = 'active'",
+/*
+ * O ATOR DE CADA REQUISIÇÃO — e por que a autoridade é relida toda vez.
+ *
+ * Nada aqui vem do navegador, e a parte que dá poder não vem nem do perfil: a
+ * autorização para administrar é lida de `admin_grants`, pelo E-MAIL da conta,
+ * a cada requisição. Copiar "é administrador" para dentro do perfil pareceria
+ * mais barato e custaria caro: revogar passaria a exigir desfazer em dois
+ * lugares, e sobraria gente com poder esquecido. Relendo, revogar vale no toque
+ * seguinte.
+ *
+ * O administrador da PLATAFORMA também pode vir da configuração do servidor
+ * (`PLATFORM_ADMIN_EMAIL`). É a porta de entrada do sistema: sem ela, uma base
+ * nova não teria ninguém para autorizar o primeiro administrador — e quem
+ * configura o servidor já tem acesso ao banco de qualquer forma.
+ */
+export async function findActor(
+  db: Queryable,
+  userId: string,
+  platformAdminEmail = process.env.PLATFORM_ADMIN_EMAIL,
+): Promise<Actor | null> {
+  const { rows } = await db.query<{
+    id: string;
+    school_id: string | null;
+    role: UserRole;
+    platform_admin: boolean;
+    email: string | null;
+    grant_platform: boolean | null;
+    grant_school: string | null;
+  }>(
+    `select p.id, p.school_id, p.role, p.platform_admin, u.email,
+            g.platform_admin as grant_platform, g.school_id as grant_school
+     from public.profiles p
+     join auth.users u on u.id = p.id
+     left join public.admin_grants g on g.email = lower(u.email) and g.revoked_at is null
+     where p.id = $1 and p.status = 'active'`,
     [userId],
   );
   const row = rows[0];
   if (!row) return null;
+
+  const email = row.email?.trim().toLowerCase() ?? null;
+  const configurado = platformAdminEmail?.trim().toLowerCase();
+  const platformAdmin = row.platform_admin || row.grant_platform === true || (!!email && !!configurado && email === configurado);
+
   // Os captadores sob responsabilidade vêm do banco a cada requisição: é deles que
   // sai o poder de calibrar, e não da função declarada no cadastro.
   const stewardships = await db.query<{ collector_id: string }>(
@@ -87,7 +134,8 @@ export async function findActor(db: Queryable, userId: string): Promise<Actor | 
     profileId: row.id,
     schoolId: row.school_id,
     role: row.role,
-    platformAdmin: row.platform_admin,
+    platformAdmin,
+    adminOfSchool: platformAdmin ? null : row.grant_school,
     stewardOf: stewardships.rows.map((item) => item.collector_id),
   };
 }
@@ -232,6 +280,8 @@ export async function getMe(db: Queryable, actor: Actor): Promise<MeResponse> {
     schoolName: row.school_name,
     identity: toIdentity(row),
     stewardOf: [...actor.stewardOf],
+    canAdminister: isEducator(actor),
+    platformAdmin: actor.platformAdmin,
     schools: await listMySchools(db, actor.profileId, row.school_id),
     xp: num(xp.rows[0]?.xp ?? 0),
     history: history.rows.map((item) => ({

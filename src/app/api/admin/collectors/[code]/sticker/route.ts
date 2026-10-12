@@ -1,6 +1,6 @@
 import { buildStickerPdf } from "@/lib/collector/qr-sticker";
 import { normalizeCollectorCode } from "@/lib/collector/code";
-import { isAdministrator, isStewardOf } from "@/lib/server/actor";
+import { isStewardOf } from "@/lib/server/actor";
 import { authenticate } from "@/lib/server/auth";
 import { getDatabase } from "@/lib/server/db/pg";
 import { jsonError, publicBaseUrl, withErrors } from "@/lib/server/http";
@@ -36,7 +36,9 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/admin/colle
     );
     const captador = rows[0];
     if (!captador) return jsonError(404, "Captador não encontrado.");
-    if (!isAdministrator(auth.actor) && !isStewardOf(auth.actor, captador.id)) {
+    // A consulta já limita à escola de quem pede; aqui vale também quem é
+    // responsável pelo captador sem administrar a escola.
+    if (!isStewardOf(auth.actor, captador.id, auth.actor.schoolId)) {
       return jsonError(403, "Somente a administração e quem é responsável pelo captador imprimem o adesivo.");
     }
 

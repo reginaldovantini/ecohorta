@@ -143,7 +143,15 @@ export function ProfileScreen() {
         )}
       </section>
 
-      {(profile.role === "teacher" || profile.role === "admin") && (
+      {/*
+        A porta da administração abre por AUTORIZAÇÃO, nunca pela função declarada
+        no cadastro. Antes bastava marcar "Professor(a)" no primeiro acesso para
+        ver esta área — e cadastrar captador é o ato que coloca um tubo na rede de
+        uma escola. Agora quem decide é o servidor: ou o administrador da
+        plataforma autorizou este e-mail, ou a pessoa é responsável por algum
+        captador (código de dentro da caixa).
+      */}
+      {profile.canAdminister && (
         <Link href="/admin/captadores" className="block rounded-card active:scale-[0.99] transition-transform">
           <Surface className="flex items-center gap-3 p-4">
             <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-aqua-400/15 text-aqua-300">

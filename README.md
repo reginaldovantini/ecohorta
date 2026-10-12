@@ -163,6 +163,7 @@ Todas estão documentadas em [.env.example](.env.example). **Nunca coloque crede
 | Variável | Onde é usada | Vercel |
 |---|---|---|
 | `NEXT_PUBLIC_APP_URL` | QR Codes impressos, `secrets.h` do ESP32 e links — **definir antes de imprimir adesivos** | ✅ |
+| `PLATFORM_ADMIN_EMAIL` | E-mail Google de quem administra a plataforma: autoriza outros administradores e cria escolas | ✅ |
 | `NEXT_PUBLIC_SUPABASE_URL` | Sessão (Supabase Auth) | ✅ |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Sessão (protegida pelo RLS) | ✅ |
 | `DATABASE_URL` | Banco (Transaction pooler) | ✅ |
