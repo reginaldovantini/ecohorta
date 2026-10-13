@@ -1,12 +1,18 @@
 /*
- * O QUE A PLATAFORMA ENTREGA EM CADA ETAPA.
+ * OS MATERIAIS FIXOS DE CADA ETAPA.
  *
- * Montar o captador e personalizá-lo dependem de dois PDFs que ainda vamos
- * produzir. A tentação seria esconder essas etapas até os arquivos existirem —
- * e aí quem está montando o tubo descobre só no fim que precisava de um manual.
+ * Aqui ficam só os arquivos que são IGUAIS para todos os captadores. O que é
+ * feito sob medida — o adesivo com o QR daquele tubo, o manual de gravação com
+ * a identidade daquela placa — a plataforma gera na hora, e por isso não mora
+ * nesta lista: nunca falta, nunca desatualiza.
  *
- * Então a etapa aparece desde já, com o material marcado como EM PREPARAÇÃO, e
- * a plataforma nunca oferece um link que não abre.
+ * O manual de construção e o guia de gravação saíram desta lista: eles passaram
+ * a ser gerados com as medidas do captador de cada escola (setup-guides.ts).
+ * Ficaram aqui só as artes de personalização, que são as mesmas para todos e
+ * ainda vamos produzir.
+ *
+ * A etapa aparece desde já, com o material marcado como EM PREPARAÇÃO, e a
+ * plataforma nunca oferece um link que não abre.
  *
  * A disponibilidade é declarada aqui, em `ready`, e não descoberta lendo a pasta.
  * Ler a pasta parecia mais esperto, mas obriga o build a rastrear o projeto
@@ -34,18 +40,10 @@ export interface SetupDocument {
 
 export const SETUP_DOCUMENTS: readonly SetupDocument[] = [
   {
-    id: "manual",
-    step: "montagem",
-    title: "Manual de construção",
-    description: "Lista de materiais, corte do tubo, posição do sensor, caixa eletrônica e torneira, passo a passo com fotos.",
-    file: "manual-construcao-captador.pdf",
-    ready: false,
-  },
-  {
     id: "artes",
-    step: "personalizacao",
-    title: "Artes para personalizar",
-    description: "Faixas, nome da escola e identidade visual do EcoHorta para colar no tubo.",
+    step: "identificacao",
+    title: "Artes para personalizar (opcional)",
+    description: "Faixas, nome da escola e identidade visual do EcoHorta para colar no tubo. O captador funciona sem elas.",
     file: "artes-personalizacao-captador.pdf",
     ready: false,
   },

@@ -108,7 +108,7 @@ function SchoolsSection({
   schools: PlatformSchool[] | null;
   salvando: boolean;
   onCreate: (input: { name: string; city: string; state: string }) => Promise<{ ok: boolean }>;
-  onUpdate: (id: string, input: { name: string; city: string; state: string }) => Promise<{ ok: boolean }>;
+  onUpdate: (id: string, input: { name: string; city: string; state: string; enrolledStudents: number | null }) => Promise<{ ok: boolean }>;
 }) {
   const [aberto, setAberto] = useState(false);
   const [name, setName] = useState("");
@@ -312,18 +312,25 @@ function SchoolRow({
 }: {
   school: PlatformSchool;
   salvando: boolean;
-  onSave: (input: { name: string; city: string; state: string }) => Promise<{ ok: boolean }>;
+  onSave: (input: { name: string; city: string; state: string; enrolledStudents: number | null }) => Promise<{ ok: boolean }>;
 }) {
   const [editando, setEditando] = useState(false);
   const [name, setName] = useState(school.name);
   const [city, setCity] = useState(school.city ?? "");
   const [state, setState] = useState(school.state ?? "");
+  const [matriculados, setMatriculados] = useState(school.enrolledStudents === null ? "" : String(school.enrolledStudents));
   const incompleta = !school.city || !school.state;
   const valido = name.trim().length >= 3 && city.trim().length >= 2 && state.length === 2;
 
   const salvar = async () => {
     if (!valido) return;
-    const { ok } = await onSave({ name: name.trim(), city: city.trim(), state });
+    const numero = Number(matriculados.replace(/\D/g, ""));
+    const { ok } = await onSave({
+      name: name.trim(),
+      city: city.trim(),
+      state,
+      enrolledStudents: numero > 0 ? numero : null,
+    });
     if (ok) setEditando(false);
   };
 
@@ -352,6 +359,21 @@ function SchoolRow({
             ))}
           </select>
         </div>
+        <label className="block">
+          <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-mist-400">
+            Estudantes matriculados
+          </span>
+          <input
+            className={inputClass}
+            value={matriculados}
+            onChange={(e) => setMatriculados(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="Ex.: 820"
+            inputMode="numeric"
+          />
+          <span className="mt-1.5 block text-[0.7rem] leading-relaxed text-mist-500">
+            É o denominador do alcance: sem ele, o número de missões não diz que parte da escola o projeto envolveu.
+          </span>
+        </label>
         <div className="flex gap-2">
           <Button variant="secondary" className="flex-1" onClick={() => setEditando(false)} disabled={salvando}>
             Cancelar
@@ -373,7 +395,9 @@ function SchoolRow({
         <div className="min-w-0 flex-1">
           <p className="truncate font-display font-semibold text-mist-50">{school.name}</p>
           <p className={incompleta ? "truncate text-xs text-sun-300" : "truncate text-xs text-mist-400"}>
-            {incompleta ? "Toque para informar o município" : `${school.city} · ${school.state}`}
+            {incompleta
+              ? "Toque para informar o município"
+              : `${school.city} · ${school.state}${school.enrolledStudents === null ? "" : ` · ${school.enrolledStudents} estudantes`}`}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">

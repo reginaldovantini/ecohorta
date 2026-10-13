@@ -16,6 +16,8 @@ export interface PlatformSchool {
   name: string;
   city: string | null;
   state: string | null;
+  /** Matriculados na unidade: o denominador do alcance do projeto. */
+  enrolledStudents: number | null;
   activeCollectors: number;
   prototypes: number;
 }
@@ -40,7 +42,7 @@ export interface PlatformSource {
   /** Carrega escolas e autorizações. Devolve a função de parada. */
   start(): () => void;
   createSchool(input: { name: string; city: string; state: string }): Promise<PlatformResult>;
-  updateSchool(id: string, input: { name: string; city: string; state: string }): Promise<PlatformResult>;
+  updateSchool(id: string, input: { name: string; city: string; state: string; enrolledStudents: number | null }): Promise<PlatformResult>;
   grant(input: { email: string; schoolId: string }): Promise<PlatformResult>;
   revoke(email: string): Promise<PlatformResult>;
   /** Aprovar cria a escola e autoriza o e-mail de uma vez. */

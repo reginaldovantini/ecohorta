@@ -26,6 +26,11 @@ export interface SchoolInput {
   name: string;
   city: string;
   state: Uf;
+  /**
+   * Estudantes matriculados na unidade. Opcional: escola cadastrada antes desta
+   * coluna continua válida, e a tela pede o número quando falta.
+   */
+  enrolledStudents?: number | null;
 }
 
 export interface School {
@@ -33,7 +38,40 @@ export interface School {
   name: string;
   city: string | null;
   state: string | null;
+  enrolledStudents: number | null;
 }
+
+/**
+ * Quantos estudantes a escola tem.
+ *
+ * É o denominador do único indicador que uma secretaria de educação pergunta
+ * primeiro: não "quantas missões aconteceram", mas "que parte da escola isso
+ * alcançou". Sem ele, 280 missões podem ser a escola inteira ou uma turma.
+ */
+export function parseEnrolledStudents(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const numero = typeof value === "number" ? value : Number(String(value).replace(/\D/g, ""));
+  if (!Number.isInteger(numero) || numero < 1 || numero > 200_000) {
+    throw new Error("Informe quantos estudantes a escola tem matriculados.");
+  }
+  return numero;
+}
+
+interface SchoolRow {
+  id: string;
+  name: string;
+  city: string | null;
+  state: string | null;
+  enrolled_students: number | null;
+}
+
+const toSchool = (row: SchoolRow): School => ({
+  id: row.id,
+  name: row.name,
+  city: row.city,
+  state: row.state,
+  enrolledStudents: row.enrolled_students,
+});
 
 /**
  * Cadastra a escola, ou completa o que faltava nela.
@@ -49,28 +87,45 @@ export async function registerSchool(tx: Queryable, input: SchoolInput): Promise
   if (city.length < 2) throw new Error("Informe o município da escola.");
   if (!isUf(input.state)) throw new Error("Informe o estado (sigla de duas letras).");
 
-  const { rows } = await tx.query<School>(
-    `insert into public.schools (name, city, state) values ($1, $2, $3)
+  const { rows } = await tx.query<SchoolRow>(
+    `insert into public.schools (name, city, state, enrolled_students) values ($1, $2, $3, $4)
      on conflict (name) do update set city = coalesce(excluded.city, public.schools.city),
-       state = coalesce(excluded.state, public.schools.state)
-     returning id, name, city, state`,
-    [name, city, input.state],
+       state = coalesce(excluded.state, public.schools.state),
+       enrolled_students = coalesce(excluded.enrolled_students, public.schools.enrolled_students)
+     returning id, name, city, state, enrolled_students`,
+    [name, city, input.state, input.enrolledStudents ?? null],
   );
-  return rows[0]!;
+  return toSchool(rows[0]!);
+}
+
+/**
+ * Registra quantos estudantes a escola tem.
+ *
+ * Separado de `updateSchool` por causa de quem pode fazer cada coisa: município
+ * e estado são da administração da plataforma, para o indicador não nascer com
+ * três grafias da mesma cidade. O número de matriculados é o contrário — só a
+ * própria escola sabe, muda todo ano, e pedir à plataforma seria garantir que
+ * fique desatualizado.
+ */
+export async function setEnrolledStudents(tx: Queryable, schoolId: string, enrolledStudents: number): Promise<void> {
+  if (!Number.isInteger(enrolledStudents) || enrolledStudents < 1 || enrolledStudents > 200_000) {
+    throw new Error("Informe quantos estudantes a escola tem matriculados.");
+  }
+  await tx.query("update public.schools set enrolled_students = $2 where id = $1", [schoolId, enrolledStudents]);
 }
 
 /** Escolas da plataforma, com quantos captadores de cada uma já medem de verdade. */
 export async function listSchools(tx: Queryable): Promise<(School & { activeCollectors: number; prototypes: number })[]> {
-  const { rows } = await tx.query<School & { active_collectors: number; prototypes: number }>(
-    `select s.id, s.name, s.city, s.state,
+  const { rows } = await tx.query<SchoolRow & { active_collectors: number; prototypes: number }>(
+    `select s.id, s.name, s.city, s.state, s.enrolled_students,
             count(c.id) filter (where c.activated_at is not null and c.prefix = 'ECO')::int as active_collectors,
             count(c.id) filter (where c.prefix = 'PROTO')::int as prototypes
      from public.schools s left join public.collectors c on c.school_id = s.id
-     group by s.id, s.name, s.city, s.state
+     group by s.id, s.name, s.city, s.state, s.enrolled_students
      order by s.state nulls last, s.city nulls last, s.name`,
   );
   return rows.map(({ active_collectors, prototypes, ...school }) => ({
-    ...school,
+    ...toSchool(school),
     activeCollectors: active_collectors,
     prototypes,
   }));
@@ -91,11 +146,13 @@ export async function updateSchool(tx: Queryable, id: string, input: SchoolInput
   if (city.length < 2) throw new Error("Informe o município da escola.");
   if (!isUf(input.state)) throw new Error("Informe o estado (sigla de duas letras).");
 
-  const { rows } = await tx.query<School>(
-    "update public.schools set name = $2, city = $3, state = $4 where id = $1 returning id, name, city, state",
-    [id, name, city, input.state],
+  const { rows } = await tx.query<SchoolRow>(
+    `update public.schools set name = $2, city = $3, state = $4,
+       enrolled_students = coalesce($5, enrolled_students)
+     where id = $1 returning id, name, city, state, enrolled_students`,
+    [id, name, city, input.state, input.enrolledStudents ?? null],
   );
   const escola = rows[0];
   if (!escola) throw new Error("Escola não encontrada.");
-  return escola;
+  return toSchool(escola);
 }

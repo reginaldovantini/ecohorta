@@ -69,14 +69,14 @@ describe("o que eu faço agora", () => {
     expect(resultado.value.connectivity).toBe("school_network");
   });
 
-  it("oferece manual e artes, e diz honestamente quando o material ainda não existe", async () => {
+  it("diz honestamente quando o material fixo ainda não existe", async () => {
     const captador = await cadastrar("Quadra");
     const resultado = await service.journey(admin, captador.code);
     if (!resultado.ok) throw new Error(resultado.message);
-    const manual = resultado.value.resources.find((item) => item.id === "manual")!;
+    const artes = resultado.value.resources.find((item) => item.id === "artes")!;
     // A pasta de materiais está vazia neste repositório: nada de link quebrado.
-    expect(manual.href).toBeNull();
-    expect(manual.pending).toMatch(/preparação/);
+    expect(artes.href).toBeNull();
+    expect(artes.pending).toMatch(/preparação/);
   });
 
   it("captador que não existe não vira jornada", async () => {
@@ -91,13 +91,13 @@ describe("o que eu faço agora", () => {
 });
 
 describe("marcar o que a plataforma não tem como ver", () => {
-  it("montagem e personalização se marcam à mão, e a vez anda", async () => {
+  it("montagem e identificação se marcam à mão, e a vez anda", async () => {
     const captador = await cadastrar("Jardim lateral");
     const montado = await service.markStep(admin, captador.code, "montagem", true);
     if (!montado.ok) throw new Error(montado.message);
-    expect(montado.value.journey.currentStep).toBe("personalizacao");
+    expect(montado.value.journey.currentStep).toBe("identificacao");
 
-    const personalizado = await service.markStep(admin, captador.code, "personalizacao", true);
+    const personalizado = await service.markStep(admin, captador.code, "identificacao", true);
     if (!personalizado.ok) throw new Error(personalizado.message);
     expect(personalizado.value.journey.currentStep).toBe("firmware");
   });
@@ -161,7 +161,7 @@ describe("o programa do ESP32", () => {
     expect(rows[0]).toMatchObject({ device_key: pacote.value.identity.deviceKey, is_simulated: false });
 
     await service.markStep(admin, captador.code, "montagem", true);
-    await service.markStep(admin, captador.code, "personalizacao", true);
+    await service.markStep(admin, captador.code, "identificacao", true);
     const depois = await service.journey(admin, captador.code);
     if (!depois.ok) throw new Error(depois.message);
     expect(depois.value.journey.steps.find((step) => step.id === "firmware")!.state).toBe("done");
@@ -193,7 +193,7 @@ describe("o programa do ESP32", () => {
   it("a placa que fala cumpre firmware e conexão juntos", async () => {
     const captador = await cadastrar("Bloco F");
     await service.markStep(admin, captador.code, "montagem", true);
-    await service.markStep(admin, captador.code, "personalizacao", true);
+    await service.markStep(admin, captador.code, "identificacao", true);
     await placaFalou(captador.id);
 
     const resultado = await service.journey(admin, captador.code);

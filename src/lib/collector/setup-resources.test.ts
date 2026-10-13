@@ -9,13 +9,14 @@ const comoSeria = (documents: readonly SetupDocument[]) =>
   }));
 
 describe("material de cada etapa", () => {
-  it("o manual é da montagem, as artes são da personalização", () => {
-    expect(setupResources("montagem").map((item) => item.id)).toEqual(["manual"]);
-    expect(setupResources("personalizacao").map((item) => item.id)).toEqual(["artes"]);
+  it("as artes são da identificação — o único material fixo que sobrou", () => {
+    expect(setupResources("identificacao").map((item) => item.id)).toEqual(["artes"]);
   });
 
-  it("etapas sem material não inventam botão", () => {
-    for (const etapa of ["cadastro", "firmware", "conexao", "calibracao"] as const) {
+
+  it("etapas sem material fixo não inventam botão", () => {
+    // Montagem e firmware têm manual, mas gerado por captador: ele não entra aqui.
+    for (const etapa of ["cadastro", "montagem", "firmware", "conexao", "calibracao", "verificacao"] as const) {
       expect(setupResources(etapa)).toEqual([]);
     }
   });
@@ -32,9 +33,9 @@ describe("enquanto o PDF não existe", () => {
   it("marcar `ready` publica o link daquele arquivo, e só dele", () => {
     const hipotese = comoSeria([
       { ...SETUP_DOCUMENTS[0]!, ready: true },
-      { ...SETUP_DOCUMENTS[1]!, ready: false },
+      { ...SETUP_DOCUMENTS[0]!, id: "outro", file: "outro.pdf", ready: false },
     ]);
-    expect(hipotese[0]!.href).toBe("/documentos-captador/manual-construcao-captador.pdf");
+    expect(hipotese[0]!.href).toBe("/documentos-captador/artes-personalizacao-captador.pdf");
     expect(hipotese[1]!.href).toBeNull();
   });
 

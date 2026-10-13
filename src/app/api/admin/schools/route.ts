@@ -11,13 +11,20 @@ import { jsonError, jsonOk, parseBody, withErrors } from "@/lib/server/http";
  * Traz quantos captadores de cada escola já medem de verdade e quantos ainda são
  * protótipos: é o retrato da rede, e o que evita cadastrar a mesma escola duas
  * vezes com nomes parecidos.
+ *
+ * A rede inteira só a administração da plataforma vê. Quem administra uma escola
+ * recebe a sua, e mais nenhuma: o retrato da rede inclui quantos captadores cada
+ * escola tem, e isso é justamente o que não deve atravessar de uma para outra.
  */
 export async function GET() {
   return withErrors(async () => {
     const auth = await authenticate();
     if (auth.response) return auth.response;
-    if (!isAdministrator(auth.actor)) return jsonError(403, "Somente a administração cadastra captadores.");
-    return jsonOk({ schools: await listSchools(getDatabase()) });
+    const { actor } = auth;
+    if (!isAdministrator(actor)) return jsonError(403, "Somente a administração cadastra captadores.");
+    const schools = await listSchools(getDatabase());
+    if (isPlatformAdmin(actor)) return jsonOk({ schools });
+    return jsonOk({ schools: schools.filter((school) => school.id === actor.adminOfSchool) });
   });
 }
 
@@ -25,6 +32,8 @@ const schoolSchema = z.object({
   name: z.string().trim().min(3).max(120),
   city: z.string().trim().min(2).max(80),
   state: z.enum(UF_LIST),
+  /** Matriculados na unidade: o denominador do alcance do projeto. */
+  enrolledStudents: z.number().int().min(1).max(200_000).nullable().optional(),
 });
 
 /**

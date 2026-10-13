@@ -10,6 +10,8 @@ const bodySchema = z.object({
   name: z.string().trim().min(3).max(120),
   city: z.string().trim().min(2).max(80),
   state: z.enum(UF_LIST),
+  /** Matriculados na unidade: o denominador do alcance do projeto. */
+  enrolledStudents: z.number().int().min(1).max(200_000).nullable().optional(),
 });
 
 /**

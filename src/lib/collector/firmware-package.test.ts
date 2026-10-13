@@ -52,14 +52,19 @@ describe("passo a passo da gravação", () => {
 
   it("vai da instalação do programa até a conferência na plataforma", () => {
     expect(guia).toHaveLength(7);
-    expect(guia[0]!.title).toMatch(/^1\./);
+    // A numeração é de quem desenha: tela e PDF numeram sozinhos, e um "1." no
+    // título virava "1. 1." no papel.
+    for (const passo of guia) expect(passo.title).not.toMatch(/^\d+\./);
+
     expect(guia.at(-1)!.title).toMatch(/plataforma/i);
   });
 
   it("todo passo tem instrução, e nenhum presume que a pessoa já programou", () => {
     for (const passo of guia) {
       expect(passo.lines.length).toBeGreaterThan(0);
-      for (const linha of passo.lines) expect(linha.endsWith(".")).toBe(true);
+      // Frase inteira, com ponto — menos quando termina em endereço: um ponto
+      // depois de uma URL vai junto quando alguém copia, e a página não abre.
+      for (const linha of passo.lines) expect(linha.endsWith(".") || /https?:\/\/\S+$/.test(linha)).toBe(true);
     }
   });
 

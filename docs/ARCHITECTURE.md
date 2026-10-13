@@ -317,24 +317,38 @@ Tela: `/admin/captadores/{code}/ligacoes` (**Sensores e Ligações** + manual de
 ## 13. Construção de um captador: do tubo à rede
 
 Replicar o projeto é construir mais captadores, e quem constrói raramente já
-programou. A plataforma conduz isso como uma jornada de seis etapas, com **uma
-acesa por vez** e as seguintes bloqueadas com o motivo escrito
+programou. A plataforma conduz isso como uma linha do tempo de sete etapas, com
+**uma acesa por vez** e as seguintes bloqueadas com o motivo escrito
 (`src/lib/collector/setup-journey.ts`, tela em
 `src/components/admin/collector-setup-screen.tsx`).
 
 | Etapa | Como se cumpre |
 |---|---|
-| 1. Cadastro | escola (município e estado), localização e dimensões do tubo |
-| 2. Montagem | **marcada à mão** — a plataforma não enxerga um tubo montado |
-| 3. Personalização | **marcada à mão** — artes e o adesivo com o QR do captador |
+| 1. Cadastro | escola (município, estado e matriculados), localização e dimensões do tubo |
+| 2. Montagem do protótipo | **marcada à mão** — a plataforma não enxerga um tubo montado |
+| 3. Identificação | **marcada à mão** — o adesivo com o QR do captador, colado no tubo |
 | 4. Programa do ESP32 | a placa aparece no banco quando a plataforma gera o `secrets.h` dela |
 | 5. Conexão | o ESP32 enviou telemetria (nenhum botão marca isto) |
 | 6. Calibração | existe calibração aceita e válida para o dispositivo atual |
+| 7. Verificação | o captador está habilitado e a calibração vale para a placa de hoje |
 
-**O estado vem de fatos, não de botões.** Só montagem e personalização são
-marcadas por pessoas; as outras quatro a plataforma observa. A etapa atual é a
+**O estado vem de fatos, não de botões.** Só montagem e identificação são
+marcadas por pessoas; as outras cinco a plataforma observa. A etapa atual é a
 primeira não cumprida — trocar o sensor derruba a calibração e devolve a jornada
 à etapa 6 sozinha.
+
+A sétima etapa não se marca nem se "conclui": ela é verdadeira quando as
+anteriores são. Existe porque percorrer seis etapas e ficar sem saber se deu
+certo é pior do que não ter começado — e porque ela é o lugar certo para dizer o
+que a plataforma **não** consegue ver: que a válvula abre e a água sai só o
+primeiro teste no pátio mostra.
+
+**Os manuais são gerados, não guardados.** O manual de construção e o guia de
+gravação saem em PDF com as medidas daquele tubo, o sensor escolhido e a rede
+daquela placa (`src/lib/collector/setup-guides.ts` sobre
+`src/lib/collector/document-pdf.ts`). Um PDF estático na pasta seria igual para
+todos e desatualizaria em silêncio. Na pasta `public/documentos-captador/`
+ficaram só as artes de personalização, iguais para toda escola.
 
 ### 13.1 O código se conquista calibrando
 

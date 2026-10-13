@@ -67,6 +67,32 @@ export function secretsHeader(identity: FirmwareIdentity): string {
   return linhas.join("\n");
 }
 
+/**
+ * Endereços que o passo a passo cita.
+ *
+ * Ficam aqui, num lugar só, porque aparecem na tela E no PDF impresso — e um
+ * endereço que só existe no texto da tela vira erro de digitação no papel.
+ */
+export const FLASHING_LINKS = {
+  vscode: "https://code.visualstudio.com/download",
+  platformio: "https://platformio.org/install/ide?install=vscode",
+  projeto: "https://github.com/reginaldovantini/ecohorta/archive/refs/heads/main.zip",
+  drivers: "https://www.silabs.com/developer-tools/usb-to-uart-bridge-driver",
+} as const;
+
+/**
+ * O que o passo a passo precisa saber do captador.
+ *
+ * Mais estreito que a identidade completa de propósito: o guia é impresso e
+ * levado para a sala de informática, e o token do dispositivo não tem o que
+ * fazer num papel que circula.
+ */
+export interface FlashingContext {
+  collectorCode: string;
+  hotspotSsid: string;
+  hotspotPassword: string;
+}
+
 export interface FlashingStep {
   title: string;
   /** Instruções em frases curtas. Nenhuma presume experiência anterior. */
@@ -82,26 +108,28 @@ export interface FlashingStep {
  * programação. Cada etapa diz o que vai acontecer na tela e o que fazer quando
  * não acontecer — travar sozinho é o que faz a pessoa desistir.
  */
-export function flashingGuide(identity: FirmwareIdentity): FlashingStep[] {
+export function flashingGuide(identity: FlashingContext): FlashingStep[] {
   return [
     {
-      title: "1. Instale o programa que grava a placa",
+      title: "Instale o programa que grava a placa",
       lines: [
-        "No computador, instale o Visual Studio Code (gratuito).",
-        "Dentro dele, abra a aba de Extensões e instale a extensão PlatformIO IDE.",
+        `No computador, baixe e instale o Visual Studio Code (gratuito): ${FLASHING_LINKS.vscode}`,
+        `Dentro dele, abra a aba de Extensões e instale a extensão PlatformIO IDE: ${FLASHING_LINKS.platformio}`,
         "A instalação demora alguns minutos na primeira vez: ela baixa as ferramentas sozinha.",
       ],
       whenItFails: "Se a extensão não terminar de instalar, feche e abra o Visual Studio Code uma vez.",
     },
     {
-      title: "2. Baixe o projeto do captador",
+      title: "Baixe o projeto do captador",
       lines: [
-        "Baixe o projeto EcoHorta e descompacte numa pasta.",
-        "No Visual Studio Code, abra essa pasta.",
+        `Baixe o projeto EcoHorta: ${FLASHING_LINKS.projeto}`,
+        "Descompacte o arquivo numa pasta do computador.",
+        "No Visual Studio Code, use Arquivo > Abrir Pasta e escolha a pasta que você descompactou.",
       ],
+      whenItFails: "Se o navegador avisar que o arquivo é grande, aceite: o projeto inclui o programa da placa e os testes.",
     },
     {
-      title: "3. Coloque a identidade deste captador",
+      title: "Coloque a identidade deste captador",
       lines: [
         `Baixe o arquivo secrets.h deste captador (${identity.collectorCode}) aqui nesta tela.`,
         "Salve dentro da pasta do projeto, em firmware/include/.",
@@ -109,16 +137,16 @@ export function flashingGuide(identity: FirmwareIdentity): FlashingStep[] {
       ],
     },
     {
-      title: "4. Ligue a placa no computador",
+      title: "Ligue a placa no computador",
       lines: [
         "Conecte o ESP32 ao computador com um cabo USB de dados.",
         "Cabo só de carregar não serve: o computador precisa reconhecer a placa.",
       ],
       whenItFails:
-        "Se o computador não reconhecer, troque o cabo primeiro. Se continuar, instale o driver CP2102 ou CH340 — está escrito no chip quadrado ao lado da entrada USB.",
+        `Se o computador não reconhecer, troque o cabo primeiro. Se continuar, instale o driver do chip escrito ao lado da entrada USB: CP2102 em ${FLASHING_LINKS.drivers}, ou procure por "driver CH340" se for esse o chip.`,
     },
     {
-      title: "5. Grave o programa",
+      title: "Grave o programa",
       lines: [
         "No Visual Studio Code, abra o terminal e rode o comando abaixo.",
         "A primeira gravação demora: o PlatformIO baixa as bibliotecas do sensor.",
@@ -129,7 +157,7 @@ export function flashingGuide(identity: FirmwareIdentity): FlashingStep[] {
         "Erro de porta ocupada: feche o monitor serial e tente de novo. Erro de permissão no Linux: adicione seu usuário ao grupo dialout.",
     },
     {
-      title: "6. Configure a rede Wi-Fi",
+      title: "Configure a rede Wi-Fi",
       lines: [
         "Assim que ligar, a placa cria a própria rede Wi-Fi.",
         `No celular, conecte-se à rede ${identity.hotspotSsid} usando a senha ${identity.hotspotPassword}.`,
@@ -141,7 +169,7 @@ export function flashingGuide(identity: FirmwareIdentity): FlashingStep[] {
         "Se a página não abrir sozinha, digite 192.168.4.1 no navegador. Se a rede da escola não aparecer na lista, aproxime o captador do roteador para o primeiro teste.",
     },
     {
-      title: "7. Confira aqui na plataforma",
+      title: "Confira aqui na plataforma",
       lines: [
         "Volte a esta tela: quando a placa falar, a etapa de conexão fica verde sozinha.",
         "A partir daí o captador já envia distância, mas ainda não entrega litros.",

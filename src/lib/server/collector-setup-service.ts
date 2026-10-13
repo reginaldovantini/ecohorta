@@ -25,7 +25,7 @@ import { ensureDevice, generateSecret } from "./provisioning";
  *   não guarda a senha do Wi-Fi da escola. Ela é digitada na própria placa, na
  *   rede que a placa cria, e fica na memória dela;
  *
- *   não deixa ninguém marcar "calibrado". Montagem e personalização se marcam à
+ *   não deixa ninguém marcar "calibrado". Montagem e identificação se marcam à
  *   mão porque a plataforma não enxerga um tubo pintado; medição, não: ou o
  *   sensor mediu, ou não mediu.
  */
@@ -162,7 +162,7 @@ export function createCollectorSetupService({ db }: { db: Database }) {
     },
 
     /**
-     * Marca (ou desmarca) uma etapa feita à mão. Só montagem e personalização:
+     * Marca (ou desmarca) uma etapa feita à mão. Só montagem e identificação:
      * conexão e calibração vêm do sensor, e nenhum botão as inventa.
      */
     async markStep(actor: Actor, code: string, step: SetupStepId, done: boolean): Promise<ServiceResult<CollectorSetupView>> {

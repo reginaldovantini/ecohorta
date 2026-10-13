@@ -50,6 +50,7 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/admin/colle
       code: captador.code,
       location: captador.location,
       schoolName: captador.school_name,
+      provisionalCode: captador.code.startsWith("PROTO"),
     });
 
     return new Response(pdf as BodyInit, {

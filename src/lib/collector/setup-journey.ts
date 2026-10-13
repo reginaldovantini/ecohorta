@@ -3,7 +3,7 @@
  *
  * Replicar o projeto é construir mais captadores. Quem faz isso costuma ser um
  * professor que nunca programou, e entre "quero montar um" e "a escola tem mais
- * um captador na rede" existem seis etapas. Sem um fio condutor, a pessoa trava
+ * um captador na rede" existem sete etapas. Sem um fio condutor, a pessoa trava
  * na primeira dúvida e o tubo vira enfeite no pátio.
  *
  * Este módulo é esse fio. Ele responde a uma pergunta só, e sempre a mesma:
@@ -13,25 +13,27 @@
  *
  *   1. O estado vem de FATOS, não de botões. Se o ESP32 enviou leitura, a
  *      conexão funciona — não adianta alguém marcar "conectei" se não conectou.
- *      Só montagem e personalização são marcadas à mão, porque a plataforma não
- *      tem como ver um tubo pintado.
+ *      Só montagem e identificação são marcadas à mão, porque a plataforma não
+ *      tem como ver um tubo montado nem um adesivo colado.
  *
  *   2. Uma etapa por vez. As seguintes aparecem bloqueadas, com o motivo: ver o
  *      caminho inteiro tranquiliza, e saber por que ainda não dá evita a
  *      sensação de erro.
  */
 
-export const SETUP_STEPS = ["cadastro", "montagem", "personalizacao", "firmware", "conexao", "calibracao"] as const;
+export const SETUP_STEPS = ["cadastro", "montagem", "identificacao", "firmware", "conexao", "calibracao", "verificacao"] as const;
 export type SetupStepId = (typeof SETUP_STEPS)[number];
 
 /**
  * Etapas que alguém marca como feitas: a plataforma não enxerga um tubo montado
- * nem um tubo pintado. Todas as outras vem de fato observado, e nenhum botão as
- * alcança — o enum `setup_step` do banco também aceita 'firmware', de quando a
- * gravação era marcada à mão; hoje ela vem do cadastro da placa e esse valor
- * simplesmente não é usado.
+ * nem um adesivo colado no pátio. Todas as outras vêm de fato observado, e
+ * nenhum botão as alcança.
+ *
+ * A VERIFICAÇÃO, em especial, não se marca: ela é a leitura dos fatos das
+ * etapas anteriores. Um botão "está funcionando" seria justamente a mentira que
+ * essa etapa existe para impedir.
  */
-export const MANUAL_STEPS = ["montagem", "personalizacao"] as const;
+export const MANUAL_STEPS = ["montagem", "identificacao"] as const;
 
 export type StepState = "done" | "current" | "locked";
 
@@ -74,10 +76,10 @@ const DESCRICAO: Record<SetupStepId, { title: string; summary: string; action: s
     summary: "O manual mostra o tubo, o sensor, a caixa eletrônica e a torneira, peça por peça.",
     action: "Baixar o manual e montar o captador",
   },
-  personalizacao: {
-    title: "Personalização",
-    summary: "Artes para colar no tubo e o adesivo com o QR Code da missão.",
-    action: "Baixar as artes e o adesivo",
+  identificacao: {
+    title: "Identificação do captador",
+    summary: "O adesivo com o QR Code único deste tubo. Sem ele colado, nenhuma missão começa.",
+    action: "Imprimir o adesivo e colar no tubo",
   },
   firmware: {
     title: "Programa do ESP32",
@@ -94,16 +96,22 @@ const DESCRICAO: Record<SetupStepId, { title: string; summary: string; action: s
     summary: "Água medida de verdade: 0, 1, 2, 3 litros e o nível máximo.",
     action: "Calibrar com volumes conhecidos",
   },
+  verificacao: {
+    title: "Verificação de funcionamento",
+    summary: "A conferência final: o captador está no ar e as missões estão liberadas para os estudantes.",
+    action: "Conferir o captador no ar",
+  },
 };
 
 /** Motivo pelo qual cada etapa espera a anterior. Escrito para quem está travado. */
 const BLOQUEIO: Record<SetupStepId, string> = {
   cadastro: "",
   montagem: "Cadastre o captador primeiro.",
-  personalizacao: "Monte o captador antes de personalizá-lo.",
+  identificacao: "Monte o captador antes de identificá-lo.",
   firmware: "O programa é gerado depois da montagem.",
   conexao: "Grave o programa no ESP32 antes de conectar.",
   calibracao: "A calibração precisa do captador conectado, enviando leituras.",
+  verificacao: "A conferência final acontece quando a calibração for aceita.",
 };
 
 /** Uma etapa está cumprida? Fatos primeiro; marcação à mão só onde não há fato. */
@@ -112,7 +120,7 @@ function cumprida(step: SetupStepId, facts: SetupFacts): boolean {
     case "cadastro":
       return facts.registered;
     case "montagem":
-    case "personalizacao":
+    case "identificacao":
       return facts.marked.includes(step);
     case "firmware":
       // Gerar o programa registra a placa no banco: é isso que a plataforma
@@ -123,6 +131,12 @@ function cumprida(step: SetupStepId, facts: SetupFacts): boolean {
       return facts.everConnected;
     case "calibracao":
       return facts.calibrated;
+    case "verificacao":
+      // Ninguém "conclui" a verificação: ela é verdadeira quando o captador
+      // está no ar — habilitado na rede da escola e com calibração que vale
+      // para a placa de hoje. Trocar o sensor derruba as duas, e a linha do
+      // tempo volta sozinha para a etapa certa.
+      return facts.activated && facts.calibrated;
   }
 }
 
@@ -130,7 +144,7 @@ export interface SetupJourney {
   steps: SetupStep[];
   /** Etapa em que a pessoa está agora. `null` quando acabou. */
   currentStep: SetupStepId | null;
-  /** Quantas das seis etapas estão cumpridas. */
+  /** Quantas das sete etapas estão cumpridas. */
   completed: number;
   total: number;
   /** O captador já atende missões. */
@@ -173,9 +187,11 @@ export function setupJourney(facts: SetupFacts): SetupJourney {
 /**
  * A frase que a tela mostra em destaque. É a resposta a "o que eu faço agora?",
  * e por isso existe mesmo quando não há mais nada a fazer.
+ *
+ * Com a verificação como última etapa, não existe mais o limbo de "tudo feito,
+ * mas ainda não no ar": cumprir a sétima etapa É estar no ar.
  */
 export function nextAction(journey: SetupJourney): string {
-  if (journey.live) return "Captador ativo: já aparece nas missões da escola.";
-  if (journey.currentStep === null) return "Tudo pronto. Ativando o captador na rede da escola…";
+  if (journey.currentStep === null) return "Captador no ar: já aparece nas missões da escola.";
   return journey.steps.find((step) => step.id === journey.currentStep)!.action!;
 }

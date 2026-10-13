@@ -102,19 +102,36 @@ const PAGE = { widthMm: 210, heightMm: 297 } as const;
 // ---------------------------------------------------------------------
 // Escrita do PDF
 // ---------------------------------------------------------------------
-
-/**
- * Texto para o PDF em WinAnsi (latin-1), que é como as fontes padrão esperam
- * receber acentuação. "MISSÃO" e "sustentável" quebrariam em UTF-8.
+/*
+ * Pontuação tipográfica que o PDF conhece por outro número.
+ *
+ * O PDF escreve texto em WinAnsi, e nela o travessão e o marcador de lista
+ * moram ACIMA de 255 no Unicode e abaixo dele no WinAnsi. Sem esta tradução um
+ * "—" vira "?" no papel — e foi exatamente o que aconteceu na primeira
+ * impressão do manual.
  */
-function pdfText(value: string): string {
+const WIN_ANSI: Record<string, number> = {
+  "–": 0x96,
+  "—": 0x97,
+  "‘": 0x91,
+  "’": 0x92,
+  "“": 0x93,
+  "”": 0x94,
+  "•": 0x95,
+  "…": 0x85,
+};
+
+/** Escapa e traduz um texto para a string literal de um PDF em WinAnsi. */
+export function pdfText(value: string): string {
   let out = "";
   for (const character of value) {
     const code = character.codePointAt(0)!;
+    const winAnsi = WIN_ANSI[character];
     if (character === "(" || character === ")" || character === "\\") out += `\\${character}`;
+    else if (winAnsi !== undefined) out += `\\${winAnsi.toString(8).padStart(3, "0")}`;
     else if (code < 128) out += character;
     else if (code <= 255) out += `\\${code.toString(8).padStart(3, "0")}`;
-    else out += "?"; // fora do latin-1: não ocorre nos textos deste adesivo
+    else out += "?"; // fora do WinAnsi: nenhum texto do projeto chega aqui
   }
   return out;
 }
@@ -188,6 +205,15 @@ export interface StickerInput {
   code: string;
   location: string;
   schoolName: string;
+  /**
+   * O captador ainda é protótipo: o código acima é provisório.
+   *
+   * O adesivo em si não muda — ele carrega só o QR, e o token não se altera
+   * quando o captador assume o número da escola. Quem precisa saber disso é
+   * quem arquiva a folha e, meses depois, procura o adesivo do ECO-001 e só
+   * encontra uma folha com PROTO-001 escrito.
+   */
+  provisionalCode?: boolean;
 }
 
 /** Linhas do adesivo, iguais às do modelo. */
@@ -337,6 +363,9 @@ export function buildStickerPdf(input: StickerInput): Uint8Array {
   const legenda: Linha[] = [
     { text: `${input.code} · ${input.location}`, bold: true },
     { text: input.schoolName },
+    ...(input.provisionalCode
+      ? [{ text: "Código provisório: o captador assume o número da escola quando a calibração" }, { text: "for aceita. O adesivo não muda — imprima e cole uma vez só." }]
+      : []),
     { text: "", space: true },
     { text: "PARA A GRÁFICA", bold: true },
     { text: "Imprimir em ADESIVO VINIL branco, próprio para molhar." },

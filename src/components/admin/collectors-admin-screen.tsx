@@ -1,6 +1,6 @@
 "use client";
 
-import { Cable, Hammer, Microscope, QrCode, Ruler } from "lucide-react";
+import { Cable, Hammer, Microscope, Plus, QrCode, Ruler } from "lucide-react";
 import Link from "next/link";
 import { useCollectorCodes, useCollectorSnapshot, useConnectionState } from "@/components/collector/collector-source";
 import { ScreenHeader } from "@/components/student/screen-header";
@@ -29,12 +29,13 @@ export function CollectorsAdminScreen() {
         connection === "online" ? (
           // A API respondeu e não há captador: quem administra precisa cadastrar
           // o primeiro, e não ficar olhando um esqueleto pulsar.
-          <Surface tone="leaf" className="space-y-2 p-5">
+          <Surface tone="leaf" className="space-y-3 p-5">
             <p className="font-display font-semibold text-mist-50">Nenhum captador cadastrado</p>
             <p className="text-sm leading-relaxed text-mist-300">
               Cadastre o primeiro captador desta escola para começar. Ele nasce como protótipo e assume o código da
               escola quando a calibração for aceita.
             </p>
+            <NovoCaptador />
           </Surface>
         ) : (
           <div className="space-y-3" aria-busy="true" aria-label="Carregando">
@@ -42,15 +43,31 @@ export function CollectorsAdminScreen() {
           </div>
         )
       ) : (
-        <ul className="space-y-3">
-          {codes.map((code) => (
-            <li key={code}>
-              <CollectorRow code={code} />
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="space-y-3">
+            {codes.map((code) => (
+              <li key={code}>
+                <CollectorRow code={code} />
+              </li>
+            ))}
+          </ul>
+          <NovoCaptador />
+        </>
       )}
     </div>
+  );
+}
+
+/** A porta da primeira etapa. Existe nas duas pontas: sem captador nenhum e com vinte. */
+function NovoCaptador() {
+  return (
+    <Link
+      href="/admin/captadores/novo"
+      className="flex h-12 w-full items-center justify-center gap-2 rounded-control bg-linear-to-b from-leaf-300 to-leaf-500 text-sm font-semibold text-abyss-950"
+    >
+      <Plus className="size-5" aria-hidden />
+      Cadastrar captador
+    </Link>
   );
 }
 

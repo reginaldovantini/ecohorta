@@ -8,12 +8,12 @@ import {
   Copy,
   Download,
   FileText,
-  Lock,
   MapPin,
-  Palette,
+  QrCode,
   Radio,
   Ruler,
   School,
+  ShieldCheck,
   Sparkles,
   Terminal,
   Wifi,
@@ -31,7 +31,7 @@ import { describeSilence } from "@/lib/collector/offline-estimate";
 import type { SetupStep, SetupStepId } from "@/lib/collector/setup-journey";
 import { createSetupApiSource, type SetupSource } from "@/lib/iot/setup-source";
 import type { CollectorSetupView, FirmwarePackage } from "@/lib/server/collector-setup-service";
-import { StickerLink } from "./collector-sticker-card";
+import { CollectorStickerCard } from "./collector-sticker-card";
 
 /*
  * A TELA DE QUEM ESTÁ CONSTRUINDO UM CAPTADOR.
@@ -42,7 +42,7 @@ import { StickerLink } from "./collector-sticker-card";
  *
  * Uma etapa acesa, as feitas em verde e discretas, as seguintes trancadas com o
  * motivo escrito. Nada de abrir tudo ao mesmo tempo: um celular de 360 px com
- * seis painéis abertos é a mesma coisa que nenhuma orientação.
+ * sete painéis abertos é a mesma coisa que nenhuma orientação.
  *
  * A tela se atualiza sozinha porque a etapa da conexão não tem botão: ela acende
  * no segundo em que o ESP32 fala, e quem está instalando tem as duas mãos
@@ -52,10 +52,11 @@ import { StickerLink } from "./collector-sticker-card";
 const ICONS: Record<SetupStepId, typeof School> = {
   cadastro: School,
   montagem: Ruler,
-  personalizacao: Palette,
+  identificacao: QrCode,
   firmware: Terminal,
   conexao: Wifi,
   calibracao: Sparkles,
+  verificacao: ShieldCheck,
 };
 
 export function CollectorSetupScreen({ code }: { code: string }) {
@@ -100,9 +101,15 @@ export function CollectorSetupScreen({ code }: { code: string }) {
 
       {journey.live ? <LiveCard view={view} /> : <NowCard view={view} />}
 
+      {/*
+        A linha do tempo. O fio à esquerda é o que transforma sete cartões numa
+        jornada: ele mostra, sem texto nenhum, quanto do caminho já ficou para
+        trás — e é verde só até onde é verdade.
+      */}
       <ol className="space-y-3">
-        {journey.steps.map((step) => (
-          <li key={step.id}>
+        {journey.steps.map((step, index) => (
+          <li key={step.id} className="grid grid-cols-[2.25rem_1fr] gap-3">
+            <TimelineMarker step={step} number={index + 1} last={index === journey.steps.length - 1} />
             <StepCard step={step} view={view} source={source} state={state} />
           </li>
         ))}
@@ -145,31 +152,55 @@ interface PanelProps {
   state: { busy: boolean; firmware: FirmwarePackage | null; firmwareWarning: string | null };
 }
 
-function StepCard({ step, view, source, state }: PanelProps & { step: SetupStep }) {
+/**
+ * O marcador de uma etapa no fio da jornada.
+ *
+ * Etapa cumprida leva visto; a atual, o ícone do que se faz nela; as que ainda
+ * esperam levam o NÚMERO, e não um cadeado. O cadeado dizia "você não pode", e
+ * o número diz "a sua vez chega" — para quem está montando o primeiro captador,
+ * a diferença entre as duas frases é continuar ou parar.
+ */
+function TimelineMarker({ step, number, last }: { step: SetupStep; number: number; last: boolean }) {
   const Icon = ICONS[step.id];
+  const feita = step.state === "done";
+  const atual = step.state === "current";
+
+  return (
+    <div className="relative flex justify-center">
+      {!last && (
+        <span
+          aria-hidden
+          className={`absolute left-1/2 top-9 -ml-px h-[calc(100%-1.5rem)] w-0.5 rounded-full ${
+            feita ? "bg-leaf-400/40" : "bg-white/[0.07]"
+          }`}
+        />
+      )}
+      <span
+        className={`relative grid size-9 shrink-0 place-items-center rounded-full text-sm font-bold ${
+          feita
+            ? "bg-leaf-400/20 text-leaf-300 ring-1 ring-inset ring-leaf-400/40"
+            : atual
+              ? "bg-aqua-400/20 text-aqua-200 ring-2 ring-inset ring-aqua-400/60"
+              : "bg-white/[0.04] text-mist-500 ring-1 ring-inset ring-white/[0.08]"
+        }`}
+      >
+        {feita ? <Check className="size-4" aria-hidden /> : atual ? <Icon className="size-4" aria-hidden /> : number}
+      </span>
+    </div>
+  );
+}
+
+function StepCard({ step, view, source, state }: PanelProps & { step: SetupStep }) {
   const atual = step.state === "current";
   const feita = step.state === "done";
 
   return (
-    <Surface tone={atual ? "raised" : "default"} className={atual ? "space-y-4 p-5" : "space-y-2 p-4"} aria-current={atual ? "step" : undefined}>
-      <div className="flex items-start gap-3">
-        <span
-          className={
-            feita
-              ? "grid size-10 shrink-0 place-items-center rounded-2xl bg-leaf-400/15 text-leaf-300"
-              : atual
-                ? "grid size-10 shrink-0 place-items-center rounded-2xl bg-aqua-400/15 text-aqua-300"
-                : "grid size-10 shrink-0 place-items-center rounded-2xl bg-white/[0.05] text-mist-500"
-          }
-        >
-          {feita ? (
-            <Check className="size-5" aria-hidden />
-          ) : step.state === "locked" ? (
-            <Lock className="size-4" aria-hidden />
-          ) : (
-            <Icon className="size-5" aria-hidden />
-          )}
-        </span>
+    <Surface
+      tone={atual ? "raised" : "default"}
+      className={atual ? "min-w-0 space-y-4 p-4" : "min-w-0 space-y-2 p-3.5"}
+      aria-current={atual ? "step" : undefined}
+    >
+      <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <p className={feita || atual ? "font-display font-semibold text-mist-50" : "font-display font-semibold text-mist-400"}>{step.title}</p>
           {atual && <p className="mt-1 text-sm leading-relaxed text-mist-300">{step.summary}</p>}
@@ -189,7 +220,7 @@ function StepPanel({ step, view, source, state }: PanelProps & { step: SetupStep
     case "cadastro":
       return null;
     case "montagem":
-    case "personalizacao":
+    case "identificacao":
       return <ManualStepPanel step={step} view={view} source={source} state={state} />;
     case "firmware":
       return <FirmwarePanel view={view} source={source} state={state} />;
@@ -197,14 +228,25 @@ function StepPanel({ step, view, source, state }: PanelProps & { step: SetupStep
       return <ConnectionPanel view={view} />;
     case "calibracao":
       return <CalibrationPanel view={view} />;
+    case "verificacao":
+      return <VerificationPanel view={view} />;
   }
 }
 
-function ManualStepPanel({ step, view, source, state }: PanelProps & { step: "montagem" | "personalizacao" }) {
+function ManualStepPanel({ step, view, source, state }: PanelProps & { step: "montagem" | "identificacao" }) {
   const materiais = view.resources.filter((item) => item.step === step);
 
   return (
     <div className="space-y-3">
+      {step === "montagem" && (
+        <GuiaPdf
+          code={view.code}
+          guide="construcao"
+          titulo="Manual de construção deste captador"
+          descricao={`Materiais, cortes, posição do sensor e ligação — já com as medidas do ${view.code} e o sensor que você escolheu.`}
+        />
+      )}
+      {step === "identificacao" && <CollectorStickerCard code={view.code} location={view.location} />}
       {materiais.map((material) => (
         <div key={material.id} className="rounded-2xl bg-white/[0.04] p-3.5">
           <p className="flex items-center gap-2 text-sm font-semibold text-mist-100">
@@ -229,18 +271,6 @@ function ManualStepPanel({ step, view, source, state }: PanelProps & { step: "mo
         </div>
       ))}
 
-      {step === "personalizacao" && (
-        <div className="rounded-2xl bg-white/[0.04] p-3.5">
-          <p className="text-sm font-semibold text-mist-100">Adesivo com o QR deste captador</p>
-          <p className="mt-1 text-xs leading-relaxed text-mist-400">
-            Sem ele colado no tubo, ninguém valida este captador nem faz missão nele.
-          </p>
-          <div className="mt-3">
-            <StickerLink code={view.code} />
-          </div>
-        </div>
-      )}
-
       <Button
         variant="leaf"
         onClick={() => void source.markStep(step, true)}
@@ -248,16 +278,18 @@ function ManualStepPanel({ step, view, source, state }: PanelProps & { step: "mo
         className="w-full"
         icon={<Check className="size-5" aria-hidden />}
       >
-        {step === "montagem" ? "Montei o captador" : "Personalizei o captador"}
+        {step === "montagem" ? "Montei o captador" : "Colei o adesivo no tubo"}
       </Button>
       <p className="text-xs leading-relaxed text-mist-500">
-        Esta etapa é você que marca: a plataforma não tem como ver um tubo montado. As próximas ela confere sozinha.
+        {step === "montagem"
+          ? "Esta etapa é você que marca: a plataforma não tem como ver um tubo montado. As próximas ela confere sozinha."
+          : "Esta etapa é você que marca: a plataforma não tem como ver um adesivo colado. As próximas ela confere sozinha."}
       </p>
     </div>
   );
 }
 
-function FirmwarePanel({ source, state }: PanelProps) {
+function FirmwarePanel({ view, source, state }: PanelProps) {
   const pacote = state.firmware;
 
   const gerar = async (confirmReplacement: boolean) => {
@@ -274,6 +306,17 @@ function FirmwarePanel({ source, state }: PanelProps) {
         A plataforma gera o arquivo <code className="text-aqua-300">secrets.h</code> com a identidade deste captador. A senha do Wi-Fi da
         escola não vai nele: a própria placa pergunta a rede, na etapa seguinte.
       </p>
+
+      {/*
+        O guia impresso vem antes do arquivo: quem grava a placa sai de perto do
+        telefone e vai para um computador, e o papel é o que atravessa com ele.
+      */}
+      <GuiaPdf
+        code={view.code}
+        guide="firmware"
+        titulo="Guia de gravação, passo a passo"
+        descricao="Quais programas instalar, onde baixar cada um, como ligar a placa e o que fazer quando der errado. Escrito para quem nunca programou."
+      />
 
       {state.firmwareWarning && (
         <div className="space-y-3 rounded-2xl bg-alert-400/12 p-3.5">
@@ -316,6 +359,29 @@ function FirmwarePanel({ source, state }: PanelProps) {
 }
 
 /** O passo a passo da gravação. Aparece depois do download, que é quando serve. */
+/** Manual em PDF desta etapa, montado na hora para este captador. */
+function GuiaPdf({ code, guide, titulo, descricao }: { code: string; guide: "construcao" | "firmware"; titulo: string; descricao: string }) {
+  return (
+    <div className="rounded-2xl bg-white/[0.04] p-3.5">
+      <p className="flex items-center gap-2 text-sm font-semibold text-mist-100">
+        <FileText className="size-4 text-aqua-300" aria-hidden />
+        {titulo}
+      </p>
+      <p className="mt-1 text-xs leading-relaxed text-mist-400">{descricao}</p>
+      <motion.a
+        href={`/api/admin/collectors/${encodeURIComponent(code)}/guides/${guide}`}
+        target="_blank"
+        rel="noreferrer"
+        whileTap={{ scale: 0.97 }}
+        className="mt-3 flex h-11 items-center justify-center gap-2 rounded-control bg-white/[0.07] text-sm font-semibold text-mist-50 ring-1 ring-inset ring-white/10"
+      >
+        <Download className="size-4" aria-hidden />
+        Baixar PDF para imprimir
+      </motion.a>
+    </div>
+  );
+}
+
 function FlashingSteps({ guide }: { guide: FirmwarePackage["guide"] }) {
   const [open, setOpen] = useState(true);
   return (
@@ -331,9 +397,11 @@ function FlashingSteps({ guide }: { guide: FirmwarePackage["guide"] }) {
       </button>
       {open && (
         <ol className="space-y-3.5 border-t border-white/[0.06] px-3.5 py-3.5">
-          {guide.map((passo) => (
+          {guide.map((passo, index) => (
             <li key={passo.title} className="space-y-1.5">
-              <p className="text-sm font-semibold text-mist-100">{passo.title}</p>
+              <p className="text-sm font-semibold text-mist-100">
+                {index + 1}. {passo.title}
+              </p>
               {passo.lines.map((linha) => (
                 <p key={linha} className="text-xs leading-relaxed text-mist-400">
                   {linha}
@@ -405,6 +473,104 @@ function CalibrationPanel({ view }: { view: CollectorSetupView }) {
         <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         Faça a calibração junto ao captador: cada ponto vem da leitura do sensor, nenhum é digitado.
       </p>
+    </div>
+  );
+}
+
+/**
+ * A SÉTIMA ETAPA: o captador está no ar?
+ *
+ * Esta tela não pede nada. Ela existe porque percorrer seis etapas e ficar sem
+ * saber se deu certo é pior do que não ter começado — e porque "deu certo" aqui
+ * tem significado exato: a placa falou faz pouco, a calibração vale para o
+ * sensor de hoje, e o captador tem o número da escola.
+ *
+ * Quando algo falta, a tela diz o que falta. Nunca diz "pronto" por otimismo.
+ */
+function VerificationPanel({ view }: { view: CollectorSetupView }) {
+  // `null` no servidor: antes de montar não há relógio, e o silêncio fica sem
+  // medida em vez de inventar uma.
+  const agora = useNow(30_000);
+  const silencio = agora === null || view.lastSeenAt === null ? null : agora - view.lastSeenAt;
+  const falandoAgora = silencio !== null && silencio < 10 * 60_000;
+
+  const conferencias = [
+    {
+      ok: view.lastSeenAt !== null,
+      titulo: "A placa fala com a plataforma",
+      detalhe:
+        view.lastSeenAt === null
+          ? "Nenhuma leitura recebida até agora."
+          : falandoAgora || silencio === null
+            ? "Leitura recebida agora há pouco."
+            : `Última leitura ${describeSilence(silencio)}. Confira a energia e o Wi-Fi do captador.`,
+    },
+    {
+      ok: view.journey.steps.find((step) => step.id === "calibracao")!.state === "done",
+      titulo: "A calibração vale para este sensor",
+      detalhe:
+        view.journey.steps.find((step) => step.id === "calibracao")!.state === "done"
+          ? "Os litros que o app mostra vêm desta calibração."
+          : "Sem calibração aceita, o captador mede distância mas não entrega litros.",
+    },
+    {
+      ok: view.protoCode !== null || view.code.startsWith("ECO"),
+      titulo: "O captador tem o número da escola",
+      detalhe:
+        view.protoCode !== null
+          ? `Era ${view.protoCode} enquanto era obra. Agora é ${view.code}.`
+          : view.code.startsWith("ECO")
+            ? `Este captador é o ${view.code} da escola.`
+            : "O número da escola é assumido quando a calibração é aceita.",
+    },
+  ];
+
+  return (
+    <div className="space-y-3">
+      <ul className="space-y-2">
+        {conferencias.map((item) => (
+          <li key={item.titulo} className="flex gap-3 rounded-2xl bg-white/[0.04] p-3.5">
+            <span
+              className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-full ${
+                item.ok ? "bg-leaf-400/20 text-leaf-300" : "bg-sun-400/15 text-sun-300"
+              }`}
+            >
+              {item.ok ? <Check className="size-3.5" aria-hidden /> : <AlertTriangle className="size-3.5" aria-hidden />}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-mist-100">{item.titulo}</span>
+              <span className="mt-0.5 block text-xs leading-relaxed text-mist-400">{item.detalhe}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      {view.journey.live && (
+        <Surface tone="leaf" className="space-y-2 p-4">
+          <p className="font-display font-semibold text-mist-50">As missões estão liberadas</p>
+          <p className="text-sm leading-relaxed text-mist-300">
+            Os estudantes da escola já veem o {view.code} no aplicativo. Para começar, basta apontar a câmera para o
+            adesivo colado no tubo.
+          </p>
+        </Surface>
+      )}
+
+      {/*
+        O que esta etapa NÃO consegue ver: se a válvula realmente abre e a água
+        realmente sai. Isso só o primeiro teste com o tubo cheio mostra — e é
+        melhor dizer isso aqui do que deixar a primeira missão de um estudante
+        falhar sem explicação.
+      */}
+      <div className="rounded-2xl bg-sun-400/10 p-3.5">
+        <p className="flex items-center gap-2 text-sm font-semibold text-sun-300">
+          <AlertTriangle className="size-4" aria-hidden />
+          Faça a primeira liberação com você por perto
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-mist-300">
+          A plataforma confere o que ela mede: sensor, calibração e número da escola. Que a válvula abre e a água sai
+          pela mangueira, só o pátio mostra. Faça a primeira missão acompanhando, com um balde embaixo da saída.
+        </p>
+      </div>
     </div>
   );
 }

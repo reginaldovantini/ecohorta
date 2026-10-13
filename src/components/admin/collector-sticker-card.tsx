@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { Download, Droplets, Printer, QrCode, Ruler } from "lucide-react";
+import { Download, Droplets, MapPin, Printer, QrCode, Ruler, ScanLine } from "lucide-react";
 import { Surface } from "@/components/ui/surface";
 import { STICKER, stickerSize } from "@/lib/collector/qr-sticker";
 
@@ -36,6 +36,8 @@ export function CollectorStickerCard({ code, location }: { code: string; locatio
           { icon: Droplets, texto: "Peça adesivo VINIL com laminação: o tubo molha, e papel comum apaga o QR." },
           { icon: Printer, texto: "Tamanho real (100%). Nunca em “ajustar à página”." },
           { icon: Ruler, texto: `Arte final de ${widthMm} × ${heightMm} mm, com QR de ${STICKER.qrMm / 10} cm — já no tamanho certo.` },
+          { icon: MapPin, texto: "Cole na altura dos olhos, no lado por onde os estudantes chegam." },
+          { icon: ScanLine, texto: "Confira com a câmera do celular: o QR precisa abrir mesmo com o pátio claro." },
         ].map(({ icon: Icon, texto }, index) => (
           <li key={index} className="flex gap-3 text-sm text-mist-300">
             <span className="grid size-6 shrink-0 place-items-center rounded-full bg-white/[0.07] text-leaf-300">
@@ -59,6 +61,14 @@ export function CollectorStickerCard({ code, location }: { code: string; locatio
       <p className="text-xs leading-relaxed text-mist-400">
         Adesivo de {widthMm} × {heightMm} mm, com marcas de corte. O arquivo traz “{code} · {location}” fora da área
         colável, para não trocar os tubos na hora de colar.
+      </p>
+      {/*
+        O medo de quem vai colar: colar cedo e ter de refazer. O QR carrega um
+        token que não muda quando o captador assume o número da escola — então
+        colar agora é seguro, e dizer isso aqui evita o tubo sem adesivo.
+      */}
+      <p className="text-xs leading-relaxed text-mist-400">
+        O QR não muda nunca, nem quando o captador assumir o código da escola na calibração. Imprima e cole uma vez só.
       </p>
     </Surface>
   );

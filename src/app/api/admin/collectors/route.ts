@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { DISTANCE_SENSOR_MODELS } from "@/lib/collector/distance-sensors";
 import { CONNECTIVITY_MODES, registerCollector } from "@/lib/server/collector-registry";
-import { registerSchool, UF_LIST } from "@/lib/server/school-registry";
+import { registerSchool, setEnrolledStudents, UF_LIST } from "@/lib/server/school-registry";
 import { isAdministrator } from "@/lib/server/actor";
 import { authenticate } from "@/lib/server/auth";
 import { getDatabase } from "@/lib/server/db/pg";
@@ -37,6 +37,14 @@ const bodySchema = z.object({
   schoolId: z.string().uuid().optional(),
   /** Escola nova, com município e estado. Só a administração da plataforma. */
   school: schoolSchema.optional(),
+  /**
+   * Quantos estudantes a escola tem matriculados.
+   *
+   * Pedido aqui, na primeira etapa, porque é a única hora em que quem responde
+   * é quem sabe — e porque sem ele o alcance do projeto fica sem denominador:
+   * "280 missões" pode ser a escola inteira ou uma turma.
+   */
+  enrolledStudents: z.number().int().min(1).max(200_000).optional(),
 });
 
 export async function POST(request: Request) {
@@ -51,7 +59,7 @@ export async function POST(request: Request) {
 
     const body = await parseBody(request, bodySchema);
     if (body.error) return body.error;
-    const { school, schoolId, ...collector } = body.data;
+    const { school, schoolId, enrolledStudents, ...collector } = body.data;
 
     if ((school || (schoolId && schoolId !== actor.schoolId)) && !actor.platformAdmin) {
       return jsonError(403, "Somente a administração da plataforma cadastra captadores em outras escolas.");
@@ -61,6 +69,7 @@ export async function POST(request: Request) {
     try {
       const criado = await getDatabase().transaction(async (tx) => {
         const alvo = school ? (await registerSchool(tx, school)).id : (schoolId ?? actor.schoolId!);
+        if (enrolledStudents !== undefined) await setEnrolledStudents(tx, alvo, enrolledStudents);
         return registerCollector(tx, { ...collector, schoolId: alvo, createdBy: actor.profileId, pepper });
       });
       // O código de responsável e a senha da rede aparecem para quem cadastrou:
