@@ -102,12 +102,33 @@ export interface DeviceSimulationState {
 }
 
 /**
+ * Calibração ativa, enviada à placa.
+ *
+ * Existe por uma razão só: QUEM FECHA A VÁLVULA É A PLACA. Ela precisa saber,
+ * sozinha, quantos litros já saíram — se dependesse do servidor para decidir o
+ * instante de fechar, uma queda de Wi-Fi no meio da liberação deixaria a água
+ * correndo até o tempo máximo.
+ *
+ * São os mesmos quatro números do modelo do servidor (`VolumeModel`), e a conta
+ * na placa é a mesma: litros = k × (zero − distância).
+ */
+export interface DeviceCalibration {
+  id: string;
+  zero_distance_mm: number;
+  maximum_distance_mm: number;
+  constant_liters_per_mm: number;
+  capacity_liters: number;
+}
+
+/**
  * Configuração de hardware do captador, definida na plataforma e enviada em toda resposta.
  * O firmware usa o driver do sensor indicado e guarda a configuração na memória não volátil.
  */
 export interface HardwareConfig {
   distance_sensor: DistanceSensorModel;
   revision: number;
+  /** `null` enquanto o captador não tem calibração aceita: sem ela não se libera água. */
+  calibration: DeviceCalibration | null;
 }
 
 export interface TelemetryResponse {

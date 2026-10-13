@@ -40,6 +40,32 @@ export const SENSOR_WIRING = {
   unusedPins: ["XSHUT", "GPIO1"],
 } as const;
 
+/*
+ * A LIGAÇÃO DA VÁLVULA.
+ *
+ * Esquema "alimentação + controle", identificado na bancada (docs/HARDWARE.md
+ * §2.2): o motor fica permanentemente alimentado e um único fio decide o
+ * sentido. Um relé basta.
+ *
+ * A propriedade que importa: relé solto = válvula fechada. Sem energia no relé,
+ * a água não sai — e é por isso que o firmware solta o relé na primeira linha,
+ * antes de qualquer outra coisa.
+ */
+export const VALVE_WIRING = {
+  kind: "Válvula esférica motorizada DC 12 V, 3 fios",
+  relayGpio: 26,
+  supply: "Fonte 12 V (separada da alimentação do ESP32)",
+  wires: [
+    { color: "Amarelo", to: "GND da fonte 12 V, direto", role: "Comum" },
+    { color: "Marrom", to: "+12 V da fonte, direto", role: "Alimentação permanente do motor" },
+    { color: "Azul", to: "Um contato do relé; o outro contato vai ao +12 V", role: "Controle: energizado abre, solto fecha" },
+  ],
+  /** Como o módulo de relé é acionado. Precisa ser conferido na bancada. */
+  relayActiveLow: true,
+  /** Tempo entre o comando e o fechamento completo. O firmware antecipa por causa dele. */
+  closeMs: 1500,
+} as const;
+
 export interface DistanceSensorSpec {
   model: DistanceSensorModel;
   manufacturer: "STMicroelectronics";

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, BookOpen, Cable, ChevronDown, CircleCheck, History, Info, Microscope, Ruler, TriangleAlert, type LucideIcon } from "lucide-react";
+import { ArrowLeft, BookOpen, Cable, ChevronDown, CircleCheck, Droplets, History, Info, Microscope, Ruler, TriangleAlert, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
@@ -17,6 +17,7 @@ import {
   isDistanceSensorModel,
   SENSOR_STATE_LABEL,
   SENSOR_WIRING,
+  VALVE_WIRING,
   type DistanceSensorModel,
   type SensorCompatibility,
 } from "@/lib/collector/distance-sensors";
@@ -116,6 +117,7 @@ function WiringWorkspace({ code }: { code: string }) {
       )}
 
       <WiringManual guide={wiringGuide(manualModel)} configured={configuration.distanceSensor} code={collector.code} onPreview={setPreview} />
+      <ValvePanel />
       <ChangeHistory items={view.history} />
 
       <ChangeSheet
@@ -539,6 +541,67 @@ function WiringManual({
           <li key={source}>{source}</li>
         ))}
       </ul>
+    </section>
+  );
+}
+
+/**
+ * A LIGAÇÃO DA VÁLVULA.
+ *
+ * Fica aqui, ao lado do sensor, porque é a mesma pessoa, a mesma caixa e o mesmo
+ * medo: ligar errado e queimar alguma coisa. Três fios e um relé — e a frase que
+ * mais importa é a última, porque é a que evita o pátio molhado.
+ */
+function ValvePanel() {
+  return (
+    <section className="space-y-3" aria-labelledby="valvula-title">
+      <h2 id="valvula-title" className="flex items-center gap-2 font-display text-lg font-bold text-mist-50">
+        <Droplets className="size-5 text-aqua-300" aria-hidden /> Ligação da válvula
+      </h2>
+      <Surface className="space-y-4 p-4">
+        <div>
+          <p className="font-display font-semibold text-mist-50">{VALVE_WIRING.kind}</p>
+          <p className="mt-0.5 text-sm text-mist-300">{VALVE_WIRING.supply}</p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            <Chip tone="aqua">relé no GPIO {VALVE_WIRING.relayGpio}</Chip>
+            <Chip tone="neutral">1 relé</Chip>
+            <Chip tone="neutral">curso ~{(VALVE_WIRING.closeMs / 1000).toLocaleString("pt-BR")} s</Chip>
+          </div>
+        </div>
+
+        <ul className="space-y-2">
+          {VALVE_WIRING.wires.map((fio) => (
+            <li key={fio.color} className="rounded-xl bg-white/[0.04] p-3">
+              <p className="text-sm font-semibold text-mist-50">
+                {fio.color} <span className="font-normal text-mist-400">→ {fio.to}</span>
+              </p>
+              <p className="mt-0.5 text-xs leading-relaxed text-mist-400">{fio.role}</p>
+            </li>
+          ))}
+        </ul>
+
+        <ManualBlock title="Como a plataforma aciona">
+          <p>
+            Relé acionado, o contato fecha, o fio azul recebe 12 V e a válvula abre. Relé solto, ela fecha. Sem energia
+            no relé a água não sai — por isso a placa solta o relé na primeira linha ao ligar, antes de qualquer outra
+            coisa.
+          </p>
+          <p>
+            Quem decide o instante de fechar é a própria placa, pelo volume que o sensor mede. Se o Wi-Fi cair no meio
+            de uma liberação, ela fecha do mesmo jeito.
+          </p>
+        </ManualBlock>
+
+        <div className="rounded-xl bg-sun-400/10 p-3 text-xs leading-relaxed text-mist-200 ring-1 ring-inset ring-sun-400/25">
+          <p className="font-semibold text-sun-300">Antes do primeiro uso com o tubo cheio</p>
+          <p className="mt-1">
+            Teste a válvula na bancada, fora da água. A maioria dos módulos de relé aciona em nível{" "}
+            {VALVE_WIRING.relayActiveLow ? "BAIXO" : "ALTO"} — a placa imprime no monitor serial o nível que está
+            usando. Se a válvula abrir quando deveria estar fechada, o módulo é do outro tipo e a configuração do
+            firmware precisa ser invertida.
+          </p>
+        </div>
+      </Surface>
     </section>
   );
 }

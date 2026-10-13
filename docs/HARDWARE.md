@@ -5,8 +5,8 @@
 > - ESP32 DevKit V1 (ESP32 clássico) na caixa eletrônica e **um único** sensor de distância dentro da tampa, ligados por **cabo de 4 vias (~50 cm)**: **prontos para a primeira validação física** (§8);
 > - sensor: **VL53L0X ou VL53L1X**, escolhido na plataforma (**Administração → Captadores → {código} → Ligações**). O firmware tem os dois drivers e usa o do sensor configurado (§3.1);
 > - módulo físico do ECO-001: **CJMCU-531, baseado no VL53L1X** → o ECO-001 é configurado como **VL53L1X** (nunca como VL53L0X);
-> - válvula esférica motorizada DC 12 V de 3 fios e dois relés: adquiridos, **NÃO integrados** (§2);
-> - firmware da etapa 1 (distância + diagnóstico + telemetria, **sem válvula**) em `firmware/`: compila para o ESP32 DevKit V1 e tem testes do núcleo de sensores no computador; ainda **não foi gravado em uma placa** (§6).
+> - válvula esférica motorizada DC 12 V de 3 fios: esquema **identificado** (alimentação + controle) e **integrada ao firmware** por um relé (§2.2);
+> - firmware em `firmware/`: distância, diagnóstico, telemetria **e liberação por válvula**. Compila para o ESP32 DevKit V1 e tem testes do núcleo de sensores e do núcleo de liberação no computador; ainda **não foi gravado em uma placa** (§6).
 
 > **Convenção de identificação:** **ECO-001** = captador FÍSICO (dispositivo `ESP32-001`, REAL).
 > **SIM-001** = captador da SIMULAÇÃO (dispositivo `VIRTUAL-001`), só para testes e demonstração.
@@ -21,8 +21,8 @@
 | ESP32 DevKit V1 — ESP32 clássico, ESP32-WROOM-32 (na caixa eletrônica) | Wi-Fi, leitura do sensor, telemetria | Pronto para validação — firmware etapa 1 (compila; ainda não gravado) |
 | Sensor de distância ToF **VL53L0X ou VL53L1X** — um único sensor, dentro da tampa superior, apontado para baixo. No ECO-001: módulo **CJMCU-531 (VL53L1X)** | Distância até a superfície da água | Pronto para validação. Modelo escolhido na plataforma (§3.1, §8.3) |
 | Cabo de 4 vias, ~50 cm instalado (VCC, GND, SDA, SCL) | Liga o sensor da tampa ao ESP32 na caixa eletrônica | Em montagem — ligação em §8.3 |
-| Válvula esférica motorizada DC 12 V, 3 fios | Liberação por gravidade | Adquirida — **não integrada; modelo elétrico a identificar (§2.2)** |
-| 2 módulos relé | Acionamento da válvula | **Compatibilidade a verificar (§2.3)** |
+| Válvula esférica motorizada DC 12 V, 3 fios | Liberação por gravidade | **Esquema identificado e integrada ao firmware (§2.2)** — falta o protocolo de vazão (§2.4) |
+| 1 módulo relé (o segundo fica de reserva) | Aciona o fio azul da válvula | **Integrado** — conferir a lógica do módulo na bancada (§2.2) |
 | Fonte | Alimentação da válvula e do ESP32 | Depende da tensão da válvula |
 
 ## 2. Válvula
@@ -33,28 +33,31 @@ A maioria das válvulas solenoides baratas de 12 V é **servo-assistida (piloto)
 
 A **válvula esférica motorizada** abre com qualquer pressão, por isso foi a escolha planejada. Mesmo assim, ela precisa passar pelo protocolo de vazão (§2.4).
 
-### 2.2 Válvula de 3 fios — NÃO assumir o modelo elétrico
+### 2.2 Válvula de 3 fios — esquema IDENTIFICADO
 
-"3 fios" descreve pelo menos dois esquemas diferentes, e ligar no esquema errado pode queimar o motor ou deixar a válvula aberta:
+A válvula do captador é do esquema **alimentação + controle**: um fio de alimentação permanente, um de controle e o comum. Ligação confirmada na bancada:
 
-| Esquema comum | Como funciona | Consequência |
+| Fio | Vai para | Papel |
 |---|---|---|
-| **Inversão por fio** (ex.: marcações CR01/CR03) | Um fio comum + um fio "abrir" + um fio "fechar". A tensão no fio "abrir" gira para um lado; no "fechar", para o outro. Fins de curso internos cortam o motor | Cada relé energiza um sentido. **Nunca** os dois ao mesmo tempo |
-| **Alimentação + controle** (ex.: CR02) | Um fio de alimentação permanente, um de controle e o comum. Controle energizado = abre; desenergizado = fecha | Precisa de alimentação contínua; um relé pode bastar |
+| **Amarelo** | GND da fonte 12 V, direto | Comum |
+| **Marrom** | +12 V da fonte, direto | Alimentação permanente do motor |
+| **Azul** | Um contato do **relé**; o outro contato do relé vai ao +12 V | Controle |
 
-**Nenhuma das duas é à prova de falha:** sem energia, a válvula fica **na última posição**. Se faltar energia com a válvula aberta, a água continua saindo. Isso precisa ser considerado no local de instalação (a água deve escoar para uma área segura) e na política do firmware.
+**Relé acionado = contato fechado = o azul recebe 12 V = a válvula ABRE.
+Relé solto = a válvula FECHA.**
 
-**Checklist de identificação (antes de ligar ao ESP32):**
+Isso dá uma propriedade que vale mais do que parece: **sem energia no relé, a água não sai**. Por isso o firmware solta o relé na primeira linha do `setup()`, antes de qualquer outra coisa — entre a energia chegar e essa linha, o pino está flutuando, e um pino flutuante num módulo acionado por nível baixo pode energizar a bobina sozinho.
 
-1. Fotografe a etiqueta: modelo (CR01…CR05), tensão (DC 5 V, 12 V, 24 V ou AC) e esquema de fios impresso.
-2. Confira a documentação do vendedor e anote as cores dos fios.
-3. Com fonte de bancada **na tensão da etiqueta** e limite de corrente:
-   - aplique tensão em cada par de fios e anote o que acontece (abre, fecha ou nada);
-   - meça o **tempo** para abrir e para fechar por completo;
-   - meça a **corrente** em movimento e ao chegar ao fim de curso;
-   - confirme se o motor **desliga sozinho** no fim de curso (corrente cai a ~0).
-4. Desligue a energia com a válvula no meio do curso e confirme que ela fica parada (sem retorno por mola).
-5. Registre tudo nesta seção antes de escrever qualquer lógica de válvula no firmware.
+**Um relé basta.** O segundo módulo adquirido fica de reserva.
+
+**O que continua não sendo à prova de falha:** faltando energia na FONTE (não no relé), a válvula fica na última posição. Se faltar luz com ela aberta, a água continua saindo. Daí a exigência do local: a saída precisa escoar para uma área segura, onde a água possa cair sem molhar passagem.
+
+**Antes do primeiro uso com o tubo cheio** (bancada, válvula fora da água):
+
+1. Confira a **lógica do módulo de relé**. A maioria dos módulos aciona em nível BAIXO (IN em 0 V energiza a bobina). O firmware imprime no monitor serial o nível que está usando; se a válvula abrir quando deveria estar fechada, inverta `VALVE_RELAY_ACTIVE_LOW` em `firmware/include/config.h`.
+2. Meça o **tempo de curso** entre o comando e o fechamento completo. É o `VALVE_CLOSE_MS` do firmware (padrão 1500 ms), e é o que a antecipação de fechamento compensa — errar esse número faz o captador entregar água a mais ou a menos.
+3. Confirme que o motor **desliga sozinho** no fim de curso (a corrente cai a ~0).
+4. Só então ligue a válvula ao tubo cheio e rode o protocolo de vazão (§2.4).
 
 ### 2.3 Relés
 
@@ -204,7 +207,7 @@ firmware/
 - **I²C:** SDA = GPIO21, SCL = GPIO22, **100 kHz** para os dois sensores. Não aumentar para 400 kHz sem validação física.
 - **Telemetria:** distância (`distance_mm`), driver em uso (`sensor_model`), revisão aplicada (`hardware_revision`) e diagnóstico (`sensor_state`, `model_id`, `i2c_ack`, `i2c_clock_hz`, amostras válidas, faixa, sinal e luz ambiente quando o sensor informa, contagem de status, tempo de leitura, modo, ROI e RSSI). O volume é calculado no servidor pela calibração ativa.
 - Reaproveita a conexão HTTPS, conta o intervalo pedido pelo servidor a partir do início do ciclo e segue o `next_poll_ms`, no **mesmo contrato do dispositivo virtual**.
-- Status enviado: `MAINTENANCE` (leitura válida, sem válvula) ou `ERROR` (sem leitura). Sem calibração na plataforma, o app mostra `CALIBRATING`. As missões ficam indisponíveis nesse captador.
+- Status enviado: `READY` quando as três coisas são verdadeiras ao mesmo tempo — o sensor mede, a placa tem calibração e a válvula não está no meio de outra liberação. `DISPENSING` durante uma liberação, `MAINTENANCE` quando mede mas ainda não foi calibrado (mede, não libera) e `ERROR` sem leitura válida.
 - **Sem válvula:** comandos recebidos são ignorados e expiram no servidor (`FAILED/DEVICE_OFFLINE`), sem liberar água. Trocar o sensor só troca o driver de medição.
 
 **Mensagens do monitor serial:**

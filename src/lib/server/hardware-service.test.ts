@@ -182,16 +182,52 @@ describe("seleção do sensor (persistida na plataforma)", () => {
 describe("driver correto no firmware", () => {
   it("a resposta de cada telemetria leva o sensor configurado e a revisão", async () => {
     const before = await collectors.ingestTelemetry(esp32, real(1236));
-    expect(before.hardware).toEqual({ distance_sensor: "VL53L1X", revision: 1 });
+    expect(before.hardware).toMatchObject({ distance_sensor: "VL53L1X", revision: 1 });
 
     await change("VL53L0X");
     clock += 1000;
     const after = await collectors.ingestTelemetry(esp32, real(1236));
-    expect(after.hardware).toEqual({ distance_sensor: "VL53L0X", revision: 2 });
+    expect(after.hardware).toMatchObject({ distance_sensor: "VL53L0X", revision: 2 });
     // A troca não cria comando nenhum para o dispositivo (nada de válvula).
     expect(after.command).toBeNull();
     const { rows } = await db.query("select 1 from device_commands");
     expect(rows).toEqual([]);
+  });
+
+  /*
+   * A calibração viaja até a placa.
+   *
+   * Não é conveniência: QUEM FECHA A VÁLVULA É A PLACA, pelo volume que ela
+   * mesma mede. Se o instante de fechar dependesse de uma resposta HTTP, uma
+   * queda de Wi-Fi no meio da liberação deixaria a água correndo até o tempo
+   * máximo — com um estudante segurando o regador embaixo.
+   */
+  it("sem calibração aceita, a placa não recebe modelo nenhum", async () => {
+    const resposta = await collectors.ingestTelemetry(esp32, real(1236));
+    expect(resposta.hardware.calibration).toBeNull();
+  });
+
+  it("calibração aceita vai junto da configuração, com os quatro números da conta", async () => {
+    await calibrate("VL53L1X");
+    clock += 1000;
+    const resposta = await collectors.ingestTelemetry(esp32, real(tube(2)));
+    const calibracao = resposta.hardware.calibration;
+    expect(calibracao).not.toBeNull();
+    expect(calibracao!.constant_liters_per_mm).toBeGreaterThan(0);
+    expect(calibracao!.capacity_liters).toBeGreaterThan(0);
+    expect(calibracao!.zero_distance_mm).toBeGreaterThan(calibracao!.maximum_distance_mm);
+
+    // A conta da placa é a mesma do servidor: k × (zero − distância).
+    const litros = calibracao!.constant_liters_per_mm * (calibracao!.zero_distance_mm - tube(2));
+    expect(litros).toBeCloseTo(2, 1);
+  });
+
+  it("trocar o sensor derruba a calibração, e a placa deixa de poder liberar água", async () => {
+    await calibrate("VL53L1X");
+    await change("VL53L0X");
+    clock += 1000;
+    const resposta = await collectors.ingestTelemetry(esp32, real(tube(2), "VL53L0X", { hardware_revision: 2 }));
+    expect(resposta.hardware.calibration).toBeNull();
   });
 
   it("firmware ainda sem configuração: recebe o sensor e aparece como aguardando", async () => {

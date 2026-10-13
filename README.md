@@ -27,8 +27,8 @@ A água de condensação dos aparelhos de ar-condicionado costuma ser descartada
 | Calibração experimental de volume, versionada e vinculada ao sensor | ✅ (Fase 2) · falta executar no EC-001 |
 | Integração física: bancada, diagnóstico do sensor, validação experimental, REAL × SIMULAÇÃO | ✅ (Fase 3) · falta o primeiro teste físico |
 | Sensores de distância VL53L0X e VL53L1X: escolha na plataforma, manual de ligações, compatibilidade com o firmware | ✅ · falta o primeiro teste físico |
-| Firmware ESP32 etapa 1 (dois drivers de sensor, distância + telemetria, sem válvula) | 🧪 compila e tem testes; falta gravar na placa |
-| Válvula e lógica de liberação no ESP32 | ⏳ após checklist da válvula |
+| Firmware ESP32 (dois drivers de sensor, distância + telemetria + liberação por válvula) | 🧪 compila e tem testes dos dois núcleos; falta gravar na placa |
+| Ensaio de vazão da válvula no tubo cheio | ⏳ primeira liberação acompanhada |
 
 ## Stack
 
@@ -37,7 +37,7 @@ A água de condensação dos aparelhos de ar-condicionado costuma ser descartada
 - **Dados e identidade:** Supabase (Postgres + RLS, Auth), plano gratuito
 - **Hospedagem:** Vercel (região `gru1`)
 - **App:** PWA instalável (Android, iPhone e desktop)
-- **Hardware:** ESP32 DevKit V1 (ESP32 clássico) + um sensor de distância dentro da tampa, **VL53L0X ou VL53L1X** (um por captador, escolhido na plataforma; no EC-001, módulo CJMCU-531 = VL53L1X), ligado por cabo de 4 vias de ~50 cm (VCC, GND, SDA→GPIO21, SCL→GPIO22, I²C a 100 kHz) + válvula esférica motorizada (em validação, veja [docs/HARDWARE.md](docs/HARDWARE.md)).
+- **Hardware:** ESP32 DevKit V1 (ESP32 clássico) + um sensor de distância dentro da tampa, **VL53L0X ou VL53L1X** (um por captador, escolhido na plataforma; no EC-001, módulo CJMCU-531 = VL53L1X), ligado por cabo de 4 vias de ~50 cm (VCC, GND, SDA→GPIO21, SCL→GPIO22, I²C a 100 kHz) + válvula esférica motorizada de 12 V acionada por um relé no GPIO26 (ligação em [docs/HARDWARE.md](docs/HARDWARE.md) §2.2).
 
 ## Como rodar
 

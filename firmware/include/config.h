@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-#define FW_VERSION "esp32-0.4.0"
+#define FW_VERSION "esp32-0.5.0"
 
 // ---------- Sensor de distância ----------
 // O MODELO (VL53L0X ou VL53L1X) NÃO é definido aqui: vem da plataforma (Administração →
@@ -35,8 +35,46 @@ static const uint8_t SENSOR_ROI_WIDTH = 16;
 static const uint8_t SENSOR_ROI_HEIGHT = 16;
 
 // ---------- Volume ----------
-// O firmware NÃO converte distância em volume. A calibração experimental é feita no app
-// (Administração → Captadores → Calibração de volume) e o servidor calcula os litros.
+// A calibração experimental é feita no app (Administração → Captadores → Calibração de
+// volume). O servidor continua sendo o dono dela, mas a envia na resposta de cada telemetria
+// e o firmware a guarda na memória não volátil — porque é a PLACA que decide o instante de
+// fechar a válvula. Se esse instante dependesse de uma resposta HTTP, uma queda de Wi-Fi no
+// meio da liberação deixaria a água correndo até o tempo máximo.
+
+// ---------- Válvula esférica motorizada (12 V, 3 fios) ----------
+// Ligação validada no captador da escola (ver docs/HARDWARE.md §2.2):
+//
+//   AMARELO  → GND da fonte 12 V (comum)
+//   MARROM   → +12 V direto na fonte (alimentação permanente do motor)
+//   AZUL     → passa pelo RELE; a outra ponta do contato do relé vai ao +12 V
+//
+// Relé acionado = contato fechado = AZUL recebe 12 V = a válvula ABRE.
+// Relé solto = a válvula FECHA. Ou seja: SEM ENERGIA NO RELÉ, A ÁGUA NÃO SAI — e é por
+// isso que o firmware sempre solta o relé primeiro, antes de qualquer outra coisa.
+//
+// ATENÇÃO à lógica do módulo de relé: a maioria dos módulos chineses aciona em NÍVEL BAIXO
+// (IN em 0 V energiza a bobina). O valor abaixo precisa ser conferido NA BANCADA, com a
+// válvula desligada da água, antes do primeiro uso com o tubo cheio. O firmware imprime o
+// nível escolhido no monitor serial ao ligar.
+static const int PIN_VALVE_RELAY = 26;  // GPIO26: não é strapping nem pino de flash
+static const bool VALVE_RELAY_ACTIVE_LOW = true;
+
+// Curso do motor da válvula: tempo entre o comando e o fechamento completo. A água continua
+// saindo nesse intervalo, e o firmware antecipa o fechamento por causa dele.
+static const uint32_t VALVE_CLOSE_MS = 1500;
+// Tempo parado depois de fechar, antes da leitura final: a superfície precisa assentar.
+static const uint32_t VALVE_SETTLE_MS = 4000;
+// Válvula aberta este tempo sem o nível cair: desiste e informa NO_FLOW.
+static const uint32_t VALVE_NO_FLOW_MS = 8000;
+static const float VALVE_NO_FLOW_MIN_LITERS = 0.05f;
+// TETO ABSOLUTO. Vale mesmo que o servidor peça mais: um comando malformado não molha o pátio.
+static const uint32_t VALVE_HARD_MAX_MS = 120000;
+// Sem leitura válida por este tempo durante a liberação: fecha e informa SENSOR_ERROR.
+static const uint32_t VALVE_SENSOR_BLIND_MS = 6000;
+// Com a válvula aberta, o sensor é lido neste intervalo — muito mais rápido que a telemetria.
+// Quem fecha a válvula é esta malha, não o ciclo de rede.
+static const uint32_t DISPENSE_TICK_MS = 150;
+static const uint8_t DISPENSE_SAMPLES = 3;  // menos amostras por leitura: durante a liberação, rapidez vale mais
 
 // ---------- Comunicação ----------
 static const uint32_t DEFAULT_POLL_MS = 3000;

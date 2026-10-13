@@ -745,8 +745,22 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
           next_poll_ms: current ? ACTIVE_POLL_MS : calibrationMode || bench ? CALIBRATION_POLL_MS : IDLE_POLL_MS,
           command: commandFor(current),
           simulation: simulation ? { settings: simulation.settings, action: simulation.pendingAction } : null,
-          // A plataforma é a fonte da configuração: o firmware usa o driver deste sensor.
-          hardware: { distance_sensor: row.distance_sensor, revision: row.hardware_revision },
+          // A plataforma é a fonte da configuração: o firmware usa o driver deste
+          // sensor e, com a calibração em mãos, fecha a válvula sozinho no
+          // volume certo mesmo que a rede caia no meio da liberação.
+          hardware: {
+            distance_sensor: row.distance_sensor,
+            revision: row.hardware_revision,
+            calibration: model
+              ? {
+                  id: model.id,
+                  zero_distance_mm: model.zeroDistanceMm,
+                  maximum_distance_mm: model.maximumDistanceMm,
+                  constant_liters_per_mm: model.constantLitersPerMm,
+                  capacity_liters: model.capacityLiters,
+                }
+              : null,
+          },
         };
       });
     },

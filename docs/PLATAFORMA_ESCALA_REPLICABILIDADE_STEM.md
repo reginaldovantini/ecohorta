@@ -77,7 +77,7 @@ Prioridades usadas em todo o documento:
 | Camada | O que existe | Onde | Situação |
 |---|---|---|---|
 | Captador físico ECO-001 | Tubo vertical estreito em PVC | — | **[EXISTE]** fisicamente; sem calibração |
-| Firmware ESP32 DevKit V1 (etapa 1) | Drivers VL53L0X e VL53L1X (sensor escolhido na plataforma) com mediana; telemetria HTTPS no mesmo contrato; **sem válvula** | [`firmware/`](../firmware/) | **[EXISTE]** compila e tem testes do núcleo; não gravado nem validado em placa |
+| Firmware ESP32 DevKit V1 | Drivers VL53L0X e VL53L1X (sensor escolhido na plataforma) com mediana; telemetria HTTPS no mesmo contrato; **liberação por válvula, fechada pelo volume medido na própria placa** | [`firmware/`](../firmware/) | **[EXISTE]** compila e tem testes dos dois núcleos; não gravado nem validado em placa |
 | Dispositivo virtual ECO-001 | Física de condensado e gravidade (Torricelli), ruído + mediana, `NO_FLOW`, `TIMEOUT`, cancelamento, idempotência | [`virtual-device.ts`](../src/lib/iot/virtual-device.ts), [`tools/virtual-device/run.ts`](../tools/virtual-device/run.ts) | **[EXISTE]** 12 testes |
 | API IoT | `POST /api/iot/telemetry` (token com hash + pepper), canal da simulação | [`src/app/api/iot`](../src/app/api/iot) | **[EXISTE]** |
 | Serviço de captadores | Estado persistido, trava por captador, comandos, expiração, contabilidade hídrica, XP na conclusão | [`collector-service.ts`](../src/lib/server/collector-service.ts) | **[EXISTE]** 24 testes |
@@ -257,7 +257,7 @@ Estes princípios devem ser **preservados** em qualquer evolução:
 | Dispositivo virtual | A escola aprende e testa a plataforma **antes** de comprar peças | **[EXISTE]** |
 | Firmware aberto no repositório, com credenciais fora do Git | Base para qualquer escola gravar o seu | **[EXISTE]** etapa 1 |
 | Cadastro de captador sem mudar código | `register-device` gera o token uma vez; o banco guarda só o hash | **[EXISTE]** pela linha de comando |
-| Status honestos do dispositivo | Firmware sem calibração envia `CALIBRATING`; sem válvula, `MAINTENANCE`. As missões ficam indisponíveis | **[EXISTE]** |
+| Status honestos do dispositivo | `READY` só com sensor medindo E calibração na placa; `MAINTENANCE` enquanto mede mas não pode liberar; `DISPENSING` durante a liberação | **[EXISTE]** |
 | Protocolos físicos documentados | Identificação da válvula de 3 fios, relés, teste de vazão, calibração ([`HARDWARE.md`](./HARDWARE.md)) | **[EXISTE]** como texto |
 | Mensagens de falha legíveis | `FAILURE_COPY` explica `NO_FLOW`, `TIMEOUT` etc. | **[EXISTE]** |
 
