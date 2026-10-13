@@ -395,6 +395,28 @@ export async function checkScan(tx: Queryable, check: ScanCheck): Promise<ScanRe
 }
 
 /**
+ * Emite um código de responsável NOVO para o captador.
+ *
+ * Existe porque o código aparece uma vez só e some: o banco guarda o hash, e
+ * nem a administração consegue lê-lo de volta. Isso é desenho, não descuido —
+ * quem digita esse código passa a conduzir a construção e a calibração do
+ * captador, e credencial recuperável é credencial que vaza junto com o banco.
+ *
+ * Então não se recupera: reemite-se. O código anterior deixa de valer no mesmo
+ * instante, e o papel guardado dentro da caixa precisa ser trocado. Quem já
+ * aderiu continua responsável — a adesão é uma linha em `collector_stewards`,
+ * não uma consequência contínua do código.
+ */
+export async function reissueStewardCode(tx: Queryable, collectorId: string, pepper: string): Promise<string | null> {
+  const stewardCode = generateStewardCode();
+  const { rows } = await tx.query<{ id: string }>(
+    "update public.collectors set steward_code_hash = $2, updated_at = now() where id = $1 and active returning id",
+    [collectorId, hashStewardCode(stewardCode, pepper)],
+  );
+  return rows.length === 1 ? stewardCode : null;
+}
+
+/**
  * Adesão como responsável, com o código impresso dentro da caixa eletrônica.
  * Comparação por hash: o código em claro nunca está no banco.
  */

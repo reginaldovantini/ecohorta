@@ -31,6 +31,11 @@ export interface SetupSourceState {
   firmware: FirmwarePackage | null;
   /** Recusa da geração do firmware (ex.: já existe placa enviando dados). */
   firmwareWarning: string | null;
+  /**
+   * Código de responsável emitido nesta sessão. Como o firmware, vive só aqui,
+   * na memória da aba: o banco guarda apenas o hash, e fechar a tela o perde.
+   */
+  stewardCode: string | null;
 }
 
 export interface SetupSource {
@@ -42,6 +47,9 @@ export interface SetupSource {
   markStep(step: SetupStepId, done: boolean): Promise<SetupActionResult>;
   issueFirmware(confirmReplacement: boolean): Promise<SetupActionResult>;
   dismissFirmwareWarning(): void;
+  /** Emite um código de responsável novo. O anterior deixa de valer na hora. */
+  reissueStewardCode(): Promise<SetupActionResult>;
+  forgetStewardCode(): void;
 }
 
 const INITIAL: SetupSourceState = {
@@ -51,6 +59,7 @@ const INITIAL: SetupSourceState = {
   busy: false,
   firmware: null,
   firmwareWarning: null,
+  stewardCode: null,
 };
 
 export function createSetupApiSource(
@@ -150,6 +159,22 @@ export function createSetupApiSource(
 
     dismissFirmwareWarning() {
       commit({ firmwareWarning: null });
+    },
+
+    async reissueStewardCode() {
+      commit({ busy: true });
+      const result = await call<{ stewardCode: string }>(`${base}/steward`, { method: "POST" });
+      if (!result.ok) {
+        commit({ busy: false });
+        return { ok: false, message: result.message };
+      }
+      commit({ busy: false, stewardCode: result.body.stewardCode });
+      return { ok: true };
+    },
+
+    /** A pessoa anotou. Tirar da memória da aba é o fim honesto desta história. */
+    forgetStewardCode() {
+      commit({ stewardCode: null });
     },
   };
 }

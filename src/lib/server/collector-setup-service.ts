@@ -1,9 +1,9 @@
 import { flashingGuide, secretsHeader, type FirmwareIdentity, type FlashingStep } from "@/lib/collector/firmware-package";
 import { MANUAL_STEPS, nextAction, setupJourney, type SetupFacts, type SetupJourney, type SetupStepId } from "@/lib/collector/setup-journey";
 import { allSetupResources, type SetupResource } from "@/lib/collector/setup-resources";
-import { isStewardOf, type Actor } from "./actor";
+import { administersSchool, isStewardOf, type Actor } from "./actor";
 import { calibrationAppliesToDevice, COLLECTOR_SELECT, type CollectorRow } from "./collector-service";
-import type { CollectorConnectivity } from "./collector-registry";
+import { reissueStewardCode, type CollectorConnectivity } from "./collector-registry";
 import { millis, type Database, type Queryable } from "./db/types";
 import { fail, type ServiceResult } from "./errors";
 import { ensureDevice, generateSecret } from "./provisioning";
@@ -185,6 +185,30 @@ export function createCollectorSetupService({ db }: { db: Database }) {
         }
         const updated = (await load(tx, code))!;
         return { ok: true, value: view(updated.row, updated.collector) };
+      });
+    },
+
+    /**
+     * Emite um código de responsável novo.
+     *
+     * O anterior para de valer na mesma hora. É a única resposta possível a
+     * "perdi o código": o banco guarda só o hash, de propósito — quem digita
+     * esse código passa a conduzir o captador, e credencial que se recupera é
+     * credencial que vaza junto com o banco.
+     */
+    async reissueStewardCode(actor: Actor, code: string, pepper: string): Promise<ServiceResult<{ stewardCode: string }>> {
+      return db.transaction(async (tx) => {
+        const found = await load(tx, code);
+        if (!found) return fail(404, "Captador não encontrado.");
+        // Quem REEMITE é quem administra a escola do captador. Ser responsável
+        // não basta: senão quem tem o código de hoje emitiria o de amanhã, e a
+        // administração perderia o controle de quem conduz o próprio tubo.
+        if (!administersSchool(actor, found.row.school_id)) {
+          return fail(403, "Somente a administração da escola emite um código de responsável novo.");
+        }
+        const novo = await reissueStewardCode(tx, found.row.id, pepper);
+        if (!novo) return fail(409, "Este captador não está ativo.");
+        return { ok: true, value: { stewardCode: novo } };
       });
     },
 

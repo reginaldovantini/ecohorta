@@ -10,6 +10,7 @@ import {
   nextCollectorSeq,
   normalizeStewardCode,
   registerCollector,
+  reissueStewardCode,
   SCAN_VALIDITY_MS,
   scanCollector,
 } from "./collector-registry";
@@ -175,6 +176,57 @@ describe("código de responsável", () => {
     await db.transaction((tx) => claimStewardship(tx, pessoa, criado.id, criado.stewardCode, PEPPER));
     const { rows } = await db.query("select 1 from public.collector_stewards where collector_id = $1 and profile_id = $2", [criado.id, pessoa]);
     expect(rows).toHaveLength(1);
+  });
+});
+
+/*
+ * PERDER O PAPEL DENTRO DA CAIXA.
+ *
+ * Acontece: a caixa é aberta, o papel some, e meses depois alguém precisa
+ * conduzir a calibração. O código não se recupera — o banco tem só o hash — e
+ * essa é a propriedade que estes testes protegem. O que existe é emitir outro.
+ */
+describe("emitir um código de responsável novo", () => {
+  it("o código novo funciona e o antigo para de funcionar", async () => {
+    const criado = await registrar(escolaB, "Pátio de trás");
+    const pessoa = await criarPessoa("novo-codigo@escola.exemplo");
+
+    const novo = await db.transaction((tx) => reissueStewardCode(tx, criado.id, PEPPER));
+    expect(novo).not.toBeNull();
+    expect(novo).not.toBe(criado.stewardCode);
+
+    expect(await db.transaction((tx) => claimStewardship(tx, pessoa, criado.id, criado.stewardCode, PEPPER))).toBe(false);
+    expect(await db.transaction((tx) => claimStewardship(tx, pessoa, criado.id, novo!, PEPPER))).toBe(true);
+  });
+
+  it("o novo também só existe como hash", async () => {
+    const criado = await registrar(escolaB, "Lateral");
+    const novo = await db.transaction((tx) => reissueStewardCode(tx, criado.id, PEPPER));
+    const { rows } = await db.query<{ steward_code_hash: string }>("select steward_code_hash from public.collectors where id = $1", [
+      criado.id,
+    ]);
+    expect(rows[0]!.steward_code_hash).not.toContain(novo!);
+    expect(rows[0]!.steward_code_hash).toBe(hashStewardCode(novo!, PEPPER));
+  });
+
+  it("quem já aderiu continua responsável: o vínculo não depende do código de hoje", async () => {
+    const criado = await registrar(escolaB, "Quadra coberta");
+    const pessoa = await criarPessoa("ja-aderiu@escola.exemplo");
+    await db.transaction((tx) => claimStewardship(tx, pessoa, criado.id, criado.stewardCode, PEPPER));
+
+    await db.transaction((tx) => reissueStewardCode(tx, criado.id, PEPPER));
+
+    const { rows } = await db.query("select 1 from public.collector_stewards where collector_id = $1 and profile_id = $2", [
+      criado.id,
+      pessoa,
+    ]);
+    expect(rows).toHaveLength(1);
+  });
+
+  it("captador desativado não emite código nenhum", async () => {
+    const criado = await registrar(escolaB, "Desativado");
+    await db.query("update public.collectors set active = false where id = $1", [criado.id]);
+    expect(await db.transaction((tx) => reissueStewardCode(tx, criado.id, PEPPER))).toBeNull();
   });
 });
 

@@ -218,6 +218,53 @@ describe("o programa do ESP32", () => {
  * aqui: aproveitam o mesmo banco e a mesma escola da jornada, em vez de pagar
  * outra inicialização de PostgreSQL só para contar duas colunas.
  */
+/*
+ * QUEM EMITE UM CÓDIGO DE RESPONSÁVEL NOVO.
+ *
+ * Não é quem tem o código de hoje: senão quem conduz um captador emitiria o
+ * código de amanhã, e a administração da escola perderia o controle sobre o
+ * próprio tubo. É quem administra a escola — e só ela.
+ */
+describe("emitir código de responsável", () => {
+  it("a administração emite, e o código volta uma vez só", async () => {
+    const captador = await cadastrar("Pátio da frente");
+    const result = await service.reissueStewardCode(admin, captador.code, PEPPER);
+    if (!result.ok) throw new Error(result.message);
+    expect(result.value.stewardCode).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    expect(result.value.stewardCode).not.toBe(captador.stewardCode);
+  });
+
+  it("ser responsável pelo captador não dá o direito de emitir outro", async () => {
+    const captador = await cadastrar("Lateral da quadra");
+    const responsavel: Actor = {
+      profileId: estudante.profileId,
+      schoolId: escola,
+      role: "student",
+      platformAdmin: false,
+      adminOfSchool: null,
+      stewardOf: [captador.id],
+    };
+    expect(await service.reissueStewardCode(responsavel, captador.code, PEPPER)).toMatchObject({ ok: false, status: 403 });
+  });
+
+  it("quem administra outra escola não alcança este captador", async () => {
+    const captador = await cadastrar("Fundos");
+    const outra: Actor = {
+      profileId: admin.profileId,
+      schoolId: null,
+      role: "admin",
+      platformAdmin: false,
+      adminOfSchool: "00000000-0000-4000-8000-000000000000",
+      stewardOf: [],
+    };
+    expect(await service.reissueStewardCode(outra, captador.code, PEPPER)).toMatchObject({ ok: false, status: 403 });
+  });
+
+  it("captador que não existe não emite nada", async () => {
+    expect(await service.reissueStewardCode(admin, "PROTO-999", PEPPER)).toMatchObject({ ok: false, status: 404 });
+  });
+});
+
 describe("escolas da rede", () => {
   it("conta captadores que medem e protótipos separadamente", async () => {
     const lista = await listSchools(db);

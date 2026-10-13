@@ -8,6 +8,7 @@ import {
   Copy,
   Download,
   FileText,
+  KeyRound,
   MapPin,
   QrCode,
   Radio,
@@ -114,7 +115,104 @@ export function CollectorSetupScreen({ code }: { code: string }) {
           </li>
         ))}
       </ol>
+
+      <CredentialsCard view={view} source={source} state={state} />
     </div>
+  );
+}
+
+/**
+ * AS CREDENCIAIS DESTE CAPTADOR, PARA CONSULTAR QUANDO PRECISAR.
+ *
+ * Fica fora da linha do tempo porque não é etapa: é a gaveta onde se procura
+ * uma coisa meses depois, quando o captador já está na rede e alguém precisa
+ * socorrê-lo no pátio.
+ *
+ * As duas credenciais são de naturezas diferentes, e a tela não finge que são
+ * iguais. A rede do captador está sempre aqui: ela é combinada entre o aparelho
+ * e quem está na frente dele, não protege dado nenhum, e o estudante precisa
+ * dela para atender o tubo offline. Já o código de responsável DÁ PODER sobre o
+ * captador — por isso o banco guarda só o hash dele, e por isso ele não se
+ * recupera: emite-se outro, e o papel dentro da caixa é trocado.
+ */
+function CredentialsCard({ view, source, state }: PanelProps) {
+  const [confirmando, setConfirmando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const emitir = async () => {
+    setErro(null);
+    const result = await source.reissueStewardCode();
+    setConfirmando(false);
+    if (!result.ok) setErro(result.message);
+  };
+
+  return (
+    <section className="space-y-3" aria-labelledby="credenciais-title">
+      <h2 id="credenciais-title" className="flex items-center gap-2 font-display text-lg font-bold text-mist-50">
+        <KeyRound className="size-5 text-aqua-300" aria-hidden /> Credenciais do captador
+      </h2>
+
+      {view.network && (
+        <Surface className="space-y-2 p-4">
+          <p className="text-sm font-semibold text-mist-100">Rede do captador</p>
+          <p className="text-xs leading-relaxed text-mist-400">
+            A rede que a placa cria. Serve para configurar o Wi-Fi da escola e para um estudante atender o captador
+            quando a internet cai. Fica sempre aqui.
+          </p>
+          <CopyLine label="Rede" text={view.network.ssid} />
+          <CopyLine label="Senha" text={view.network.password} />
+        </Surface>
+      )}
+
+      <Surface className="space-y-3 p-4">
+        <p className="text-sm font-semibold text-mist-100">Código de responsável</p>
+        <p className="text-xs leading-relaxed text-mist-400">
+          Quem digita este código passa a conduzir a construção e a calibração deste captador, mesmo sem administrar a
+          escola. Guarde impresso dentro da caixa eletrônica.
+        </p>
+
+        {state.stewardCode ? (
+          <>
+            <CopyLine text={state.stewardCode} />
+            <p className="rounded-xl bg-sun-400/10 px-3 py-2 text-xs leading-relaxed text-sun-300">
+              Anote agora: ao sair desta tela ele some. O código anterior deixou de valer — troque o papel dentro da
+              caixa.
+            </p>
+            <Button variant="secondary" className="w-full" onClick={() => source.forgetStewardCode()}>
+              Anotei, pode esconder
+            </Button>
+          </>
+        ) : (
+          <>
+            <p className="text-xs leading-relaxed text-mist-500">
+              A plataforma guarda só o resultado de uma conta sobre o código — nem ela consegue mostrá-lo de novo. Se o
+              papel se perdeu, emita outro.
+            </p>
+            {confirmando ? (
+              <div className="space-y-2 rounded-2xl bg-alert-400/12 p-3.5">
+                <p className="text-sm leading-relaxed text-mist-100">
+                  O código atual para de funcionar agora. Quem já aderiu continua responsável; quem só tem o papel
+                  antigo, não.
+                </p>
+                <div className="flex gap-2">
+                  <Button variant="secondary" className="flex-1" onClick={() => setConfirmando(false)} disabled={state.busy}>
+                    Cancelar
+                  </Button>
+                  <Button variant="leaf" className="flex-1" onClick={() => void emitir()} disabled={state.busy}>
+                    Emitir novo
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button variant="secondary" className="w-full" onClick={() => setConfirmando(true)} disabled={state.busy}>
+                Emitir um código novo
+              </Button>
+            )}
+            {erro && <p className="text-xs leading-relaxed text-alert-300">{erro}</p>}
+          </>
+        )}
+      </Surface>
+    </section>
   );
 }
 
@@ -149,7 +247,7 @@ function LiveCard({ view }: { view: CollectorSetupView }) {
 interface PanelProps {
   view: CollectorSetupView;
   source: SetupSource;
-  state: { busy: boolean; firmware: FirmwarePackage | null; firmwareWarning: string | null };
+  state: { busy: boolean; firmware: FirmwarePackage | null; firmwareWarning: string | null; stewardCode: string | null };
 }
 
 /**
