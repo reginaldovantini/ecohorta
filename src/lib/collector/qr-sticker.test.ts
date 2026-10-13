@@ -94,6 +94,54 @@ describe("fidelidade do QR", () => {
     expect([...moduleBlock(asText(sticker())).matchAll(/ re/g)]).toHaveLength(escuros);
   });
 
+  /*
+   * O QUE O QR REALMENTE CARREGA.
+   *
+   * Contar os módulos escuros prova que são tantos; não prova que são OS
+   * módulos daquele endereço. Este teste reconstrói a matriz a partir dos
+   * retângulos desenhados no PDF e a compara, módulo a módulo, com a matriz
+   * gerada para a mesma URL. Se o adesivo apontasse para outro lugar — ou se um
+   * módulo saísse trocado de posição — a comparação falharia.
+   *
+   * É a prova que um leitor de QR daria, sem precisar de leitor de QR.
+   */
+  it("os módulos desenhados são exatamente os daquele endereço", () => {
+    const url = "https://ecohorta-inteligente.vercel.app/q/" + "7f3a".repeat(8);
+    const esperado = qrcode(0, "Q");
+    esperado.addData(url);
+    esperado.make();
+    const modules = esperado.getModuleCount();
+
+    const texto = asText(sticker(url));
+    const bloco = moduleBlock(texto);
+    const lado = Number([...bloco.matchAll(/ ([\d.]+) ([\d.]+) re/g)][0]![1]);
+
+    // Canto inferior esquerdo do símbolo: o menor x e o menor y desenhados.
+    const pontos = [...bloco.matchAll(/([\d.]+) ([\d.]+) [\d.]+ [\d.]+ re/g)].map((m) => ({
+      x: Number(m[1]),
+      y: Number(m[2]),
+    }));
+    const x0 = Math.min(...pontos.map((p) => p.x));
+    const y0 = Math.min(...pontos.map((p) => p.y));
+
+    const desenhado = new Set<string>();
+    for (const { x, y } of pontos) {
+      const col = Math.round((x - x0) / lado);
+      // A origem do PDF é embaixo e a linha 0 do QR é em cima.
+      const row = modules - 1 - Math.round((y - y0) / lado);
+      desenhado.add(`${row},${col}`);
+    }
+
+    let conferidos = 0;
+    for (let row = 0; row < modules; row++) {
+      for (let col = 0; col < modules; col++) {
+        expect(desenhado.has(`${row},${col}`)).toBe(esperado.isDark(row, col));
+        conferidos++;
+      }
+    }
+    expect(conferidos).toBe(modules * modules);
+  });
+
   it("cada captador gera um desenho diferente: o token é o que muda", () => {
     const a = asText(sticker("https://ecohorta.vercel.app/q/" + "a".repeat(32)));
     const b = asText(sticker("https://ecohorta.vercel.app/q/" + "b".repeat(32)));

@@ -46,6 +46,9 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/admin/colle
     if (auth.response) return auth.response;
 
     const { code, guide } = await ctx.params;
+    // `?abrir=1`: mostrar no navegador em vez de baixar. No celular é a
+    // diferença entre o manual aparecer e sumir numa pasta de downloads.
+    const abrir = new URL(_request.url).searchParams.get("abrir") === "1";
     if (!isGuideId(guide)) return jsonError(404, "Manual não encontrado.");
     const normalizado = normalizeCollectorCode(code);
     if (!normalizado || !auth.actor.schoolId) return jsonError(404, "Captador não encontrado.");
@@ -82,7 +85,7 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/admin/colle
     return new Response(pdf as BodyInit, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="${file}-${captador.code}.pdf"`,
+        "Content-Disposition": `${abrir ? "inline" : "attachment"}; filename="${file}-${captador.code}.pdf"`,
         "Cache-Control": "no-store",
       },
     });

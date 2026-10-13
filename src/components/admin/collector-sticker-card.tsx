@@ -1,8 +1,8 @@
 "use client";
 
-import { motion } from "motion/react";
 import { Download, Droplets, MapPin, Printer, QrCode, Ruler, ScanLine } from "lucide-react";
 import { Surface } from "@/components/ui/surface";
+import { DownloadLink } from "./download-link";
 import { STICKER, stickerSize } from "@/lib/collector/qr-sticker";
 
 /**
@@ -48,15 +48,22 @@ export function CollectorStickerCard({ code, location }: { code: string; locatio
         ))}
       </ol>
 
-      <motion.a
+      {/*
+        Baixar é a ação principal: o arquivo vai para a pasta Downloads do
+        aparelho, no celular e no computador, que é de onde a pessoa vai anexar
+        num e-mail para a gráfica.
+        
+        O que faltava não era o download — era saber que ele aconteceu. Numa
+        tela de celular nada muda ao tocar, e sem a linha abaixo o botão parece
+        quebrado. "Ver na tela" fica ao lado para quem só quer conferir o QR.
+      */}
+      <DownloadLink
         href={`/api/admin/collectors/${encodeURIComponent(code)}/sticker`}
-        download={`adesivo-${code}.pdf`}
-        whileTap={{ scale: 0.97 }}
-        className="flex h-12 w-full items-center justify-center gap-2 rounded-control bg-leaf-400 font-semibold text-abyss-950"
-      >
-        <Download className="size-5" aria-hidden />
-        Baixar PDF do adesivo
-      </motion.a>
+        fileName={`adesivo-${code}.pdf`}
+        viewHref={`/api/admin/collectors/${encodeURIComponent(code)}/sticker?abrir=1`}
+        label="Baixar PDF do adesivo"
+        tone="leaf"
+      />
 
       <p className="text-xs leading-relaxed text-mist-400">
         Adesivo de {widthMm} × {heightMm} mm, com marcas de corte. O arquivo traz “{code} · {location}” fora da área

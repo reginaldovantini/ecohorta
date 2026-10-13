@@ -12,12 +12,22 @@ import { jsonError, publicBaseUrl, withErrors } from "@/lib/server/http";
  * do QR, e quem tem o token pode fazer missão naquele tubo de qualquer lugar —
  * então ele não é público, mesmo sendo "só um adesivo".
  */
+/*
+ * `?abrir=1` entrega o PDF para o navegador MOSTRAR, em vez de baixar.
+ *
+ * No celular essa é a diferença entre funcionar e não funcionar. Um arquivo
+ * marcado como anexo, dentro do aplicativo instalado, desce em silêncio para
+ * uma pasta que a pessoa não encontra — e o toque no botão vira "está quebrado".
+ * Aberto, o PDF aparece na tela, e o visualizador do próprio navegador traz
+ * compartilhar, imprimir e salvar, que é o que ela ia procurar.
+ */
 export async function GET(_request: Request, ctx: RouteContext<"/api/admin/collectors/[code]/sticker">) {
   return withErrors(async () => {
     const auth = await authenticate();
     if (auth.response) return auth.response;
 
     const { code } = await ctx.params;
+    const abrir = new URL(_request.url).searchParams.get("abrir") === "1";
     const normalizado = normalizeCollectorCode(code);
     if (!normalizado || !auth.actor.schoolId) return jsonError(404, "Captador não encontrado.");
 
@@ -56,7 +66,7 @@ export async function GET(_request: Request, ctx: RouteContext<"/api/admin/colle
     return new Response(pdf as BodyInit, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="adesivo-${captador.code}.pdf"`,
+        "Content-Disposition": `${abrir ? "inline" : "attachment"}; filename="adesivo-${captador.code}.pdf"`,
         "Cache-Control": "no-store",
       },
     });

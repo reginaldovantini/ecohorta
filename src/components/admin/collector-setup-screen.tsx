@@ -33,6 +33,7 @@ import type { SetupStep, SetupStepId } from "@/lib/collector/setup-journey";
 import { createSetupApiSource, type SetupSource } from "@/lib/iot/setup-source";
 import type { CollectorSetupView, FirmwarePackage } from "@/lib/server/collector-setup-service";
 import { CollectorStickerCard } from "./collector-sticker-card";
+import { DownloadLink } from "./download-link";
 
 /*
  * A TELA DE QUEM ESTÁ CONSTRUINDO UM CAPTADOR.
@@ -445,9 +446,13 @@ function FirmwarePanel({ view, source, state }: PanelProps) {
 
       {pacote && (
         <>
+          <p role="status" className="rounded-2xl bg-leaf-400/10 px-3 py-2.5 text-xs leading-relaxed text-leaf-300">
+            <span className="font-semibold">{pacote.fileName}</span> foi para a pasta <span className="font-semibold">Downloads</span> do
+            aparelho.
+          </p>
+          <SecretsFallback pacote={pacote} />
           <p className="rounded-2xl bg-sun-400/10 px-3 py-2.5 text-xs leading-relaxed text-sun-300">
-            O arquivo baixou. Ele contém o token desta placa: não compartilhe e não versione. Se perder, gere outro — e a placa precisará ser
-            regravada.
+            Ele contém o token desta placa: não compartilhe e não versione. Se perder, gere outro — e a placa precisará ser regravada.
           </p>
           <FlashingSteps guide={pacote.guide} />
         </>
@@ -466,16 +471,69 @@ function GuiaPdf({ code, guide, titulo, descricao }: { code: string; guide: "con
         {titulo}
       </p>
       <p className="mt-1 text-xs leading-relaxed text-mist-400">{descricao}</p>
-      <motion.a
-        href={`/api/admin/collectors/${encodeURIComponent(code)}/guides/${guide}`}
-        target="_blank"
-        rel="noreferrer"
-        whileTap={{ scale: 0.97 }}
-        className="mt-3 flex h-11 items-center justify-center gap-2 rounded-control bg-white/[0.07] text-sm font-semibold text-mist-50 ring-1 ring-inset ring-white/10"
+      <div className="mt-3">
+        <DownloadLink
+          href={`/api/admin/collectors/${encodeURIComponent(code)}/guides/${guide}`}
+          fileName={`${guide === "construcao" ? "manual-construcao" : "manual-gravacao"}-${code}.pdf`}
+          viewHref={`/api/admin/collectors/${encodeURIComponent(code)}/guides/${guide}?abrir=1`}
+          label="Baixar PDF para imprimir"
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * O MESMO ARQUIVO, QUANDO O DOWNLOAD NÃO BASTA.
+ *
+ * Dois casos reais. O primeiro: dentro do aplicativo instalado, um download
+ * nem sempre dá sinal de vida, e a pessoa fica sem saber se tem o arquivo.
+ * O segundo, mais comum: ela está no celular e o arquivo precisa estar no
+ * COMPUTADOR, onde a placa vai ser gravada.
+ *
+ * Para os dois, o conteúdo na tela com um botão de copiar resolve — e copiar
+ * funciona em qualquer navegador, sem depender de pasta, permissão ou gerenciador
+ * de downloads.
+ */
+function SecretsFallback({ pacote }: { pacote: FirmwarePackage }) {
+  const [aberto, setAberto] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+
+  return (
+    <div className="rounded-2xl bg-white/[0.04]">
+      <button
+        type="button"
+        onClick={() => setAberto((valor) => !valor)}
+        aria-expanded={aberto}
+        className="flex w-full items-center justify-between gap-2 px-3.5 py-3 text-left text-sm font-semibold text-mist-100"
       >
-        <Download className="size-4" aria-hidden />
-        Baixar PDF para imprimir
-      </motion.a>
+        Não achou o arquivo? Copie o conteúdo
+        <ChevronDown className={aberto ? "size-4 shrink-0 rotate-180 transition-transform" : "size-4 shrink-0 transition-transform"} aria-hidden />
+      </button>
+      {aberto && (
+        <div className="space-y-2 border-t border-white/[0.06] px-3.5 py-3.5">
+          <p className="text-xs leading-relaxed text-mist-400">
+            Se você está no celular, o arquivo precisa ir para o computador onde a placa será gravada. Copie daqui e cole
+            num arquivo chamado <code className="text-aqua-300">{pacote.fileName}</code>, dentro de{" "}
+            <code className="text-aqua-300">firmware/include/</code>.
+          </p>
+          <pre className="max-h-56 overflow-auto rounded-xl bg-abyss-950/60 p-3 text-[0.65rem] leading-relaxed text-mist-300">
+            {pacote.content}
+          </pre>
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() => {
+              void navigator.clipboard?.writeText(pacote.content);
+              setCopiado(true);
+              setTimeout(() => setCopiado(false), 1600);
+            }}
+            icon={<Copy className="size-4" aria-hidden />}
+          >
+            {copiado ? "Copiado" : "Copiar o conteúdo"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -701,11 +759,30 @@ function CopyLine({ label, text }: { label?: string; text: string }) {
  * Não existe link de download: visitar um link geraria um token novo, e um
  * navegador que pré-carrega links calaria um captador sem ninguém pedir.
  */
+/**
+ * Salva um texto como arquivo.
+ *
+ * Três detalhes que parecem supérfluos e não são, porque cada um deles já
+ * impediu um download de acontecer:
+ *
+ *   - o link precisa estar NO documento antes do clique (o Firefox ignora um
+ *     link solto na memória);
+ *   - o endereço do blob não pode ser revogado na linha seguinte ao clique:
+ *     alguns navegadores ainda não começaram a gravar, e revogar cancela o
+ *     download — sem erro, sem aviso, sem arquivo;
+ *   - e o navegador precisa de um instante antes de a aba mexer em outra coisa.
+ */
 function baixar(fileName: string, content: string) {
   const url = URL.createObjectURL(new Blob([content], { type: "text/plain;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;
   link.download = fileName;
+  link.rel = "noopener";
+  link.style.display = "none";
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(url);
+  link.remove();
+  // Um minuto é folga de sobra para o navegador terminar, e o endereço morre
+  // com a aba de qualquer jeito.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
