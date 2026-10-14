@@ -160,6 +160,7 @@ export function createApiSource({ baseUrl = "", onUnauthorized }: { baseUrl?: st
         execution_id: command.executionId,
         mission_id: command.missionId,
         target_liters: command.targetLiters,
+        scan_id: command.scanId,
       });
 
       void (async () => {

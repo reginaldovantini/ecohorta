@@ -60,15 +60,20 @@ function ConnectionBanner() {
  */
 export function StudentShell({ children }: { children: ReactNode }) {
   const [source] = useState(() => createApiSource({ onUnauthorized: () => profileStore.markSignedOut() }));
-  const { role } = useProfile();
+  const { canAdminister } = useProfile();
 
   useEffect(() => source.start(), [source]);
 
   return (
     <MotionConfig reducedMotion="user">
       <CollectorSourceProvider source={source}>
-        {/* O painel da simulação é exclusivo de professores e administradores (a API também recusa). */}
-        <SimulationPanelProvider enabled={role === "teacher" || role === "admin"}>
+        {/*
+          O painel da simulação sai da AUTORIZAÇÃO, nunca da função declarada.
+          Com cadastro aberto, quem marcasse "Professor(a)" na entrada ganhava
+          controles do captador — e um estudante comum deve ver só as missões.
+          A API já recusava; a tela estava mais frouxa que ela.
+        */}
+        <SimulationPanelProvider enabled={canAdminister}>
           <MissionRunnerProvider>
             <AuthGuard />
             <ConnectionBanner />

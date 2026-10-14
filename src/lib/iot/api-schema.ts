@@ -150,6 +150,15 @@ export const dispenseRequestSchema = z.object({
   execution_id: z.uuid(),
   mission_id: z.string().min(1).max(64),
   target_liters: z.number().positive().max(50).optional(),
+  /**
+   * A leitura do QR colado no tubo, feita há instantes por esta pessoa.
+   *
+   * É a prova de PRESENÇA: sem ela, a água sairia de qualquer lugar do mundo,
+   * e a missão deixaria de ser uma ação no pátio para virar um botão no sofá.
+   * O servidor confere de quem é, de qual captador, se ainda vale e se já foi
+   * usada — uma leitura, uma liberação.
+   */
+  scan_id: z.uuid(),
 });
 
 /** App → plataforma: controle do dispositivo virtual. */

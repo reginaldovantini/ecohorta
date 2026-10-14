@@ -43,7 +43,7 @@ const dateTime = (ms: number) =>
 
 /** Administração → Captadores → {código} → Calibração de volume. */
 export function CalibrationScreen({ code }: { code: string }) {
-  const { status, role } = useProfile();
+  const { status, canAdminister } = useProfile();
   const normalized = normalizeCollectorCode(code) ?? code.toUpperCase();
 
   if (status !== "ready") {
@@ -54,7 +54,7 @@ export function CalibrationScreen({ code }: { code: string }) {
       </div>
     );
   }
-  if (role !== "teacher" && role !== "admin") return <RestrictedNotice />;
+  if (!canAdminister) return <RestrictedNotice />;
   return <CalibrationWorkspace code={normalized} />;
 }
 

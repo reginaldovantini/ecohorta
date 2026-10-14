@@ -108,7 +108,8 @@ export function HomeScreen() {
             mission={featured.mission}
             availability={featured.availability}
             collectorCode={collectorCode}
-            onConfirm={(mission) => start(mission, collectorCode)}
+            location={snapshot?.info.location ?? collectorCode}
+            onConfirm={(mission, scanId) => start(mission, collectorCode, scanId)}
           />
         </motion.section>
       )}

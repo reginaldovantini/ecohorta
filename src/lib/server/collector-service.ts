@@ -16,6 +16,7 @@ import {
   type AccountingState,
 } from "@/lib/collector/water-accounting";
 import { availableLiters } from "@/lib/collector/water";
+import { checkScan, SCAN_REJECTION_MESSAGE } from "./collector-registry";
 import type {
   CommandReport,
   DeviceCommand,
@@ -788,7 +789,7 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
     async requestDispense(
       actor: Actor,
       code: string,
-      request: { command_id: string; execution_id: string; mission_id: string },
+      request: { command_id: string; execution_id: string; mission_id: string; scan_id: string },
     ): Promise<ServiceResult<DispenseProgress>> {
       return db.transaction(async (tx) => {
         const row = await loadByCode(tx, code, true);
@@ -830,12 +831,31 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
         const status: DispenseStatus = failure ? "FAILED" : "QUEUED";
         const queuedAt = date(nowMs);
 
+        /*
+         * A PROVA DE PRESENÇA.
+         *
+         * A leitura do QR colado no tubo é o que separa uma missão de um botão:
+         * sem ela, a água sairia com a pessoa em casa. Conferida aqui, no mesmo
+         * instante em que o comando nasce, e não na tela — tela se contorna.
+         *
+         * Uma leitura, uma liberação: o índice único em `device_commands.scan_id`
+         * garante no banco o que `checkScan` garante na aplicação, inclusive
+         * contra dois toques simultâneos.
+         */
+        const recusa = await checkScan(tx, {
+          scanId: request.scan_id,
+          profileId: actor.profileId,
+          collectorId: row.id,
+          nowMs,
+        });
+        if (recusa) return fail(409, `${SCAN_REJECTION_MESSAGE[recusa]}. Leia o QR do captador de novo.`);
+
         const inserted = await tx.query<CommandRow>(
           `insert into public.device_commands
-           (id, collector_id, device_id, requested_by, target_liters, status, failure, is_simulated, queued_at, finished_at)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+           (id, collector_id, device_id, requested_by, target_liters, status, failure, is_simulated, queued_at, finished_at, scan_id)
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
            returning *`,
-          [request.command_id, row.id, row.device_id, actor.profileId, liters, status, failure, row.is_simulated ?? false, queuedAt, failure ? queuedAt : null],
+          [request.command_id, row.id, row.device_id, actor.profileId, liters, status, failure, row.is_simulated ?? false, queuedAt, failure ? queuedAt : null, request.scan_id],
         );
         await tx.query(
           `insert into public.mission_executions

@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createCollectorService } from "./collector-service";
-import { ACTORS, createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, makeCollectorReal } from "./db/test-db";
+import { ACTORS, createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, makeCollectorReal, scanForRelease } from "./db/test-db";
 import type { Database } from "./db/types";
 import { addSchoolMember, completeOnboarding, ensureProfile, findActor, getMe, switchSchool, updateIdentity } from "./profile-service";
 
@@ -55,7 +55,7 @@ describe("perfil do usuário autenticado", () => {
     await service.ingestTelemetry(device, { ...base, seq: 1, uptime_ms: 1000, volume_liters: 8 });
     const commandId = "0b7c6a8e-1f2d-4c3b-9a8e-7f6d5c4b3a21";
     const executionId = "2d9e8c0a-3f4e-4e5d-9c0a-9f8e7d6c5b43";
-    await service.requestDispense(student, "ECO-001", { command_id: commandId, execution_id: executionId, mission_id: "irrigar-horta" });
+    await service.requestDispense(student, "ECO-001", { command_id: commandId, execution_id: executionId, mission_id: "irrigar-horta", scan_id: await scanForRelease(db, IDS.student) });
     clock += 60_000;
     await service.ingestTelemetry(device, {
       ...base,

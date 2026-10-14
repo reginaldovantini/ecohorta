@@ -6,6 +6,7 @@ import { DEFAULT_SIMULATION_SETTINGS } from "@/lib/iot/simulation-config";
 import type { Actor } from "../actor";
 import { ensureDevice } from "../provisioning";
 import type { Database, Queryable } from "./types";
+import { scanCollector } from "../collector-registry";
 
 /*
  * SOMENTE PARA TESTES: PostgreSQL real (PGlite) com as mesmas migrations do Supabase.
@@ -186,6 +187,23 @@ export const ACTORS = {
  * Os dois códigos são escritos direto, e não pela sequência: aqui eles são a
  * identidade que os testes usam, não um cadastro sendo exercitado.
  */
+/**
+ * A leitura do QR que autoriza uma liberação.
+ *
+ * Existe porque a prova de presença deixou de ser opcional: liberar água exige
+ * uma leitura recente, daquela pessoa, naquele captador. Todo teste que libera
+ * água passa por aqui — como o estudante passa pela câmera no pátio.
+ */
+export async function scanForRelease(
+  db: Database,
+  profileId: string,
+  { token = "a".repeat(32) }: { token?: string } = {},
+): Promise<string> {
+  const leitura = await db.transaction((tx) => scanCollector(tx, profileId, token));
+  if (!leitura) throw new Error("QR de teste não reconhecido");
+  return leitura.scanId;
+}
+
 export async function seedPhysicalScenario(db: Database, esp32Token: string) {
   const sim = await db.query<{ id: string }>(
     `insert into public.collectors (school_id, seq, code, name, location, capacity_liters, reserve_liters,

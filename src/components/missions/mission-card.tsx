@@ -9,17 +9,19 @@ import type { MissionAvailability } from "@/lib/missions/availability";
 import { CATEGORY_LABEL, DIFFICULTY_LABEL, type MissionDefinition } from "@/lib/missions/catalog";
 import { cn } from "@/lib/utils/cn";
 import { formatLiters } from "@/lib/utils/format";
-import { VALVE_HOLD_MS } from "@/lib/missions/release-flow";
-import { HoldToConfirm } from "./hold-to-confirm";
+import { ReleaseSheet } from "./release-sheet";
 import { MissionArt } from "./mission-art";
 
-type Stage = "collapsed" | "details" | "confirm";
+type Stage = "collapsed" | "details";
 
 interface MissionCardProps {
   mission: MissionDefinition;
   availability: MissionAvailability;
   collectorCode: string;
-  onConfirm: (mission: MissionDefinition) => void;
+  /** Onde o tubo está instalado. Aparece na conferência, para não confundir captadores. */
+  location: string;
+  /** A leitura do QR já validada: é ela que autoriza a liberação. */
+  onConfirm: (mission: MissionDefinition, scanId: string) => void;
 }
 
 function availabilityText(availability: MissionAvailability) {
@@ -41,14 +43,22 @@ function availabilityText(availability: MissionAvailability) {
   }
 }
 
-export function MissionCard({ mission, availability, collectorCode, onConfirm }: MissionCardProps) {
+export function MissionCard({ mission, availability, collectorCode, location, onConfirm }: MissionCardProps) {
   const [stage, setStage] = useState<Stage>("collapsed");
+  const [liberando, setLiberando] = useState(false);
+  // Cada abertura é um painel novo: a leitura anterior não serve para a próxima missão.
+  const [aberturas, setAberturas] = useState(0);
   const available = availability.status === "available";
   const expanded = stage !== "collapsed";
   const rescue = mission.category === "rescue";
   const status = availabilityText(availability);
   const liters = mission.liters ?? 0;
   const toggle = () => setStage(expanded ? "collapsed" : "details");
+
+  const abrirLiberacao = () => {
+    setAberturas((valor) => valor + 1);
+    setLiberando(true);
+  };
 
   return (
     <motion.article
@@ -101,7 +111,7 @@ export function MissionCard({ mission, availability, collectorCode, onConfirm }:
           <Button
             variant={rescue ? "alert" : "leaf"}
             className="w-full"
-            onClick={() => setStage("confirm")}
+            onClick={() => abrirLiberacao()}
             data-testid="accept-mission"
           >
             {rescue ? "Resgatar agora" : "Aceitar missão"}
@@ -147,58 +157,39 @@ export function MissionCard({ mission, availability, collectorCode, onConfirm }:
                 ))}
               </ol>
 
-              <AnimatePresence mode="wait" initial={false}>
-                {stage === "confirm" ? (
-                  <motion.div
-                    key="confirm"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className={cn(
-                      "space-y-3 rounded-2xl border p-4",
-                      rescue ? "border-alert-400/30 bg-alert-500/10" : "border-leaf-400/25 bg-leaf-500/10",
-                    )}
-                  >
-                    <p className="font-display font-semibold text-mist-50">Confirme a liberação</p>
-                    <p className="text-sm leading-relaxed text-mist-300">
-                      O captador <strong className="text-mist-50">{collectorCode}</strong> vai liberar{" "}
-                      <strong className="text-aqua-300">{formatLiters(liters, 1)}</strong>. Posicione o regador na saída
-                      antes de confirmar.
-                    </p>
-                    <HoldToConfirm
-                      durationMs={VALVE_HOLD_MS}
-                      label={`Segure para liberar ${formatLiters(liters, 1)}`}
-                      holdingLabel="Continue segurando…"
-                      icon={<Droplets className="size-5" />}
-                      disabled={!available}
-                      onConfirm={() => {
-                        setStage("collapsed");
-                        onConfirm(mission);
-                      }}
-                    />
-                    <Button variant="ghost" size="sm" className="w-full" onClick={() => setStage("details")}>
-                      Voltar
-                    </Button>
-                  </motion.div>
-                ) : (
-                  <motion.div key="details" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-                    <Button
-                      size="lg"
-                      variant={rescue ? "alert" : "leaf"}
-                      className="w-full"
-                      disabled={!available}
-                      icon={<Droplets className="size-5" />}
-                      onClick={() => setStage("confirm")}
-                    >
-                      {available ? (rescue ? "Resgatar agora" : "Aceitar missão") : status.text}
-                    </Button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              <Button
+                size="lg"
+                variant={rescue ? "alert" : "leaf"}
+                className="w-full"
+                disabled={!available}
+                icon={<Droplets className="size-5" />}
+                onClick={() => abrirLiberacao()}
+              >
+                {available ? (rescue ? "Resgatar agora" : "Aceitar missão") : status.text}
+              </Button>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/*
+        O caminho guiado. Abre por cima do cartão porque, a partir daqui, a tela
+        tem uma função só: levar a pessoa do adesivo até a torneira sem que ela
+        precise decidir nada no meio.
+      */}
+      <ReleaseSheet
+        key={aberturas}
+        open={liberando}
+        onClose={() => setLiberando(false)}
+        liters={liters}
+        collectorCode={collectorCode}
+        location={location}
+        onRelease={(scanId) => {
+          setLiberando(false);
+          setStage("collapsed");
+          onConfirm(mission, scanId);
+        }}
+      />
     </motion.article>
   );
 }

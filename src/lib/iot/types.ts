@@ -193,6 +193,13 @@ export interface DispenseCommand {
   missionId: string;
   collectorCode: string;
   targetLiters: number;
+  /**
+   * A leitura do QR colado no tubo, validada pelo servidor há instantes.
+   *
+   * Sem ela a plataforma recusa a liberação: é a prova de que a pessoa está na
+   * frente do captador. Uma leitura abre a torneira uma vez.
+   */
+  scanId: string;
 }
 
 export type DispenseStatus = Extract<

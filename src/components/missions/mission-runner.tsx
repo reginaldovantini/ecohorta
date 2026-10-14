@@ -27,7 +27,8 @@ interface ActiveExecution {
 
 interface MissionRunnerValue {
   isRunning: boolean;
-  start: (mission: MissionDefinition, collectorCode: string) => void;
+  /** `scanId`: a leitura do QR que prova a presença no captador. */
+  start: (mission: MissionDefinition, collectorCode: string, scanId: string) => void;
 }
 
 const MissionRunnerContext = createContext<MissionRunnerValue | null>(null);
@@ -40,7 +41,7 @@ export function MissionRunnerProvider({ children }: { children: ReactNode }) {
   const isRunning = active !== null && !isTerminal(progress);
 
   const start = useCallback(
-    (mission: MissionDefinition, collectorCode: string) => {
+    (mission: MissionDefinition, collectorCode: string, scanId: string) => {
       if (mission.liters === null) return;
       const profile = profileStore.getSnapshot();
       const execution: ActiveExecution = {
@@ -58,6 +59,7 @@ export function MissionRunnerProvider({ children }: { children: ReactNode }) {
         missionId: mission.id,
         collectorCode,
         targetLiters: mission.liters,
+        scanId,
       });
     },
     [source],

@@ -12,7 +12,7 @@ import type { CollectorSnapshot } from "@/lib/iot/types";
 import { getMissionAvailability } from "@/lib/missions/availability";
 import { buildRescueMission, type RescuePlan } from "@/lib/missions/rescue";
 import { formatLiters, formatPercent } from "@/lib/utils/format";
-import { HoldToConfirm } from "./hold-to-confirm";
+import { ReleaseSheet } from "./release-sheet";
 import { useMissionRunner } from "./mission-runner";
 
 /**
@@ -21,11 +21,19 @@ import { useMissionRunner } from "./mission-runner";
  */
 export function RescueCard({ snapshot, plan }: { snapshot: CollectorSnapshot; plan: RescuePlan }) {
   const [open, setOpen] = useState(false);
+  const [liberando, setLiberando] = useState(false);
+  // Cada abertura é um painel novo: a leitura anterior não serve para a próxima missão.
+  const [aberturas, setAberturas] = useState(0);
   const close = useCallback(() => setOpen(false), []);
   const { start, isRunning } = useMissionRunner();
   const mission = buildRescueMission(plan);
   const available = getMissionAvailability(mission, snapshot, isRunning).status === "available";
   const code = snapshot.info.code;
+
+  const abrirLiberacao = () => {
+    setAberturas((valor) => valor + 1);
+    setLiberando(true);
+  };
 
   return (
     <>
@@ -95,18 +103,39 @@ export function RescueCard({ snapshot, plan }: { snapshot: CollectorSnapshot; pl
               </li>
             ))}
           </ol>
-          <HoldToConfirm
-            label={`Segure para liberar ${formatLiters(plan.suggestedLiters, 1)}`}
-            holdingLabel="Continue segurando…"
-            icon={<Droplets className="size-5" />}
+          {/*
+            O resgate é urgente, não é exceção: ele libera água de verdade, e
+            por isso passa pela mesma leitura do QR. Pressa é justamente quando
+            se solta água no captador errado.
+          */}
+          <Button
+            variant="alert"
+            size="lg"
+            className="w-full"
             disabled={!available}
-            onConfirm={() => {
+            icon={<Droplets className="size-5" />}
+            onClick={() => {
               close();
-              start(mission, code);
+              abrirLiberacao();
             }}
-          />
+          >
+            {available ? "Ler o QR e resgatar" : "Indisponível agora"}
+          </Button>
         </div>
       </BottomSheet>
+
+      <ReleaseSheet
+        key={aberturas}
+        open={liberando}
+        onClose={() => setLiberando(false)}
+        liters={plan.suggestedLiters}
+        collectorCode={code}
+        location={snapshot.info.location}
+        onRelease={(scanId) => {
+          setLiberando(false);
+          start(mission, code, scanId);
+        }}
+      />
     </>
   );
 }

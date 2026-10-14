@@ -8,8 +8,10 @@ import { createCollectorService, type AuthenticatedDevice, type CollectorService
 import {
   ACTORS,
   createTestDatabase,
+  IDS,
   makeCollectorReal,
   resetTestDatabase,
+  scanForRelease,
   seedPhysicalScenario,
   TEST_PEPPER,
 } from "./db/test-db";
@@ -170,6 +172,7 @@ describe("uma missão inteira, do comando ao relatório", () => {
       command_id: COMANDO,
       execution_id: EXECUCAO,
       mission_id: "regar-jardim",
+      scan_id: await scanForRelease(db, IDS.student),
     });
     if (!pedido.ok) throw new Error(pedido.message);
     return pedido.value;

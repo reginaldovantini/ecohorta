@@ -49,7 +49,7 @@ const inputClass =
 
 /** Administração → Captadores → {código} → Ligações: sensor configurado, manual de ligações e histórico. */
 export function WiringScreen({ code }: { code: string }) {
-  const { status, role } = useProfile();
+  const { status, canAdminister } = useProfile();
   const normalized = normalizeCollectorCode(code) ?? code.toUpperCase();
 
   if (status !== "ready") {
@@ -60,7 +60,7 @@ export function WiringScreen({ code }: { code: string }) {
       </div>
     );
   }
-  if (role !== "teacher" && role !== "admin") return <RestrictedNotice />;
+  if (!canAdminister) return <RestrictedNotice />;
   return <WiringWorkspace code={normalized} />;
 }
 

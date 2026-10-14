@@ -5,7 +5,7 @@ import { createBenchService, type BenchService } from "./bench-service";
 import { createCalibrationService, type CalibrationService } from "./calibration-service";
 import type { Actor } from "./actor";
 import { createCollectorService, type AuthenticatedDevice, type CollectorService } from "./collector-service";
-import { createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, ACTORS, seedPhysicalScenario } from "./db/test-db";
+import { createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, ACTORS, seedPhysicalScenario, scanForRelease } from "./db/test-db";
 import type { Database } from "./db/types";
 import { createHardwareService, type HardwareService } from "./hardware-service";
 
@@ -447,6 +447,7 @@ describe("troca do sensor e proteção da calibração", () => {
       command_id: "6b3c2d4e-7f8a-4b9c-8d0e-1f2a3b4c5d6e",
       execution_id: "7c4d3e5f-8a9b-4c0d-9e1f-2a3b4c5d6e7f",
       mission_id: "hidratar-mudas",
+      scan_id: await scanForRelease(db, IDS.student, { token: "c".repeat(32) }),
     });
     expect(dispense.ok && dispense.value.status).toBe("QUEUED");
     expect(await hardware.changeSensor(teacher, "SIM-001", { distanceSensor: "VL53L0X", confirmPhysicalMatch: true })).toMatchObject({

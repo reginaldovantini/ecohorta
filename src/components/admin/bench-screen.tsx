@@ -46,7 +46,7 @@ const inputClass =
 
 /** Administração → Captadores → {código} → Bancada: diagnóstico do sensor sem executar missões. */
 export function BenchScreen({ code }: { code: string }) {
-  const { status, role } = useProfile();
+  const { status, canAdminister } = useProfile();
   const normalized = normalizeCollectorCode(code) ?? code.toUpperCase();
 
   if (status !== "ready") {
@@ -57,7 +57,7 @@ export function BenchScreen({ code }: { code: string }) {
       </div>
     );
   }
-  if (role !== "teacher" && role !== "admin") return <RestrictedNotice />;
+  if (!canAdminister) return <RestrictedNotice />;
   return <BenchWorkspace code={normalized} />;
 }
 

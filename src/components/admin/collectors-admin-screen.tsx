@@ -16,11 +16,11 @@ import { StickerLink } from "./collector-sticker-card";
 
 /** Administração → Captadores: REAL ou SIMULAÇÃO, estado, sensor, calibração e acesso a bancada, calibração e ligações. */
 export function CollectorsAdminScreen() {
-  const { status, role, schoolName } = useProfile();
+  const { status, canAdminister, schoolName } = useProfile();
   const codes = useCollectorCodes();
   const connection = useConnectionState();
 
-  if (status === "ready" && role !== "teacher" && role !== "admin") return <RestrictedNotice />;
+  if (status === "ready" && !canAdminister) return <RestrictedNotice />;
 
   return (
     <div className="space-y-5 pt-6">

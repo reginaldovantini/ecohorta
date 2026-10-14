@@ -12,7 +12,7 @@ import {
   type AuthenticatedDevice,
   type CollectorService,
 } from "./collector-service";
-import { createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, ACTORS, seedPhysicalScenario } from "./db/test-db";
+import { createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, ACTORS, seedPhysicalScenario, scanForRelease } from "./db/test-db";
 import type { Database } from "./db/types";
 import { ensureDevice } from "./provisioning";
 
@@ -288,6 +288,7 @@ describe("ensaio de bancada", () => {
       command_id: "8d1e2f3a-4b5c-4d6e-8f7a-9b0c1d2e3f4a",
       execution_id: "9e2f3a4b-5c6d-4e7f-9a8b-0c1d2e3f4a5b",
       mission_id: "hidratar-mudas",
+      scan_id: await scanForRelease(db, IDS.student, { token: "c".repeat(32) }),
     });
     expect(blocked).toMatchObject({ ok: false, status: 409 });
 

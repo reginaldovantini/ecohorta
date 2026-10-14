@@ -17,7 +17,7 @@ import {
   type AuthenticatedDevice,
   type CollectorService,
 } from "./collector-service";
-import {createTestDatabase, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, ACTORS, IDS } from "./db/test-db";
+import {createTestDatabase, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, ACTORS, IDS, scanForRelease } from "./db/test-db";
 import type { Database } from "./db/types";
 
 const { otherSchoolTeacher, staff, student, teacher } = ACTORS;
@@ -301,6 +301,7 @@ describe("volume derivado na telemetria", () => {
       command_id: commandId,
       execution_id: "7c4d3e5f-8a9b-4c0d-9e1f-2a3b4c5d6e7f",
       mission_id: "hidratar-mudas",
+      scan_id: await scanForRelease(db, IDS.student),
     });
     expect(created.ok && created.value.status).toBe("QUEUED");
 

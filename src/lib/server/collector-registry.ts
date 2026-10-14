@@ -356,18 +356,12 @@ export async function scanCollector(tx: Queryable, profileId: string, qrToken: s
  *      em device_commands.scan_id é a garantia final, mesmo em duas abas abertas.
  */
 
-/** Quanto tempo uma leitura continua valendo. A câmera abre junto com a missão: segundos, não horas. */
-export const SCAN_VALIDITY_MS = 5 * 60_000;
 
-export type ScanRejection = "not_found" | "other_person" | "other_collector" | "expired" | "already_used";
-
-export const SCAN_REJECTION_MESSAGE: Record<ScanRejection, string> = {
-  not_found: "Leitura não reconhecida",
-  other_person: "Esta leitura é de outra pessoa",
-  other_collector: "Este QR é de outro captador",
-  expired: "A leitura expirou — leia junto ao captador",
-  already_used: "Esta leitura já foi usada",
-};
+// O vocabulário da leitura é compartilhado com a tela (src/lib/collector/scan.ts):
+// este módulo fala com o banco e com node:crypto, e nada disso pode atravessar
+// para o pacote que roda no celular.
+export { SCAN_REJECTION_MESSAGE, SCAN_VALIDITY_MS, type ScanRejection } from "@/lib/collector/scan";
+import { SCAN_VALIDITY_MS, type ScanRejection } from "@/lib/collector/scan";
 
 export interface ScanCheck {
   scanId: string;

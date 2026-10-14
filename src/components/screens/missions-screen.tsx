@@ -9,6 +9,7 @@ import { MissionArt } from "@/components/missions/mission-art";
 import { MissionCard } from "@/components/missions/mission-card";
 import { useMissionBoard, useMissionRunner } from "@/components/missions/mission-runner";
 import { RescueCard } from "@/components/missions/rescue-card";
+import { CollectorOfflineCard } from "@/components/collector/collector-offline-card";
 import { CollectorSwitcher } from "@/components/collector/collector-switcher";
 import { ScreenHeader } from "@/components/student/screen-header";
 import { Chip } from "@/components/ui/chip";
@@ -80,7 +81,8 @@ export function MissionsScreen() {
             mission={entry.mission}
             availability={entry.availability}
             collectorCode={collectorCode}
-            onConfirm={(mission) => start(mission, collectorCode)}
+            location={snapshot?.info.location ?? collectorCode}
+            onConfirm={(mission, scanId) => start(mission, collectorCode, scanId)}
           />
         </motion.li>
       ))}
@@ -98,6 +100,16 @@ export function MissionsScreen() {
       />
 
       <CollectorSwitcher />
+
+      {/*
+        O captador mudo é o maior beco sem saída da tela de missões: a pessoa
+        veio fazer uma missão, lê "indisponível" e não tem para onde ir. O
+        socorro já existia nas outras telas — aqui, que é onde ela está
+        tentando agir, não aparecia.
+      */}
+      {snapshot.telemetry.status === "OFFLINE" && (
+        <CollectorOfflineCard snapshot={snapshot} network={snapshot.rescueNetwork} />
+      )}
 
       <div role="tablist" aria-label="Situação das missões" className="grid grid-cols-3 gap-1 rounded-2xl bg-white/[0.05] p-1">
         {TABS.map((item) => {

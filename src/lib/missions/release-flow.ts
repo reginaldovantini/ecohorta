@@ -1,5 +1,5 @@
-import type { ScanRejection } from "@/lib/server/collector-registry";
-import { SCAN_REJECTION_MESSAGE } from "@/lib/server/collector-registry";
+import type { ScanRejection } from "@/lib/collector/scan";
+import { SCAN_REJECTION_MESSAGE } from "@/lib/collector/scan";
 import { canRelease, releaseBlockedReason, type ReleaseCheckId } from "./release-checklist";
 
 /*
