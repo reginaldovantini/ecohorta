@@ -257,13 +257,14 @@ export async function getMe(db: Queryable, actor: Actor): Promise<MeResponse> {
     target_liters: string | number;
     delivered_liters: string | number;
     xp_awarded: number;
+    failure: ExecutionRecord["failure"];
     created_at: Date | string;
     started_at: Date | string | null;
     finished_at: Date | string | null;
     is_simulated: boolean;
   }>(
     `select e.id, e.mission_id, e.command_id, c.code, e.status, e.target_liters, e.delivered_liters, e.xp_awarded,
-            e.created_at, d.started_at, e.finished_at, d.is_simulated
+            d.failure, e.created_at, d.started_at, e.finished_at, d.is_simulated
      from public.mission_executions e
      join public.collectors c on c.id = e.collector_id
      join public.device_commands d on d.id = e.command_id
@@ -293,6 +294,8 @@ export async function getMe(db: Queryable, actor: Actor): Promise<MeResponse> {
       targetLiters: num(item.target_liters),
       deliveredLiters: num(item.delivered_liters),
       xpAwarded: item.xp_awarded,
+      // O motivo mora no comando: é a placa que sabe por que a água não saiu.
+      failure: item.failure,
       startedAt: millis(item.started_at) ?? millis(item.created_at)!,
       finishedAt: millis(item.finished_at) ?? millis(item.created_at)!,
       origin: item.is_simulated ? "simulation" : "device",

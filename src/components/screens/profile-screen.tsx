@@ -15,6 +15,7 @@ import { Avatar } from "@/components/users/avatar";
 import { useNow } from "@/hooks/use-now";
 import { useProfile } from "@/hooks/use-profile";
 import { getLevelProgress, LEVELS } from "@/lib/gamification/levels";
+import { FAILURE_COPY } from "@/lib/missions/execution";
 import { findMission } from "@/lib/missions/catalog";
 import { profileStore, summarizeProfile } from "@/lib/student/profile-store";
 import { DEFAULT_AVATAR_ID } from "@/lib/users/avatars";
@@ -133,6 +134,14 @@ export function ProfileScreen() {
                         {!completed && " · não concluída"}
                         {now !== null && ` · ${formatRelativeTime(record.finishedAt, now)}`}
                       </p>
+                      {/*
+                        O motivo, quando houve. "Não concluída" sozinho deixa o
+                        estudante sem saber o que fazer diferente da próxima vez
+                        — e quase sempre há o que fazer diferente.
+                      */}
+                      {record.failure && FAILURE_COPY[record.failure] && (
+                        <p className="mt-0.5 truncate text-xs text-mist-500">{FAILURE_COPY[record.failure].title}</p>
+                      )}
                     </div>
                     {record.xpAwarded > 0 && <Chip tone="sun">+{record.xpAwarded} XP</Chip>}
                   </Surface>

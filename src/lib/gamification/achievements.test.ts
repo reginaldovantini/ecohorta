@@ -11,6 +11,7 @@ function record(missionId: string, status: ExecutionRecord["status"] = "COMPLETE
     commandId: `c${counter}`,
     collectorCode: "ECO-001",
     status,
+    failure: status === "FAILED" ? "NO_FLOW" : null,
     targetLiters: 3,
     deliveredLiters,
     xpAwarded: status === "COMPLETED" ? 50 : 0,
