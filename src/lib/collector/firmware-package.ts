@@ -60,7 +60,9 @@ export function secretsHeader(identity: FirmwareIdentity): string {
     `#define SETUP_AP_SSID "${identity.hotspotSsid}"`,
     `#define SETUP_AP_PASSWORD "${identity.hotspotPassword}"`,
     "",
-    "// Certificado da plataforma. Vazio usa conexão sem verificação — só em bancada.",
+    "// Raiz do certificado da plataforma. VAZIO é o normal: o firmware usa as raízes",
+    "// do projeto (firmware/include/ca_bundle.h) e verifica o certificado do mesmo",
+    "// jeito. Preencha só se hospedar a plataforma em outro lugar, com outra emissora.",
     'static const char API_ROOT_CA[] = "";',
     "",
   ];
@@ -167,6 +169,17 @@ export function flashingGuide(identity: FlashingContext): FlashingStep[] {
       ],
       whenItFails:
         "Se a página não abrir sozinha, digite 192.168.4.1 no navegador. Se a rede da escola não aparecer na lista, aproxime o captador do roteador para o primeiro teste.",
+    },
+    {
+      title: "Confira o monitor serial",
+      lines: [
+        "No Visual Studio Code, abra o monitor serial para ver o que a placa está dizendo.",
+        "Em poucos segundos devem aparecer três linhas: a válvula fechada, a hora obtida por NTP e a leitura do sensor.",
+        "A hora importa: sem ela a placa não consegue conferir o certificado da plataforma e não envia nada.",
+      ],
+      copy: "pio device monitor -d firmware -b 115200",
+      whenItFails:
+        "Se ficar repetindo \"ainda sem hora\", a rede da escola bloqueia o NTP (UDP 123). Peça para liberar, ou use o ponto de acesso do celular para o primeiro teste.",
     },
     {
       title: "Confira aqui na plataforma",

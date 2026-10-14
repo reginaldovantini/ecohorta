@@ -1,6 +1,6 @@
 # Verificação automática a cada push e pull request na main:
 # - plataforma: typecheck, lint, testes (PostgreSQL real via PGlite) e build;
-# - firmware ESP32: testes do núcleo de sensores e compilação real para o ESP32 DevKit V1.
+# - firmware ESP32: testes dos núcleos (sensores e liberação) e compilação real para o ESP32 DevKit V1.
 # Não usa segredos: o firmware compila com o secrets.h de EXEMPLO (sem credenciais).
 # A publicação de firmware para OTA fica para a Fase C.
 name: CI
@@ -50,7 +50,10 @@ jobs:
       - run: pip install platformio
       - name: secrets.h de exemplo (sem credenciais reais)
         run: cp firmware/include/secrets.example.h firmware/include/secrets.h
-      - name: Testes do núcleo de sensores
+      - name: Testes dos núcleos (sensores e liberação)
         run: pio test -d firmware -e native_test
+      # O platformio.ini trata "função definida e nunca chamada" como ERRO: foi
+      # assim que a malha da válvula ficou pronta e inerte, com a placa medindo
+      # e a torneira sem abrir.
       - name: Compilação para o ESP32 DevKit V1
         run: pio run -d firmware -e esp32dev

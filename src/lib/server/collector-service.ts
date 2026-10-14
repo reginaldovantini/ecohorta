@@ -149,6 +149,19 @@ interface CommandRow {
 // "sem conexão há tanto tempo", e um limite diferente dos dois lados seria um bug.
 export { OFFLINE_AFTER_MS };
 export const QUEUE_TIMEOUT_MS = 30_000;
+/*
+ * Quando uma liberação sem desfecho é dada por perdida.
+ *
+ * A placa fecha a válvula sozinha no teto dela (2 min), e só depois mede e
+ * relata. Se o relatório nunca chega — queda de energia no meio da manhã,
+ * Wi-Fi que não volta, placa que reiniciou —, o comando fica EXECUTANDO para
+ * sempre, e o captador para de aceitar missões: todo estudante que chegar vai
+ * ler "outra missão está liberando água", e ninguém saberá por quê.
+ *
+ * Cinco minutos sem notícia é tempo de sobra para qualquer liberação legítima,
+ * e a água já parou de sair faz tempo — o teto da placa não depende da rede.
+ */
+export const RELEASE_TIMEOUT_MS = 5 * 60_000;
 /** Intervalos de envio do dispositivo: econômicos parado, rápidos com liberação ativa. */
 export const IDLE_POLL_MS = 3_000;
 export const ACTIVE_POLL_MS = 1_000;
@@ -359,13 +372,29 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
   }
 
   /** Comando na fila que o dispositivo não buscou a tempo: falha como captador offline. */
-  async function expireQueued(q: Queryable, collectorId: string, nowMs: number) {
+  /**
+   * Fecha comandos que não vão mais terminar.
+   *
+   * Dois abandonos diferentes, e os dois deixariam o captador inutilizável:
+   *
+   *   QUEUED sem ser buscado — a placa não apareceu para pegar o comando.
+   *   EXECUTANDO ou MEDINDO sem notícia — a placa pegou e sumiu antes de
+   *   relatar. Este é o pior dos dois: sem ele, UMA queda de energia no meio de
+   *   uma liberação bastava para o captador recusar todas as missões seguintes,
+   *   para sempre, sem ninguém entender o motivo.
+   *
+   * A água já parou: o teto de tempo que fecha a válvula mora na placa e não
+   * depende da rede. O que se encerra aqui é o registro, não a torneira.
+   */
+  async function expireStale(q: Queryable, collectorId: string, nowMs: number) {
     const { rows } = await q.query<{ id: string }>(
       `update public.device_commands
        set status = 'FAILED', failure = 'DEVICE_OFFLINE', finished_at = $2, updated_at = $2
-       where collector_id = $1 and status = 'QUEUED' and queued_at < $3
+       where collector_id = $1
+         and ((status = 'QUEUED' and queued_at < $3)
+           or (status in ('EXECUTING', 'MEASURING') and updated_at < $4))
        returning id`,
-      [collectorId, date(nowMs), date(nowMs - QUEUE_TIMEOUT_MS)],
+      [collectorId, date(nowMs), date(nowMs - QUEUE_TIMEOUT_MS), date(nowMs - RELEASE_TIMEOUT_MS)],
     );
     for (const { id } of rows) {
       await q.query("update public.mission_executions set status = 'FAILED', finished_at = $2, updated_at = $2 where command_id = $1", [id, date(nowMs)]);
@@ -557,7 +586,7 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
         const row = await loadByCode(tx, code);
         if (!row || row.school_id !== actor.schoolId) return null;
         const nowMs = now();
-        await expireQueued(tx, row.id, nowMs);
+        await expireStale(tx, row.id, nowMs);
         const { rows } = await tx.query(
           "select 1 from public.collector_scans where collector_id = $1 and profile_id = $2 limit 1",
           [row.id, actor.profileId],
@@ -645,7 +674,7 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
             ingestReading(accounting, { uptimeMs: payload.uptime_ms, volumeLiters: volume, capacityLiters: capacity, dispensing });
           }
         }
-        await expireQueued(tx, row.id, nowMs);
+        await expireStale(tx, row.id, nowMs);
         const current = await activeCommand(tx, row.id);
 
         // Janela de leituras para a estabilização (tela de calibração).
@@ -810,7 +839,7 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
         if (!mission || mission.kind !== "dispense") return fail(422, "Missão desconhecida.");
 
         const nowMs = now();
-        await expireQueued(tx, row.id, nowMs);
+        await expireStale(tx, row.id, nowMs);
         const active = await activeCommand(tx, row.id);
         const snapshot = buildSnapshot(row, active, nowMs);
 
@@ -871,7 +900,7 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
       return db.transaction(async (tx) => {
         const row = await loadByCode(tx, code);
         if (!row || row.school_id !== actor.schoolId) return null;
-        await expireQueued(tx, row.id, now());
+        await expireStale(tx, row.id, now());
         const command = await findCommand(tx, commandId);
         if (!command || command.collector_id !== row.id || !canSeeCommand(actor, command)) return null;
         return toProgress(command);

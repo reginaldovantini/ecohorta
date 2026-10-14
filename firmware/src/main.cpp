@@ -20,6 +20,7 @@
 #include <Wire.h>
 #include <esp_timer.h>
 
+#include "ca_bundle.h"
 #include "config.h"
 #include "dispenser.h"
 #include "secrets.h"
@@ -46,6 +47,44 @@ static bool stateLogged = false;
 static SensorState loggedState = SensorState::NotConfigured;
 
 static uint64_t uptimeMs() { return esp_timer_get_time() / 1000ULL; }
+
+/*
+ * O RELÓGIO, SEM O QUAL O HTTPS NÃO ACONTECE.
+ *
+ * O ESP32 não tem bateria de relógio: ao ligar, para ele é 1970. E um
+ * certificado emitido em 2026 "ainda não é válido" em 1970 — a verificação
+ * falha, a telemetria não sai, e o captador fica mudo sem dizer por quê.
+ *
+ * Então a placa busca a hora por NTP antes do primeiro envio. Três servidores,
+ * porque um deles pode estar bloqueado na rede da escola; e sem travar o laço,
+ * porque o portal de configuração é servido por esta mesma placa.
+ */
+static bool relogioPronto = false;
+static bool sntpIniciado = false;
+static uint32_t proximoAvisoRelogioMs = 0;
+
+/** 1º de janeiro de 2025: qualquer data antes disso é o relógio de fábrica. */
+static const time_t HORA_MINIMA = 1735689600;
+
+static bool relogioConferido() {
+  if (relogioPronto) return true;
+  if (!sntpIniciado) {
+    // configTime dispara o SNTP em segundo plano: não espera resposta aqui.
+    configTime(0, 0, "pool.ntp.org", "time.google.com", "time.cloudflare.com");
+    sntpIniciado = true;
+    Serial.println("[relogio] buscando a hora por NTP (necessaria para o HTTPS)");
+  }
+  if (time(nullptr) >= HORA_MINIMA) {
+    relogioPronto = true;
+    Serial.println("[relogio] hora obtida; a telemetria pode comecar");
+    return true;
+  }
+  if (millis() >= proximoAvisoRelogioMs) {
+    proximoAvisoRelogioMs = millis() + 15000;
+    Serial.println("[relogio] ainda sem hora. Se nao passar disto, a rede bloqueia NTP (UDP 123) - avise o professor");
+  }
+  return false;
+}
 static uint32_t clockMs() { return millis(); }
 
 // Uma linha no monitor serial a cada mudança de estado do sensor.
@@ -310,14 +349,36 @@ static void sendTelemetry() {
 
 void setup() {
   Serial.begin(115200);
+  /*
+   * A PRIMEIRA COISA QUE O FIRMWARE FAZ É FECHAR A VÁLVULA.
+   *
+   * Entre a energia chegar e esta linha rodar, o pino do relé está flutuando — e
+   * num módulo acionado por nível baixo um pino flutuante pode energizar a
+   * bobina sozinho. Tudo o mais pode esperar um segundo; água saindo sozinha no
+   * pátio, não.
+   */
+  valve::begin();
   delay(1500);
   Serial.printf("\nEcoHorta %s | %s -> %s\n", FW_VERSION, DEVICE_ID, COLLECTOR_CODE);
   Serial.printf("[rede] rede de configuração e resgate: %s\n", SETUP_AP_SSID);
   Serial.printf("[i2c] SDA=GPIO%d SCL=GPIO%d %lu kHz\n", PIN_I2C_SDA, PIN_I2C_SCL, (unsigned long)(I2C_CLOCK_HZ / 1000));
   Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL);
   Wire.setClock(I2C_CLOCK_HZ);
-  if (strlen(API_ROOT_CA) > 0) client.setCACert(API_ROOT_CA);
-  else client.setInsecure();  // somente bancada — ver secrets.example.h
+  /*
+   * TLS verificado, sempre.
+   *
+   * Antes, sem uma raiz no secrets.h, a placa aceitava qualquer certificado — e
+   * numa rede de escola isso entrega o token do dispositivo a quem estiver
+   * escutando. Agora o padrão são as raízes do projeto, e o secrets.h só serve
+   * para quem hospeda a plataforma em outro lugar.
+   */
+  if (strlen(API_ROOT_CA) > 0) {
+    client.setCACert(API_ROOT_CA);
+    Serial.println("[tls] certificado verificado pela raiz do secrets.h");
+  } else {
+    client.setCACert(ECOHORTA_CA_BUNDLE);
+    Serial.println("[tls] certificado verificado pelas raizes do projeto");
+  }
 
   hardware = loadHardwareConfig();
   if (hardware.model != SensorModel::None) {
@@ -350,12 +411,24 @@ void loop() {
   net::loop();
   sensors.ensureReady();
   logSensorState();
-  if (net::online()) sendTelemetry();
-  // O intervalo pedido pelo servidor conta a partir do início do ciclo (leitura + HTTPS incluídos).
-  // A espera é fatiada porque a página de configuração é servida por esta mesma placa:
-  // um delay inteiro de 15 s deixaria quem está configurando olhando para uma tela travada.
+  dispenseTick();
+  // Sem hora certa o certificado do servidor é recusado: esperar a hora é mais
+  // honesto do que tentar e falhar em silêncio a cada ciclo.
+  if (net::online() && relogioConferido()) sendTelemetry();
+
+  /*
+   * A espera entre telemetrias, fatiada por dois motivos.
+   *
+   * O portal de configuração é servido por esta mesma placa, e um delay inteiro
+   * deixaria quem está configurando olhando para uma tela travada.
+   *
+   * E, sobretudo, a malha da liberação roda aqui dentro: é ELA que fecha a
+   * válvula, pelo volume que o sensor mede. Se dependesse do ciclo de rede, uma
+   * requisição lenta — ou um Wi-Fi que caiu — seria água continuando a sair.
+   */
   while (millis() - started < nextPollMs) {
     net::loop();
-    delay(20);
+    dispenseTick();
+    delay(10);
   }
 }

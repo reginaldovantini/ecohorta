@@ -1,7 +1,7 @@
 import type { PGlite } from "@electric-sql/pglite";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { TelemetryPayload } from "@/lib/iot/api-schema";
-import { createCollectorService, IDLE_POLL_MS, ACTIVE_POLL_MS, type AuthenticatedDevice, type CollectorService } from "./collector-service";
+import { createCollectorService, IDLE_POLL_MS, ACTIVE_POLL_MS, RELEASE_TIMEOUT_MS, type AuthenticatedDevice, type CollectorService } from "./collector-service";
 import { SCAN_VALIDITY_MS } from "./collector-registry";
 import { createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, ACTORS, makeCollectorReal, scanForRelease } from "./db/test-db";
 import type { Database } from "./db/types";
@@ -262,6 +262,46 @@ describe("ciclo de liberação", () => {
       const { rows } = await db.query<{ scan_id: string }>("select scan_id from device_commands where id = $1", [CMD.a]);
       expect(rows[0]!.scan_id).toBe(leitura);
     });
+  });
+
+  /*
+   * O captador não pode ficar inutilizável por uma queda de energia.
+   *
+   * A placa pega o comando, abre a válvula e some — acaba a luz, o Wi-Fi não
+   * volta, alguém desliga a tomada. A água para sozinha (o teto de tempo mora na
+   * placa), mas o registro ficaria aberto para sempre, e o captador recusaria
+   * todas as missões seguintes com "outra missão está liberando água".
+   */
+  it("liberação abandonada pela placa é encerrada, e o captador volta a aceitar missões", async () => {
+    await service.requestDispense(student, "ECO-001", await dispense(CMD.a, EXEC.a));
+    // A placa pegou o comando e começou a liberar.
+    await ingest({ valve: "open", status: "DISPENSING", command_report: report(CMD.a) });
+
+    // E sumiu. Passa mais tempo do que qualquer liberação legítima levaria.
+    clock += RELEASE_TIMEOUT_MS + 60_000;
+
+    const nova = await service.requestDispense(student, "ECO-001", await dispense(CMD.b, EXEC.b, "hidratar-mudas"));
+    expect(nova.ok).toBe(true);
+    expect(nova.ok && nova.value.failure).not.toBe("DEVICE_BUSY");
+
+    const abandonada = await db.query<{ status: string; failure: string | null }>(
+      "select status, failure from device_commands where id = $1",
+      [CMD.a],
+    );
+    expect(abandonada.rows[0]).toMatchObject({ status: "FAILED", failure: "DEVICE_OFFLINE" });
+
+    const execucao = await db.query<{ status: string }>("select status from mission_executions where id = $1", [EXEC.a]);
+    expect(execucao.rows[0]!.status).toBe("FAILED");
+  });
+
+  it("uma liberação em andamento continua intocada enquanto dá notícia", async () => {
+    await service.requestDispense(student, "ECO-001", await dispense(CMD.a, EXEC.a));
+    for (let i = 0; i < 4; i++) {
+      clock += 60_000;
+      await ingest({ valve: "open", status: "DISPENSING", command_report: report(CMD.a, { delivered_liters: 0.5 * i }) });
+    }
+    const ainda = await db.query<{ status: string }>("select status from device_commands where id = $1", [CMD.a]);
+    expect(ainda.rows[0]!.status).toBe("EXECUTING");
   });
 
   it("recusa volume acima do disponível", async () => {

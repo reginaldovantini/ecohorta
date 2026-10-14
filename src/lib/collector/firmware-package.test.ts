@@ -51,7 +51,7 @@ describe("passo a passo da gravação", () => {
   const guia = flashingGuide(identidade);
 
   it("vai da instalação do programa até a conferência na plataforma", () => {
-    expect(guia).toHaveLength(7);
+    expect(guia).toHaveLength(8);
     // A numeração é de quem desenha: tela e PDF numeram sozinhos, e um "1." no
     // título virava "1. 1." no papel.
     for (const passo of guia) expect(passo.title).not.toMatch(/^\d+\./);
@@ -71,6 +71,12 @@ describe("passo a passo da gravação", () => {
   it("entrega o comando pronto para copiar", () => {
     const gravar = guia.find((passo) => passo.copy);
     expect(gravar!.copy).toBe("pio run -d firmware -e esp32dev -t upload");
+  });
+
+  it("avisa sobre a hora: sem NTP o HTTPS não acontece, e o captador fica mudo", () => {
+    const relogio = guia.find((passo) => passo.whenItFails?.includes("NTP"));
+    expect(relogio).toBeDefined();
+    expect(relogio!.lines.join(" ")).toMatch(/hora/i);
   });
 
   it("os passos onde se trava explicam a saída", () => {

@@ -255,6 +255,12 @@ Testes do núcleo de sensores, sem placa: `pio test -d firmware -e windows_test`
 - `command_id` executados guardados na memória não volátil (NVS).
 - Relatório do comando (`command_report`) igual ao do dispositivo virtual.
 
+## 6.1 Duas exigências de rede que derrubam o captador em silêncio
+
+**Hora certa.** O ESP32 não tem bateria de relógio: ao ligar, para ele é 1970. A plataforma só aceita HTTPS, e um certificado emitido em 2026 "ainda não é válido" em 1970 — a verificação falha e a telemetria não sai. O firmware busca a hora por NTP (`pool.ntp.org`, `time.google.com`, `time.cloudflare.com`) antes do primeiro envio e **não envia nada até consegui-la**, dizendo isso no monitor serial. Rede de escola que bloqueia UDP 123 deixa o captador mudo: é o primeiro item a conferir quando a etapa de Conexão não acende.
+
+**Certificado verificado.** As raízes confiáveis estão embutidas em `firmware/include/ca_bundle.h` (GTS Root R1 e ISRG Root X1, conferidas pela impressão digital). Antes disso o firmware aceitava qualquer certificado, e numa rede de escola isso entregava o **token do dispositivo** a quem estivesse escutando. `API_ROOT_CA`, no `secrets.h`, continua existindo como override para quem hospeda a plataforma em outro lugar.
+
 ## 7. Credenciais no firmware
 
 - URL da API, token e a rede do captador ficam em `firmware/include/secrets.h`, **ignorado pelo Git** (`firmware/.gitignore`), gerado pela plataforma por captador. O modelo é `secrets.example.h`.
