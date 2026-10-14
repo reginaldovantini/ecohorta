@@ -104,14 +104,26 @@ export function setupFactsFrom(row: SetupRow, collector: CollectorRow): SetupFac
 }
 
 export function createCollectorSetupService({ db }: { db: Database }) {
-  async function load(tx: Queryable, code: string) {
+  /*
+   * O código é sequencial DENTRO da escola: toda escola tem o seu ECO-001.
+   *
+   * Quem administra uma escola recebe o tubo DELA, pela consulta — e não por
+   * uma conferência feita depois, com o tubo errado na mão. A administração da
+   * plataforma não pertence a escola nenhuma e alcança todos; para ela o código
+   * sozinho é ambíguo entre escolas, e a ordem fixa pelo menos torna o
+   * resultado previsível em vez de sorteado pelo banco. Desambiguar de verdade
+   * pede o identificador do captador na URL, não o código.
+   */
+  async function load(tx: Queryable, code: string, schoolId: string | null = null) {
     const setup = await tx.query<SetupRow>(
       `select c.id, c.school_id, c.code, c.proto_code, c.name, c.location, c.activated_at, c.hotspot_ssid, c.hotspot_password,
               c.connectivity, s.name as school_name, s.city as school_city, s.state as school_state,
               (select array_agg(m.step::text) from public.collector_setup_marks m where m.collector_id = c.id) as marks
        from public.collectors c join public.schools s on s.id = c.school_id
-       where c.code = $1`,
-      [code],
+       where c.code = $1 and ($2::uuid is null or c.school_id = $2)
+       order by c.created_at
+       limit 1`,
+      [code, schoolId],
     );
     const row = setup.rows[0];
     if (!row) return null;
@@ -154,7 +166,7 @@ export function createCollectorSetupService({ db }: { db: Database }) {
     /** A tela inteira: caminho, etapa atual, material e o que fazer agora. */
     async journey(actor: Actor, code: string): Promise<ServiceResult<CollectorSetupView>> {
       return db.transaction(async (tx) => {
-        const found = await load(tx, code);
+        const found = await load(tx, code, actor.schoolId);
         if (!found) return fail(404, "Captador não encontrado.");
         if (!mayConduct(actor, found.row.id, found.row.school_id)) return fail(403, "Esta área é de quem conduz a construção do captador.");
         return { ok: true, value: view(found.row, found.collector) };
@@ -170,7 +182,7 @@ export function createCollectorSetupService({ db }: { db: Database }) {
         return fail(422, "Esta etapa não se marca à mão: ela vem da medição do captador.");
       }
       return db.transaction(async (tx) => {
-        const found = await load(tx, code);
+        const found = await load(tx, code, actor.schoolId);
         if (!found) return fail(404, "Captador não encontrado.");
         if (!mayConduct(actor, found.row.id, found.row.school_id)) return fail(403, "Esta área é de quem conduz a construção do captador.");
 
@@ -183,7 +195,7 @@ export function createCollectorSetupService({ db }: { db: Database }) {
         } else {
           await tx.query("delete from public.collector_setup_marks where collector_id = $1 and step = $2", [found.row.id, step]);
         }
-        const updated = (await load(tx, code))!;
+        const updated = (await load(tx, code, actor.schoolId))!;
         return { ok: true, value: view(updated.row, updated.collector) };
       });
     },
@@ -198,7 +210,7 @@ export function createCollectorSetupService({ db }: { db: Database }) {
      */
     async reissueStewardCode(actor: Actor, code: string, pepper: string): Promise<ServiceResult<{ stewardCode: string }>> {
       return db.transaction(async (tx) => {
-        const found = await load(tx, code);
+        const found = await load(tx, code, actor.schoolId);
         if (!found) return fail(404, "Captador não encontrado.");
         // Quem REEMITE é quem administra a escola do captador. Ser responsável
         // não basta: senão quem tem o código de hoje emitiria o de amanhã, e a
@@ -226,7 +238,7 @@ export function createCollectorSetupService({ db }: { db: Database }) {
       code: string,
       options: { apiBaseUrl: string; pepper: string; confirmReplacement?: boolean },
     ): Promise<ServiceResult<FirmwarePackage>> {
-      const found = await db.transaction(async (tx) => load(tx, code));
+      const found = await db.transaction(async (tx) => load(tx, code, actor.schoolId));
       if (!found) return fail(404, "Captador não encontrado.");
       if (!mayConduct(actor, found.row.id, found.row.school_id)) return fail(403, "Esta área é de quem conduz a construção do captador.");
       const { row, collector } = found;

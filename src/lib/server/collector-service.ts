@@ -346,10 +346,23 @@ function commandFor(row: CommandRow | null): DeviceCommand | null {
 export function createCollectorService({ db, pepper, now = Date.now }: { db: Database; pepper: string; now?: () => number }) {
   const hashToken = (token: string) => createHash("sha256").update(`${pepper}:${token}`).digest("hex");
 
-  async function loadByCode(q: Queryable, code: string, lock = false) {
+  /*
+   * O código do captador é sequencial DENTRO da escola: toda escola tem o seu
+   * ECO-001. Procurar só pelo código, numa rede com duas escolas, devolve um
+   * tubo qualquer entre os dois — e quem chamou confere a escola DEPOIS, com o
+   * tubo errado na mão, e conclui que o captador não existe.
+   *
+   * A escola entra na consulta. Sem ela (`null`), continua sendo uma busca
+   * ampla: é o que o dispositivo precisa, porque a placa se identifica pelo
+   * token e não sabe de escola nenhuma.
+   */
+  async function loadByCode(q: Queryable, code: string, lock = false, schoolId: string | null = null) {
     const normalized = normalizeCollectorCode(code);
     if (!normalized) return null;
-    const { rows } = await q.query<CollectorRow>(`${COLLECTOR_SELECT} where c.code = $1${lock ? " for update of s" : ""}`, [normalized]);
+    const { rows } = await q.query<CollectorRow>(
+      `${COLLECTOR_SELECT} where c.code = $1 and ($2::uuid is null or c.school_id = $2)${lock ? " for update of s" : ""}`,
+      [normalized, schoolId],
+    );
     return rows[0] ?? null;
   }
 
@@ -583,7 +596,7 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
 
     async getSnapshot(actor: Actor, code: string): Promise<CollectorSnapshot | null> {
       return db.transaction(async (tx) => {
-        const row = await loadByCode(tx, code);
+        const row = await loadByCode(tx, code, false, actor.schoolId);
         if (!row || row.school_id !== actor.schoolId) return null;
         const nowMs = now();
         await expireStale(tx, row.id, nowMs);
@@ -821,7 +834,7 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
       request: { command_id: string; execution_id: string; mission_id: string; scan_id: string },
     ): Promise<ServiceResult<DispenseProgress>> {
       return db.transaction(async (tx) => {
-        const row = await loadByCode(tx, code, true);
+        const row = await loadByCode(tx, code, true, actor.schoolId);
         if (!row || row.school_id !== actor.schoolId) return notFound;
 
         const existing = await findCommand(tx, request.command_id);
@@ -898,7 +911,7 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
 
     async getProgress(actor: Actor, code: string, commandId: string): Promise<DispenseProgress | null> {
       return db.transaction(async (tx) => {
-        const row = await loadByCode(tx, code);
+        const row = await loadByCode(tx, code, false, actor.schoolId);
         if (!row || row.school_id !== actor.schoolId) return null;
         await expireStale(tx, row.id, now());
         const command = await findCommand(tx, commandId);
@@ -910,7 +923,7 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
     /** Na fila, cancela na hora; em execução, o dispositivo fecha a válvula e confirma. */
     async requestCancel(actor: Actor, code: string, commandId: string): Promise<ServiceResult<DispenseProgress>> {
       return db.transaction(async (tx) => {
-        const row = await loadByCode(tx, code, true);
+        const row = await loadByCode(tx, code, true, actor.schoolId);
         if (!row || row.school_id !== actor.schoolId) return notFound;
         const command = await findCommand(tx, commandId, true);
         if (!command || command.collector_id !== row.id || !canSeeCommand(actor, command)) return fail(404, "Comando não encontrado.");
@@ -932,7 +945,7 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
     async updateSimulation(actor: Actor, code: string, request: SimulationRequest): Promise<ServiceResult<SimulationSettings>> {
       if (!isEducator(actor)) return fail(403, "Somente professores e administradores controlam a simulação.");
       return db.transaction(async (tx) => {
-        const row = await loadByCode(tx, code, true);
+        const row = await loadByCode(tx, code, true, actor.schoolId);
         if (!row || row.school_id !== actor.schoolId) return notFound;
         const simulation = parseSimulation(row.simulation);
         if (!simulation) return fail(403, "Este captador é real: não aceita comandos de simulação.");

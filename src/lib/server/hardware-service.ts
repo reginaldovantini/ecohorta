@@ -57,10 +57,19 @@ const toChange = (row: HistoryRow): HardwareChangeRecord => ({
 });
 
 export function createHardwareService({ db, now = Date.now }: { db: Database; now?: () => number }) {
+  /*
+   * O código do captador é sequencial DENTRO da escola: toda escola tem o seu
+   * ECO-001. Procurar só pelo código, numa rede com duas escolas, devolve um
+   * tubo qualquer entre os dois — e a tela passa a falhar de forma
+   * imprevisível na escola errada. A escola entra na consulta, não na
+   * conferência depois dela.
+   */
   async function loadCollector(q: Queryable, actor: Actor, code: string, lock = false) {
     const normalized = normalizeCollectorCode(code);
     if (!normalized) return null;
-    const { rows } = await q.query<CollectorRow>(`${COLLECTOR_SELECT} where c.code = $1${lock ? " for update of s" : ""}`, [normalized]);
+    const { rows } = await q.query<CollectorRow>(`${COLLECTOR_SELECT} where c.code = $1 and c.school_id = $2${lock ? " for update of s" : ""}`,
+      [normalized, actor.schoolId],
+    );
     const row = rows[0];
     return row && row.school_id === actor.schoolId ? row : null;
   }
