@@ -188,7 +188,10 @@ describe("uma missão inteira, do comando ao relatório", () => {
     const resposta = await service.ingestTelemetry(esp32, daPlaca());
     expect(resposta.command).toMatchObject({ command_id: COMANDO, action: "dispense" });
     expect(resposta.command!.action === "dispense" && resposta.command!.target_liters).toBeGreaterThan(0);
-    expect(resposta.command!.action === "dispense" && resposta.command!.max_duration_ms).toBeGreaterThan(0);
+    // O teto que o servidor concede e o teto embutido na placa são o MESMO número
+    // (240 s). Se a placa cortasse antes, uma missão legítima de pouca vazão
+    // falharia por TIMEOUT tendo entregado quase toda a água.
+    expect(resposta.command!.action === "dispense" && resposta.command!.max_duration_ms).toBe(240_000);
   });
 
   it("o relatório terminal conclui a execução, e o comando para de ser enviado", async () => {

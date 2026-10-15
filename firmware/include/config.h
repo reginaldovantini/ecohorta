@@ -67,8 +67,15 @@ static const uint32_t VALVE_SETTLE_MS = 4000;
 // Válvula aberta este tempo sem o nível cair: desiste e informa NO_FLOW.
 static const uint32_t VALVE_NO_FLOW_MS = 8000;
 static const float VALVE_NO_FLOW_MIN_LITERS = 0.05f;
-// TETO ABSOLUTO. Vale mesmo que o servidor peça mais: um comando malformado não molha o pátio.
-static const uint32_t VALVE_HARD_MAX_MS = 120000;
+// TETO ABSOLUTO da abertura. Vale mesmo que o servidor peça mais: um comando malformado
+// não molha o pátio. Igual ao teto do servidor (MAX_DISPENSE_MS) de propósito — se a placa
+// cortasse antes, uma missão legítima de 3 L por gravidade, com torneira de pouca vazão,
+// falharia por TIMEOUT tendo entregado quase tudo.
+//
+// Este NÃO é o guarda principal: água que não desce vira NO_FLOW em 8 s, e sensor mudo
+// fecha em 6 s. O teto é o último recurso. O número definitivo sai do protocolo de vazão
+// (docs/HARDWARE.md §2.4), medido com o tubo cheio.
+static const uint32_t VALVE_HARD_MAX_MS = 240000;
 // Sem leitura válida por este tempo durante a liberação: fecha e informa SENSOR_ERROR.
 static const uint32_t VALVE_SENSOR_BLIND_MS = 6000;
 // Com a válvula aberta, o sensor é lido neste intervalo — muito mais rápido que a telemetria.
