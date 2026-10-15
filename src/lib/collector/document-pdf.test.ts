@@ -105,6 +105,23 @@ describe("o manual sai com os dados daquele captador", () => {
     expect(conteudo).toContain("platformio.org");
   });
 
+  /*
+   * O manual é impresso e levado para o pátio. Se ele disser que a saída é
+   * manual — como disse enquanto a válvula não existia —, a escola monta o tubo
+   * sem a válvula e a plataforma manda abrir uma torneira que ninguém instalou.
+   * Papel desatualizado é pior do que papel nenhum: ele é obedecido.
+   *
+   * As buscas são por trechos sem acento: o PDF escreve "á" como á.
+   */
+  it("o manual de construção manda instalar a válvula, e não a trata como estudo futuro", () => {
+    const conteudo = texto(buildDocumentPdf(constructionGuideDocument(CONTEXTO)));
+    expect(conteudo).toContain("MOTORIZADA");
+    expect(conteudo).toContain("GPIO 26");
+    expect(conteudo).toContain("rel");
+    // A frase antiga dizia que a válvula "ainda está em estudo" e a saída era manual.
+    expect(conteudo).not.toContain("em estudo");
+  });
+
   it("o guia impresso não carrega o token do dispositivo", () => {
     // O contexto do guia nem tem onde guardá-lo: é a garantia que vale, porque
     // depende do tipo e não de alguém lembrar. O teste registra a intenção.

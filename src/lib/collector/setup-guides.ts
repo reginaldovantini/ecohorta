@@ -46,8 +46,8 @@ export function constructionGuideDocument(context: GuideContext): DocumentInput 
             kind: "text",
             text:
               "Um tubo vertical que recebe a água que o ar-condicionado joga fora, guarda essa água e deixa um sensor " +
-              "medir quanto tem lá dentro. Nada é automático: a água sai pela torneira, aberta por quem está no pátio, e " +
-              "o sensor mede quanto saiu. É essa medição que conclui a missão de um estudante.",
+              "medir quanto tem lá dentro. Quando um estudante cumpre uma missão, a plataforma manda a placa abrir a válvula, " +
+              "e é a PRÓPRIA PLACA que a fecha — no volume que o sensor mediu, nunca por tempo. É essa medição que conclui a missão.",
           },
           {
             kind: "fields",
@@ -77,7 +77,9 @@ export function constructionGuideDocument(context: GuideContext): DocumentInput 
               `Tubo de PVC DN100, cerca de ${metro(context.nominalUsefulHeightMm + 300)} (sobra para as conexões e o apoio).`,
               "Tampa de PVC DN100 para a parte de cima — é nela que o sensor é instalado.",
               "Cap ou tampão para o fundo, mais a saída da torneira.",
-              "Torneira ou registro de esfera para a saída da água, na altura do ZERO.",
+              "Válvula esférica MOTORIZADA de 12 V (3 fios) para a saída da água, na altura do ZERO. É ela que a plataforma abre.",
+              "1 módulo relé de 1 canal e uma fonte de 12 V para a válvula, separada da alimentação da placa.",
+              "Registro manual depois da válvula, para fechar a água durante a manutenção.",
               "Mangueira transparente lateral, ligada ao tubo em cima e embaixo: é a régua visual, independente do sensor.",
               "Mangueira que traz a água do dreno do ar-condicionado.",
               `Sensor de distância ${sensor.model} (módulo pequeno, com quatro pinos: VCC, GND, SDA, SCL).`,
@@ -132,6 +134,18 @@ export function constructionGuideDocument(context: GuideContext): DocumentInput 
                 whenItFails: "Se depois o aplicativo mostrar uma distância que não muda, quase sempre o sensor está lendo uma luva ou a entrada da mangueira. Anote tudo que fica dentro do tubo no caminho do sensor.",
               },
               {
+                title: "Instale a válvula e teste o relé ANTES da água",
+                lines: [
+                  "A válvula vai na saída do fundo, na altura do ZERO; o registro manual vem depois dela.",
+                  "Ligue os três fios: amarelo no GND da fonte 12 V, marrom no +12 V, e o azul passando pelo relé até o +12 V.",
+                  "O relé é acionado pelo GPIO 26 da placa. A tela de Ligações, na plataforma, mostra o desenho.",
+                  "Com a válvula FORA da água, confira que o relé acionado abre e o relé solto fecha.",
+                  "Cronometre quanto o motor leva para fechar por completo: esse número vai para o firmware.",
+                ],
+                whenItFails:
+                  "Se a válvula abrir quando deveria estar fechada, o módulo de relé é do tipo contrário: inverta VALVE_RELAY_ACTIVE_LOW em firmware/include/config.h. Faça este teste com o tubo vazio, nunca cheio.",
+              },
+              {
                 title: "Ligue o sensor à placa",
                 lines: [
                   "O ESP32 fica na caixa plástica, fora do tubo e longe de respingo.",
@@ -164,7 +178,8 @@ export function constructionGuideDocument(context: GuideContext): DocumentInput 
           {
             kind: "bullets",
             items: [
-              "Não instale válvula automática nesta fase: o sistema é por gravidade, e a válvula ainda está em estudo. A saída é manual.",
+              "Não ligue a válvula à água antes de testar o relé com o tubo vazio: um módulo do tipo contrário abre quando deveria fechar.",
+              "Não dispense o registro manual depois da válvula: é por ele que se fecha a água para qualquer manutenção.",
               "Não cubra a janela do sensor com acrílico ou vidro no primeiro teste: o reflexo atrapalha a medição.",
               "Não use papel comum no adesivo do QR: no pátio ele encharca, e um QR que não lê é missão que não acontece.",
               "Não beba a água do captador nem use em alimento. Ela é água de condensação, boa para rega e limpeza.",
