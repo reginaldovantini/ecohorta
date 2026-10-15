@@ -1,6 +1,8 @@
 import { availableLiters } from "@/lib/collector/water";
 import type { CollectorSnapshot } from "@/lib/iot/types";
 import type { MissionDefinition } from "./catalog";
+import type { ExecutionRecord } from "./history";
+import { phaseGate } from "./phases";
 
 export type MissionAvailability =
   | { status: "available"; freeLiters: number }
@@ -8,7 +10,9 @@ export type MissionAvailability =
   | { status: "busy" }
   | { status: "device_unavailable" }
   /** Captador ainda apagado: esta pessoa nunca leu o QR dele. */
-  | { status: "needs_verification" };
+  | { status: "needs_verification" }
+  /** A fase ainda não abriu: faltam missões da fase anterior. */
+  | { status: "locked_phase"; missing: number; previousPhase: number };
 
 const EPSILON = 1e-6;
 
@@ -16,8 +20,22 @@ export function getMissionAvailability(
   mission: MissionDefinition,
   snapshot: CollectorSnapshot | null,
   hasActiveExecution: boolean,
+  history: readonly ExecutionRecord[] = [],
 ): MissionAvailability {
   if (hasActiveExecution || snapshot?.telemetry.status === "DISPENSING") return { status: "busy" };
+
+  /*
+   * A fase vem ANTES do estado do captador.
+   *
+   * Uma missão que a pessoa ainda não desbloqueou não melhora quando o tubo
+   * enche: dizer "aguardando água" numa missão trancada mandaria um estudante
+   * esperar por algo que não ia acontecer.
+   */
+  const fase = phaseGate(mission, history);
+  if (!fase.unlocked) {
+    return { status: "locked_phase", missing: fase.missing, previousPhase: fase.previousPhase ?? mission.phase - 1 };
+  }
+
   if (!snapshot || (snapshot.telemetry.status !== "READY" && snapshot.telemetry.status !== "ONLINE")) {
     return { status: "device_unavailable" };
   }

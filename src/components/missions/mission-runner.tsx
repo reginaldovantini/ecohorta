@@ -10,9 +10,11 @@ import {
 } from "@/components/collector/collector-source";
 import { unlockedAchievements } from "@/lib/gamification/achievements";
 import { getMissionAvailability } from "@/lib/missions/availability";
+import { currentPhase } from "@/lib/missions/phases";
 import { MISSION_CATALOG, type MissionDefinition } from "@/lib/missions/catalog";
 import { isTerminal } from "@/lib/missions/execution";
 import { profileStore } from "@/lib/student/profile-store";
+import { useProfile } from "@/hooks/use-profile";
 import { createId } from "@/lib/utils/id";
 import { ExecutionOverlay } from "./execution-overlay";
 
@@ -107,16 +109,18 @@ export function useMissionBoard() {
   const collectorCode = usePrimaryCollectorCode();
   const snapshot = useCollectorSnapshot(collectorCode);
   const { isRunning } = useMissionRunner();
+  // O histórico abre as fases: uma fase se conquista cumprindo a anterior.
+  const { history } = useProfile();
 
   return useMemo(() => {
     const items = MISSION_CATALOG.map((mission) => ({
       mission,
-      availability: getMissionAvailability(mission, snapshot, isRunning),
+      availability: getMissionAvailability(mission, snapshot, isRunning, history),
     }));
     items.sort(
       (a, b) => Number(b.availability.status === "available") - Number(a.availability.status === "available"),
     );
     const availableCount = items.filter((item) => item.availability.status === "available").length;
-    return { collectorCode, snapshot, items, availableCount };
-  }, [collectorCode, snapshot, isRunning]);
+    return { collectorCode, snapshot, items, availableCount, phase: currentPhase(history) };
+  }, [collectorCode, snapshot, isRunning, history]);
 }

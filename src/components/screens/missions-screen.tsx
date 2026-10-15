@@ -40,7 +40,7 @@ interface BoardItem {
 }
 
 export function MissionsScreen() {
-  const { collectorCode, snapshot, items, availableCount } = useMissionBoard();
+  const { collectorCode, snapshot, items, availableCount, phase } = useMissionBoard();
   const { start } = useMissionRunner();
   const profile = useProfile();
   const codes = useCollectorCodes();
@@ -94,7 +94,7 @@ export function MissionsScreen() {
       <ScreenHeader
         eyebrow={`EcoCaptador ${collectorCode}`}
         title="Missões"
-        subtitle={`${availableCount + (plan ? 1 : 0)} disponíveis · ${formatLiters(free)} livres para uso`}
+        subtitle={`Fase ${phase} · ${availableCount + (plan ? 1 : 0)} disponíveis · ${formatLiters(free)} livres`}
         isSimulation={snapshot.telemetry.origin === "simulation"}
         isReal={snapshot.telemetry.origin === "device"}
       />

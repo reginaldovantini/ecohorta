@@ -40,6 +40,15 @@ function availabilityText(availability: MissionAvailability) {
       return { text: "Captador indisponível", className: "text-ember-400", dot: "bg-ember-400" };
     case "needs_verification":
       return { text: "Leia o QR do captador", className: "text-aqua-300", dot: "bg-aqua-400" };
+    case "locked_phase":
+      return {
+        text:
+          availability.missing === 1
+            ? `Falta 1 missão da Fase ${availability.previousPhase}`
+            : `Faltam ${availability.missing} missões da Fase ${availability.previousPhase}`,
+        className: "text-mist-400",
+        dot: "bg-mist-500",
+      };
   }
 }
 

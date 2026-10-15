@@ -27,7 +27,7 @@ export function RescueCard({ snapshot, plan }: { snapshot: CollectorSnapshot; pl
   const close = useCallback(() => setOpen(false), []);
   const { start, isRunning } = useMissionRunner();
   const mission = buildRescueMission(plan);
-  const available = getMissionAvailability(mission, snapshot, isRunning).status === "available";
+  const available = getMissionAvailability(mission, snapshot, isRunning, []).status === "available";
   const code = snapshot.info.code;
 
   const abrirLiberacao = () => {
