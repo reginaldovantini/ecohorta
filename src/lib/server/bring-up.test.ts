@@ -101,6 +101,11 @@ describe("instalar um captador do zero e rodar a primeira missão", () => {
     // Nasce protótipo: um tubo que ainda não mede nada não é captador da escola.
     expect(captador.code).toBe("PROTO-001");
     expect(captador.stewardCode).toMatch(/^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    // Nasce com a válvula que o manual manda instalar: sem isso o aplicativo
+    // avisaria o estudante de que a válvula "está em validação" num tubo que
+    // abre e fecha sozinho.
+    const valvula = await db.query<{ valve_kind: string }>("select valve_kind from public.collectors where id = $1", [captador.id]);
+    expect(valvula.rows[0]!.valve_kind).toBe("motorized_ball");
     expect(captador.network.ssid).toBeTruthy();
 
     // Este administrador administra esta escola: é o que a tela usa para decidir.

@@ -26,7 +26,7 @@ Prioridades usadas em todo o documento:
 
 > **Estado real em 16/09/2026.** O código da plataforma está pronto e testado (137 testes; banco e regras de acesso validados em PostgreSQL real via PGlite). Mas:
 > - o projeto Supabase ainda **não foi configurado** e não há deploy público;
-> - o captador físico existe, mas **o sensor e a válvula ainda não foram validados fisicamente**;
+> - o captador físico existe e a válvula está **integrada ao firmware**, mas **nada disso foi validado numa placa ainda**: o sensor e a válvula esperam o ensaio no tubo cheio;
 > - o firmware do ESP32 (etapa 1) mede e envia telemetria, **sem controle de válvula**, e ainda não foi compilado.
 >
 > O ciclo completo missão → comando → liberação → medição → confirmação → XP funciona hoje com o **dispositivo virtual** (SIMULAÇÃO).

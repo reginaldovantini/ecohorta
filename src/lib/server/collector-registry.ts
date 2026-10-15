@@ -201,12 +201,19 @@ export async function registerCollector(tx: Queryable, input: CollectorRegistrat
   const network = generateCollectorNetwork();
   const connectivity = input.connectivity ?? "school_network";
 
+  /*
+   * A válvula do captador é a ESFÉRICA MOTORIZADA, e isso não é mais uma
+   * escolha de cada escola: é o que o manual manda instalar e o que o firmware
+   * aciona pelo relé. Deixar o padrão do banco ('undefined') faria o aplicativo
+   * avisar o estudante de que "a válvula está em validação" num captador cuja
+   * válvula abre e fecha sozinha.
+   */
   const { rows } = await tx.query<{ id: string }>(
     `insert into public.collectors
        (school_id, prefix, seq, code, proto_code, name, location, capacity_liters, reserve_liters, nominal_diameter_mm,
         nominal_useful_height_mm, distance_sensor, qr_token, steward_code_hash, created_by,
-        hotspot_ssid, hotspot_password, connectivity)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+        hotspot_ssid, hotspot_password, connectivity, valve_kind)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'motorized_ball')
      returning id`,
     [
       input.schoolId,

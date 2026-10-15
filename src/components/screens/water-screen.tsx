@@ -121,11 +121,16 @@ export function WaterScreen() {
         <WaterBalance totals={totals} />
       </section>
 
+      {/*
+        Captador cadastrado antes de a válvula ser definida. Os novos já nascem
+        com a esférica motorizada — e dizer "em validação" num tubo que abre e
+        fecha sozinho confundiria quem está na frente dele.
+      */}
       {info.valveKind === "undefined" && (
         <Surface tone="ember" className="p-4 text-sm leading-relaxed text-mist-300">
-          <p className="font-display font-semibold text-mist-50">Válvula em validação física</p>
-          O captador funciona por gravidade. A válvula de saída precisa ser normalmente fechada e de acionamento direto
-          (pressão mínima zero). O modelo definitivo será escolhido após os testes de vazão.
+          <p className="font-display font-semibold text-mist-50">Saída ainda não configurada</p>
+          Este captador foi cadastrado sem informar o tipo de válvula. Enquanto isso não for corrigido na administração,
+          a água sai pelo registro manual e as missões ficam indisponíveis neste tubo.
         </Surface>
       )}
     </div>

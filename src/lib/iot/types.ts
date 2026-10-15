@@ -37,9 +37,13 @@ export type DataOrigin = "device" | "simulation";
 export type ValveState = "closed" | "open" | "unknown";
 
 /**
- * Tipo de atuador de saída. A válvula ainda NÃO foi escolhida:
- * o captador trabalha por gravidade e exige válvula NC de acionamento
- * direto / pressão zero (ver docs/HARDWARE.md).
+ * Tipo de atuador de saída.
+ *
+ * O captador trabalha por GRAVIDADE, com poucos centímetros de coluna: válvula
+ * solenoide barata, que é servo-assistida, precisa de pressão mínima e
+ * simplesmente não abre. A escolhida é a esférica MOTORIZADA de 12 V, que abre
+ * com qualquer pressão — ligada por um relé e já integrada ao firmware
+ * (docs/HARDWARE.md §2.2).
  */
 export type ValveKind = "undefined" | "solenoid_direct_acting" | "motorized_ball" | "pump";
 
