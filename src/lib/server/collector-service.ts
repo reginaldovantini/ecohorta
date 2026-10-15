@@ -17,6 +17,7 @@ import {
 } from "@/lib/collector/water-accounting";
 import { availableLiters } from "@/lib/collector/water";
 import { checkScan, SCAN_REJECTION_MESSAGE } from "./collector-registry";
+import { notifyLevel, type AlertKind } from "./notifications";
 import type {
   CommandReport,
   DeviceCommand,
@@ -640,7 +641,17 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
     },
 
     async ingestTelemetry(device: AuthenticatedDevice, payload: TelemetryPayload): Promise<TelemetryResponse> {
-      return db.transaction(async (tx) => {
+      /*
+       * O aviso de nível sai DEPOIS da transação.
+       *
+       * Mandar notificação é conversar com servidores de terceiros, e isso não
+       * pode segurar uma transação que grava a leitura do sensor — nem fazer a
+       * placa esperar. A transação só decide SE há aviso; quem manda é a linha
+       * depois dela, e uma falha ali não derruba a telemetria.
+       */
+      let aviso: { collectorId: string; collectorCode: string; schoolId: string; kind: AlertKind | null; freeLiters: number; nowMs: number } | null =
+        null;
+      const resposta = await db.transaction(async (tx) => {
         const nowMs = now();
         const row = (await loadById(tx, device.collectorId, true))!;
         // Leituras de um driver diferente do sensor configurado nunca viram volume.
@@ -783,6 +794,26 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
           ]);
         }
 
+        /*
+         * O nível decide o aviso, e é aqui que ele é conhecido.
+         *
+         * Só captador REAL avisa: uma simulação enchendo não é água de verdade
+         * e não justifica tirar ninguém da aula. E só com volume conhecido —
+         * sem calibração o captador mede distância, não litros.
+         */
+        if (!row.is_simulated && volume !== null && !bench) {
+          const proporcao = fillRatio(volume, capacity);
+          const estado = getLevelState(proporcao).urgency;
+          aviso = {
+            collectorId: row.id,
+            collectorCode: row.code,
+            schoolId: row.school_id,
+            kind: estado === "normal" ? null : estado,
+            freeLiters: availableLiters(volume, num(row.reserve_liters)),
+            nowMs,
+          };
+        }
+
         return {
           server_time: nowMs,
           next_poll_ms: current ? ACTIVE_POLL_MS : calibrationMode || bench ? CALIBRATION_POLL_MS : IDLE_POLL_MS,
@@ -806,6 +837,13 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
           },
         };
       });
+
+      if (aviso) {
+        // Uma falha aqui não pode calar a placa: o aviso é um extra sobre a
+        // leitura, e a leitura já está gravada.
+        await notifyLevel(db, aviso).catch(() => undefined);
+      }
+      return resposta;
     },
 
     /** Canal de controle para o dispositivo virtual quando ele está "offline". */

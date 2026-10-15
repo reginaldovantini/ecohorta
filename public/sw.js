@@ -68,3 +68,48 @@ self.addEventListener("fetch", (event) => {
     );
   }
 });
+
+/*
+ * AVISOS DO CAPTADOR.
+ *
+ * Chegam com o aplicativo fechado — é esse o ponto. O tubo enche de madrugada
+ * e no fim de semana, e até existir isto só descobria quem abrisse o app por
+ * acaso.
+ *
+ * `tag` faz o aviso novo SUBSTITUIR o anterior do mesmo captador, em vez de
+ * empilhar: três avisos do mesmo tubo na bandeja viram ruído, e ruído a pessoa
+ * desliga.
+ */
+self.addEventListener("push", (event) => {
+  let dados = {};
+  try {
+    dados = event.data ? event.data.json() : {};
+  } catch {
+    dados = {};
+  }
+  const titulo = dados.title || "EcoHorta";
+  event.waitUntil(
+    self.registration.showNotification(titulo, {
+      body: dados.body || "",
+      tag: dados.tag || "ecohorta",
+      renotify: true,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: { url: dados.url || "/" },
+    }),
+  );
+});
+
+/* Tocar no aviso abre a aba que já existe, em vez de abrir mais uma. */
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const destino = (event.notification.data && event.notification.data.url) || "/";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((abas) => {
+      for (const aba of abas) {
+        if (aba.url.includes(self.location.origin)) return aba.focus().then((focada) => focada.navigate(destino));
+      }
+      return self.clients.openWindow(destino);
+    }),
+  );
+});

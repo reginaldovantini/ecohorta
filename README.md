@@ -173,7 +173,7 @@ Todas estão documentadas em [.env.example](.env.example). **Nunca coloque crede
 | `DATABASE_MIGRATION_URL` | **Somente scripts** (Session pooler) | ❌ |
 | `IOT_SIMULATED_DEVICE_TOKEN`, `ECOHORTA_API_URL` | Dispositivo virtual | ❌ |
 | `SMOKE_*` | Teste de ponta a ponta | ❌ |
-| `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Web Push (futuro) | — |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Avisos do captador por Web Push. Sem elas o app funciona, mas ninguém é avisado quando o tubo enche | — |
 
 ## Estrutura
 

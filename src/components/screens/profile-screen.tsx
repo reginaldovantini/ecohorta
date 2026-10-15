@@ -7,6 +7,7 @@ import { useState } from "react";
 import { AchievementBadge } from "@/components/gamification/achievement-badge";
 import { LevelBadge } from "@/components/gamification/level-badge";
 import { ACHIEVEMENTS, unlockedAchievements } from "@/lib/gamification/achievements";
+import { NotificationToggle } from "@/components/notifications/notification-toggle";
 import { ScreenHeader } from "@/components/student/screen-header";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
@@ -197,6 +198,8 @@ export function ProfileScreen() {
         desfazer. Fica no perfil e não enterrada numa tela de configurações:
         autorização que custa a achar é autorização que não se retira.
       */}
+      <NotificationToggle publicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? null} />
+
       <ImageConsentCard />
 
       <div className="grid gap-2">
