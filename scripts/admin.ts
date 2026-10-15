@@ -3,6 +3,7 @@
  * Lê as credenciais do .env.local.
  *
  *   npm run db:migrate
+ *   npm run admin -- create-wall-bucket   (bucket privado das fotos do mural)
  *   npm run db:seed [--school "Nome"] [--city "Três Lagoas"] [--state MS]   (cria só a escola)
  *   npm run admin -- create-admin --email voce@escola.exemplo --name "Rê" [--platform] [--school "Nome"]
  *   npm run admin -- list-collectors
@@ -29,6 +30,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { DEFAULT_DISTANCE_SENSOR, DISTANCE_SENSOR_MODELS, isDistanceSensorModel } from "@/lib/collector/distance-sensors";
+import { WALL_BUCKET, WALL_MAX_BYTES, WALL_MIME_TYPES } from "@/lib/collector/wall-storage";
+import { createSupabaseAdminClient } from "@/lib/server/supabase-admin";
 import { openScriptDatabase } from "@/lib/server/db/pg";
 import type { Queryable } from "@/lib/server/db/types";
 import { CONNECTIVITY_MODES, registerCollector, type CollectorConnectivity } from "@/lib/server/collector-registry";
@@ -270,9 +273,36 @@ async function registerDevice() {
   });
 }
 
+/**
+ * Cria o bucket privado das fotos do mural.
+ *
+ * Privado de propósito: a imagem chega ao aplicativo por URL assinada, com
+ * prazo, e nunca por um endereço público que qualquer pessoa com o link abre.
+ * São fotos de menores — um bucket público seria um álbum aberto na internet.
+ *
+ * Idempotente: rodar de novo não apaga nada nem recria.
+ */
+async function createWallBucket() {
+  const client = createSupabaseAdminClient();
+  const { data: existentes, error: erroLista } = await client.storage.listBuckets();
+  if (erroLista) throw new Error(`Não foi possível listar os buckets: ${erroLista.message}`);
+  if (existentes?.some((bucket) => bucket.name === WALL_BUCKET)) {
+    console.log(`= bucket ${WALL_BUCKET} já existe`);
+    return;
+  }
+  const { error } = await client.storage.createBucket(WALL_BUCKET, {
+    public: false,
+    fileSizeLimit: WALL_MAX_BYTES,
+    allowedMimeTypes: [...WALL_MIME_TYPES],
+  });
+  if (error) throw new Error(`Não foi possível criar o bucket: ${error.message}`);
+  console.log(`+ bucket ${WALL_BUCKET} criado (privado, até ${Math.round(WALL_MAX_BYTES / 1024 / 1024)} MB por foto)`);
+}
+
 const COMMANDS: Record<string, () => Promise<void>> = {
   migrate,
   seed,
+  "create-wall-bucket": createWallBucket,
   "list-collectors": listCollectors,
   "create-admin": createAdmin,
   "register-collector": registerCollectorCommand,

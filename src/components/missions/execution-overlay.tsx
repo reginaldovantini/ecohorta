@@ -18,6 +18,9 @@ import { getLevelProgress } from "@/lib/gamification/levels";
 import type { DispenseProgress } from "@/lib/iot/types";
 import type { MissionDefinition } from "@/lib/missions/catalog";
 import { CANCELLED_COPY, FAILURE_COPY, isTerminal, xpForExecution } from "@/lib/missions/execution";
+import { EVIDENCE_BONUS_XP } from "@/lib/missions/evidence";
+import { profileStore } from "@/lib/student/profile-store";
+import { MissionEvidence } from "./mission-evidence";
 import { cn } from "@/lib/utils/cn";
 import { formatDecimal, formatDuration, formatLiters } from "@/lib/utils/format";
 import { MissionArt } from "./mission-art";
@@ -56,6 +59,8 @@ const RUNNING_COPY = {
 interface ExecutionOverlayProps {
   mission: MissionDefinition;
   collectorCode: string;
+  /** A execução desta missão: é a ela que a foto do mural se amarra. */
+  executionId: string;
   progress: DispenseProgress | null;
   xpBefore: number;
   achievementsBefore: string[];
@@ -66,6 +71,7 @@ interface ExecutionOverlayProps {
 export function ExecutionOverlay({
   mission,
   collectorCode,
+  executionId,
   progress,
   xpBefore,
   achievementsBefore,
@@ -117,6 +123,7 @@ export function ExecutionOverlay({
             <ResultPanel
               key="result"
               mission={mission}
+              executionId={executionId}
               progress={progress}
               xpBefore={xpBefore}
               achievementsBefore={achievementsBefore}
@@ -264,12 +271,14 @@ function RunningPanel({
 
 function ResultPanel({
   mission,
+  executionId,
   progress,
   xpBefore,
   achievementsBefore,
   onClose,
 }: {
   mission: MissionDefinition;
+  executionId: string;
   progress: DispenseProgress;
   xpBefore: number;
   achievementsBefore: string[];
@@ -347,6 +356,16 @@ function ResultPanel({
           ))}
         </motion.div>
       )}
+
+      {/*
+        A evidência vem ANTES dos botões de sair.
+        
+        É aqui, com o regador ainda na mão e a horta molhada na frente, que a
+        foto existe. Depois dos botões ela seria uma foto que ninguém tira.
+      */}
+      <div className="mt-4">
+        <MissionEvidence executionId={executionId} bonusXp={EVIDENCE_BONUS_XP} onPublished={() => void profileStore.refresh()} />
+      </div>
 
       <div className="mt-auto grid gap-3 py-6">
         <Button size="lg" variant="leaf" onClick={() => leave("/")}>

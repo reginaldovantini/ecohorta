@@ -86,6 +86,7 @@ export function MissionRunnerProvider({ children }: { children: ReactNode }) {
             key={active.executionId}
             mission={active.mission}
             collectorCode={active.collectorCode}
+            executionId={active.executionId}
             progress={progress}
             xpBefore={active.xpBefore}
             achievementsBefore={active.achievementsBefore}

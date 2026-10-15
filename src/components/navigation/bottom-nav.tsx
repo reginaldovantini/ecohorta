@@ -1,15 +1,22 @@
 "use client";
 
 import { motion } from "motion/react";
-import { Droplets, House, Target, Trophy, UserRound } from "lucide-react";
+import { House, Images, Target, Trophy, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils/cn";
 
+/*
+ * Cinco abas, e a Água saiu para o Mural entrar.
+ *
+ * O nível do captador aparece na Início, grande, com o tubo animado — ter uma
+ * aba inteira para repetir isso era espaço gasto. O mural não tinha onde estar,
+ * e é ele que faz a turma do lado querer fazer missão.
+ */
 const TABS = [
   { href: "/", label: "Início", icon: House },
-  { href: "/agua", label: "Água", icon: Droplets },
   { href: "/missoes", label: "Missões", icon: Target },
+  { href: "/mural", label: "Mural", icon: Images },
   { href: "/ranking", label: "Ranking", icon: Trophy },
   { href: "/perfil", label: "Perfil", icon: UserRound },
 ] as const;
