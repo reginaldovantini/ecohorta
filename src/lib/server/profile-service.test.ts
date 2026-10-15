@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { createCollectorService } from "./collector-service";
 import { ACTORS, createTestDatabase, IDS, resetTestDatabase, TEST_DEVICE_TOKEN, TEST_PEPPER, makeCollectorReal, scanForRelease } from "./db/test-db";
 import type { Database } from "./db/types";
-import { addSchoolMember, completeOnboarding, ensureProfile, findActor, getMe, switchSchool, updateIdentity } from "./profile-service";
+import { addSchoolMember, completeOnboarding, ensureProfile, findActor, getMe, setImageConsent, switchSchool, updateIdentity } from "./profile-service";
 
 let db: Database;
 const { student } = ACTORS;
@@ -119,6 +119,7 @@ describe("primeiro acesso (cadastro aberto)", () => {
       role: "student",
       gradePhase: "ano_9",
       avatarId: "broto",
+      acceptedTerms: true,
     });
     expect(result.ok).toBe(true);
 
@@ -133,6 +134,123 @@ describe("primeiro acesso (cadastro aberto)", () => {
     expect(rows[0]).toMatchObject({ first_name: "Jhow", sex: "masculino" });
   });
 
+  /*
+   * O ACEITE VIRA FATO, COM DATA.
+   *
+   * "Ao continuar você concorda" numa tela, sem registro, deixa a plataforma
+   * sem como mostrar QUANDO alguém concordou — e é justamente isso que a lei
+   * pede que exista.
+   */
+  it("concluir o cadastro registra o aceite dos termos", async () => {
+    await ensureProfile(db, NOVO);
+    const actor = (await findActor(db, NOVO))!;
+    await completeOnboarding(db, actor, {
+      name: "Jhow",
+      sex: "masculino",
+      birthDate: "2010-04-15",
+      role: "student",
+      gradePhase: "ano_9",
+      avatarId: "gota",
+      acceptedTerms: true,
+    });
+
+    const { rows } = await db.query<{ purpose: string; method: string; revoked_at: Date | null }>(
+      "select purpose, method, revoked_at from public.guardian_consents where profile_id = $1",
+      [NOVO],
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ purpose: "participacao", method: "termo_digital", revoked_at: null });
+  });
+
+  it("sem aceitar os termos, o cadastro não conclui", async () => {
+    await ensureProfile(db, NOVO);
+    const actor = (await findActor(db, NOVO))!;
+    const result = await completeOnboarding(db, actor, {
+      name: "Jhow",
+      sex: "masculino",
+      birthDate: "2010-04-15",
+      role: "student",
+      gradePhase: "ano_9",
+      avatarId: "gota",
+      acceptedTerms: false,
+    });
+    expect(result).toMatchObject({ ok: false, status: 422 });
+    const { rows } = await db.query("select 1 from public.guardian_consents where profile_id = $1", [NOVO]);
+    expect(rows).toHaveLength(0);
+  });
+
+  it("o uso de imagem é uma autorização à parte: quem recusa usa a plataforma inteira", async () => {
+    await ensureProfile(db, NOVO);
+    const actor = (await findActor(db, NOVO))!;
+    await completeOnboarding(db, actor, {
+      name: "Jhow",
+      sex: "masculino",
+      birthDate: "2010-04-15",
+      role: "student",
+      gradePhase: "ano_9",
+      avatarId: "gota",
+      acceptedTerms: true,
+      imageConsent: false,
+    });
+
+    // Entrou, tem identidade e faz missão; só não aparece no mural.
+    expect((await getMe(db, (await findActor(db, NOVO))!)).identity).not.toBeNull();
+    const imagem = await db.query("select 1 from public.guardian_consents where profile_id = $1 and purpose = 'uso_de_imagem'", [NOVO]);
+    expect(imagem.rows).toHaveLength(0);
+  });
+
+  it("autorizar a imagem no primeiro acesso guarda as duas autorizações", async () => {
+    await ensureProfile(db, NOVO);
+    const actor = (await findActor(db, NOVO))!;
+    await completeOnboarding(db, actor, {
+      name: "Jhow",
+      sex: "masculino",
+      birthDate: "2010-04-15",
+      role: "student",
+      gradePhase: "ano_9",
+      avatarId: "gota",
+      acceptedTerms: true,
+      imageConsent: true,
+    });
+    const { rows } = await db.query<{ purpose: string }>(
+      "select purpose from public.guardian_consents where profile_id = $1 order by purpose",
+      [NOVO],
+    );
+    expect(rows.map((r) => r.purpose)).toEqual(["participacao", "uso_de_imagem"]);
+  });
+
+  it("a autorização de imagem muda de ideia nos dois sentidos, e o histórico fica", async () => {
+    await ensureProfile(db, NOVO);
+    let actor = (await findActor(db, NOVO))!;
+    await completeOnboarding(db, actor, {
+      name: "Jhow",
+      sex: "masculino",
+      birthDate: "2010-04-15",
+      role: "student",
+      gradePhase: "ano_9",
+      avatarId: "gota",
+      acceptedTerms: true,
+      imageConsent: true,
+    });
+    actor = (await findActor(db, NOVO))!;
+
+    expect(await setImageConsent(db, actor, false)).toMatchObject({ ok: true, value: false });
+    const retirada = await db.query<{ revoked_at: Date | null }>(
+      "select revoked_at from public.guardian_consents where profile_id = $1 and purpose = 'uso_de_imagem'",
+      [NOVO],
+    );
+    // A linha fica: o registro de que houve autorização não se apaga.
+    expect(retirada.rows).toHaveLength(1);
+    expect(retirada.rows[0]!.revoked_at).not.toBeNull();
+
+    expect(await setImageConsent(db, actor, true)).toMatchObject({ ok: true, value: true });
+    const devolta = await db.query<{ revoked_at: Date | null }>(
+      "select revoked_at from public.guardian_consents where profile_id = $1 and purpose = 'uso_de_imagem'",
+      [NOVO],
+    );
+    expect(devolta.rows[0]!.revoked_at).toBeNull();
+  });
+
   it("professor e funcionário não recebem ano/fase", async () => {
     await ensureProfile(db, NOVO);
     const actor = (await findActor(db, NOVO))!;
@@ -143,6 +261,7 @@ describe("primeiro acesso (cadastro aberto)", () => {
       role: "teacher",
       gradePhase: "ano_1",
       avatarId: "cientista",
+      acceptedTerms: true,
     });
     const { rows } = await db.query<{ role: string; grade_phase: string | null }>("select role, grade_phase from profiles where id = $1", [NOVO]);
     expect(rows[0]).toEqual({ role: "teacher", grade_phase: null });
@@ -157,6 +276,7 @@ describe("primeiro acesso (cadastro aberto)", () => {
       birthDate: "2000-01-01",
       role: "admin",
       avatarId: "estrela",
+      acceptedTerms: true,
     });
     expect(result.ok).toBe(false);
     const { rows } = await db.query<{ role: string }>("select role from profiles where id = $1", [NOVO]);
@@ -172,6 +292,7 @@ describe("primeiro acesso (cadastro aberto)", () => {
       birthDate: "2010-01-01",
       role: "student",
       avatarId: "gota",
+      acceptedTerms: true,
     });
     expect(result.ok).toBe(false);
     expect(result.ok === false && result.message).toMatch(/ano\/fase/i);

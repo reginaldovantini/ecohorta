@@ -1,8 +1,9 @@
 "use client";
 
-import { ChevronRight, CircleAlert, Droplets, History, LogOut, Ruler, ShieldCheck, Sparkles, Target } from "lucide-react";
+import { Camera, ChevronRight, CircleAlert, Droplets, History, LogOut, Ruler, ShieldCheck, Sparkles, Target } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { AchievementBadge } from "@/components/gamification/achievement-badge";
 import { LevelBadge } from "@/components/gamification/level-badge";
 import { ACHIEVEMENTS, unlockedAchievements } from "@/lib/gamification/achievements";
@@ -191,6 +192,13 @@ export function ProfileScreen() {
         </Link>
       )}
 
+      {/*
+        A autorização que a pessoa deu no primeiro acesso, onde ela pode
+        desfazer. Fica no perfil e não enterrada numa tela de configurações:
+        autorização que custa a achar é autorização que não se retira.
+      */}
+      <ImageConsentCard />
+
       <div className="grid gap-2">
         <Button
           variant="ghost"
@@ -201,5 +209,59 @@ export function ProfileScreen() {
         </Button>
       </div>
     </div>
+  );
+}
+
+/** Autorizar ou retirar o uso da imagem no mural, a qualquer momento. */
+function ImageConsentCard() {
+  const { imageConsent } = useProfile();
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const alternar = async () => {
+    setSalvando(true);
+    setErro(null);
+    const result = await profileStore.setImageConsent(!imageConsent);
+    setSalvando(false);
+    if (!result.ok) setErro(result.message);
+  };
+
+  return (
+    <Surface className="space-y-3 p-4">
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl bg-aqua-400/12 text-aqua-300">
+          <Camera className="size-4" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-display font-semibold text-mist-50">Minha imagem no mural</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-mist-400">
+            {imageConsent
+              ? "Autorizado: a foto que você enviar depois de uma missão pode aparecer no mural, visível para as outras escolas."
+              : "Não autorizado: você cumpre missões, ganha XP e aparece no ranking igual — só não aparece no mural."}
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={imageConsent}
+          aria-label="Autorizar o uso da minha imagem no mural"
+          disabled={salvando}
+          onClick={() => void alternar()}
+          className={cn(
+            "mt-0.5 h-7 w-12 shrink-0 rounded-full p-0.5 transition-colors",
+            imageConsent ? "bg-leaf-400" : "bg-white/15",
+            salvando && "opacity-60",
+          )}
+        >
+          <span
+            className={cn(
+              "block size-6 rounded-full bg-white transition-transform",
+              imageConsent ? "translate-x-5" : "translate-x-0",
+            )}
+          />
+        </button>
+      </div>
+      {erro && <p className="text-xs text-alert-300">{erro}</p>}
+    </Surface>
   );
 }

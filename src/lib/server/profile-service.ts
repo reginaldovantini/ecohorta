@@ -10,6 +10,7 @@ import {
 import { isAdministrator, isEducator, type Actor } from "./actor";
 import { millis, num, type Database, type Queryable } from "./db/types";
 import { fail, type ServiceResult } from "./errors";
+import { recordGuardianConsent, revokeGuardianConsent } from "./provisioning";
 
 /*
  * Perfil do usuário autenticado. XP e histórico vêm SEMPRE do banco
@@ -36,6 +37,11 @@ export interface MeResponse {
   canAdminister: boolean;
   /** Administração da plataforma: autoriza e-mails e cria escolas. */
   platformAdmin: boolean;
+  /**
+   * Autoriza a imagem no mural das missões? Dado no primeiro acesso, e mudável
+   * no perfil a qualquer momento — nos dois sentidos.
+   */
+  imageConsent: boolean;
   /** Escolas a que a pessoa pertence. A atual é a que o jogo mostra. */
   schools: MySchool[];
   xp: number;
@@ -274,6 +280,13 @@ export async function getMe(db: Queryable, actor: Actor): Promise<MeResponse> {
     [actor.profileId],
   );
 
+  // Autorização de imagem vigente: concedida e não retirada. Fica no perfil
+  // porque é lá que a pessoa muda de ideia, nos dois sentidos.
+  const imagem = await db.query(
+    "select 1 from public.guardian_consents where profile_id = $1 and purpose = 'uso_de_imagem' and revoked_at is null",
+    [actor.profileId],
+  );
+
   return {
     profileId: row.id,
     role: row.role,
@@ -283,6 +296,7 @@ export async function getMe(db: Queryable, actor: Actor): Promise<MeResponse> {
     stewardOf: [...actor.stewardOf],
     canAdminister: isEducator(actor),
     platformAdmin: actor.platformAdmin,
+    imageConsent: imagem.rows.length > 0,
     schools: await listMySchools(db, actor.profileId, row.school_id),
     xp: num(xp.rows[0]?.xp ?? 0),
     history: history.rows.map((item) => ({
@@ -313,7 +327,7 @@ export async function getMe(db: Queryable, actor: Actor): Promise<MeResponse> {
 export async function completeOnboarding(db: Database, actor: Actor, input: unknown): Promise<ServiceResult<void>> {
   const parsed = onboardingSchema.safeParse(input);
   if (!parsed.success) return fail(422, parsed.error.issues[0]?.message ?? "Dados do cadastro inválidos.");
-  const { name, sex, birthDate, role, gradePhase, avatarId } = parsed.data;
+  const { name, sex, birthDate, role, gradePhase, avatarId, imageConsent } = parsed.data;
 
   await db.transaction(async (tx) => {
     await tx.query(
@@ -327,8 +341,58 @@ export async function completeOnboarding(db: Database, actor: Actor, input: unkn
        on conflict (profile_id) do update set first_name = excluded.first_name, sex = excluded.sex, birth_date = excluded.birth_date`,
       [actor.profileId, name, sex, birthDate],
     );
+
+    /*
+     * O ACEITE, GUARDADO COMO FATO.
+     *
+     * Dizer "ao continuar você concorda" numa tela e não registrar nada deixa a
+     * plataforma sem como mostrar QUANDO alguém concordou — e é exatamente isso
+     * que a LGPD pede que exista. Fica na mesma transação do cadastro: ou a
+     * pessoa entra com o aceite registrado, ou não entra.
+     *
+     * São duas autorizações distintas de propósito. Participar é condição para
+     * usar a plataforma. Ter a imagem no mural não é: quem recusa cumpre missão,
+     * ganha XP e aparece no ranking igual — só não aparece no mural. E pode
+     * mudar de ideia depois, nos dois sentidos, no próprio perfil.
+     */
+    await recordGuardianConsent(tx, {
+      profileId: actor.profileId,
+      purpose: "participacao",
+      recordedBy: actor.profileId,
+      method: "termo_digital",
+    });
+    if (imageConsent) {
+      await recordGuardianConsent(tx, {
+        profileId: actor.profileId,
+        purpose: "uso_de_imagem",
+        recordedBy: actor.profileId,
+        method: "termo_digital",
+      });
+    }
   });
   return { ok: true, value: undefined };
+}
+
+/**
+ * Autoriza ou retira o uso de imagem, depois do primeiro acesso.
+ *
+ * Retirar não apaga o histórico: a linha fica com a data da retirada, porque o
+ * registro de que houve autorização em algum momento é o que protege as duas
+ * partes. O que some é a permissão de publicar daqui para a frente.
+ */
+export async function setImageConsent(db: Queryable, actor: Actor, allowed: unknown): Promise<ServiceResult<boolean>> {
+  if (typeof allowed !== "boolean") return fail(422, "Informe se autoriza o uso de imagem.");
+  if (allowed) {
+    await recordGuardianConsent(db, {
+      profileId: actor.profileId,
+      purpose: "uso_de_imagem",
+      recordedBy: actor.profileId,
+      method: "termo_digital",
+    });
+  } else {
+    await revokeGuardianConsent(db, actor.profileId, "uso_de_imagem");
+  }
+  return { ok: true, value: allowed };
 }
 
 /** Depois do primeiro acesso, o usuário ainda troca apelido e avatar quando quiser. */

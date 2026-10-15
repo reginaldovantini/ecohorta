@@ -25,6 +25,8 @@ export interface ProfileState {
    */
   canAdminister: boolean;
   platformAdmin: boolean;
+  /** Autoriza a imagem no mural das missões. Mudável no perfil. */
+  imageConsent: boolean;
   xp: number;
   history: readonly ExecutionRecord[];
 }
@@ -36,6 +38,7 @@ interface MeBody {
   identity: DisplayIdentity | null;
   canAdminister?: boolean;
   platformAdmin?: boolean;
+  imageConsent?: boolean;
   xp: number;
   history: ExecutionRecord[];
 }
@@ -50,6 +53,7 @@ const INITIAL: ProfileState = {
   identity: null,
   canAdminister: false,
   platformAdmin: false,
+  imageConsent: false,
   xp: 0,
   history: [],
 };
@@ -72,6 +76,7 @@ const fromBody = (body: MeBody): ProfileState => ({
   identity: body.identity,
   canAdminister: body.canAdminister === true,
   platformAdmin: body.platformAdmin === true,
+  imageConsent: body.imageConsent === true,
   xp: body.xp,
   history: body.history,
 });
@@ -181,6 +186,28 @@ export const profileStore = {
       if (response.status === 401) commit(SIGNED_OUT);
       if (!response.ok) return { ok: false, message: await errorMessage(response, "Não foi possível salvar.") };
       commit(fromBody((await response.json()) as MeBody));
+      return { ok: true };
+    } catch {
+      return { ok: false, message: "Sem conexão. Tente novamente." };
+    }
+  },
+
+  /**
+   * Autoriza ou retira o uso da imagem no mural.
+   *
+   * Recarrega o perfil depois: o estado da autorização é do servidor, e uma
+   * cópia otimista na tela diria "autorizado" numa requisição que falhou.
+   */
+  async setImageConsent(allowed: boolean): Promise<ActionResult> {
+    try {
+      const response = await fetch("/api/me/image-consent", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ allowed }),
+      });
+      if (response.status === 401) commit(SIGNED_OUT);
+      if (!response.ok) return { ok: false, message: await errorMessage(response, "Não foi possível salvar a autorização.") };
+      await profileStore.refresh();
       return { ok: true };
     } catch {
       return { ok: false, message: "Sem conexão. Tente novamente." };

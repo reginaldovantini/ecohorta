@@ -138,6 +138,21 @@ export const onboardingSchema = z
     /** Só para estudante; ignorado nas demais funções. */
     gradePhase: z.enum(GRADE_PHASES).nullable().optional(),
     avatarId: avatarIdSchema,
+    /**
+     * Aceite dos Termos de Uso e da Política de Privacidade.
+     *
+     * Obrigatório e sem valor padrão: um `true` implícito não é aceite, é
+     * suposição. Sem ele o cadastro não conclui.
+     */
+    acceptedTerms: z.literal(true, { message: "É preciso aceitar os termos para usar a plataforma." }),
+    /**
+     * Autorização de uso de imagem no mural — SEPARADA do aceite, e opcional.
+     *
+     * São fotos de menores vistas por outras escolas: quem não autoriza usa a
+     * plataforma inteira e cumpre missões normalmente, só não aparece no mural.
+     * Juntar as duas numa caixa só tornaria a recusa impossível na prática.
+     */
+    imageConsent: z.boolean().default(false),
   })
   .refine((value) => value.role !== "student" || value.gradePhase != null, {
     message: "Escolha o ano/fase.",

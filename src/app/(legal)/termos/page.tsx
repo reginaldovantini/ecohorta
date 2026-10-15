@@ -70,11 +70,16 @@ export default function TermosPage() {
       <h2>Pontos, ranking e mural</h2>
       <ul>
         <li>
-          <strong>Pontos só vêm de missão executada</strong>, pelo volume medido. Curtida no mural é incentivo, não vale
-          ponto.
+          <strong>A pontuação base vem da missão executada</strong>, pelo volume que o sensor mediu. Nada de pedir uma
+          quantidade e pontuar por ela: pontua o que saiu de verdade.
         </li>
         <li>
-          Publicar foto é opcional e nunca é condição para concluir missão ou ganhar ponto.
+          Registrar a evidência da missão com uma foto dá um <strong>bônus de pontos</strong>. É opcional: quem não
+          publica recebe a pontuação base igual e continua no ranking.
+        </li>
+        <li>
+          <strong>Curtida não vale ponto.</strong> Se valesse, dois estudantes curtindo um ao outro subiriam no ranking
+          sem economizar uma gota — e o ranking deixaria de medir água.
         </li>
         <li>
           No mural, publique o que tem a ver com a missão. Conteúdo ofensivo, foto de outra pessoa sem a autorização

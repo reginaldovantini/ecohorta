@@ -1,7 +1,8 @@
 "use client";
 
 import { AnimatePresence, motion, MotionConfig } from "motion/react";
-import { ArrowLeft, Cake, Check, GraduationCap, Smile, Sparkles, UserRound } from "lucide-react";
+import { ArrowLeft, Cake, Check, GraduationCap, ShieldCheck, Smile, Sparkles, UserRound } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
@@ -43,7 +44,7 @@ import { cn } from "@/lib/utils/cn";
 const inputClass =
   "h-14 w-full rounded-control bg-white/[0.05] px-4 text-lg text-mist-50 outline-none ring-1 ring-inset ring-white/10 transition-shadow placeholder:text-mist-500 focus:ring-2 focus:ring-aqua-400";
 
-type Step = "nome" | "sexo" | "nascimento" | "funcao" | "ano" | "avatar";
+type Step = "nome" | "sexo" | "nascimento" | "funcao" | "ano" | "avatar" | "termos";
 
 /** Idades plausíveis na escola. Fora disso é quase sempre erro de digitação. */
 const MIN_AGE = 5;
@@ -68,6 +69,8 @@ export function OnboardingFlow() {
   const [role, setRole] = useState<SelfDeclaredRole | null>(null);
   const [gradePhase, setGradePhase] = useState<GradePhase | null>(null);
   const [avatarId, setAvatarId] = useState<AvatarId>(DEFAULT_AVATAR_ID);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [imageConsent, setImageConsent] = useState(false);
 
   const [stepIndex, setStepIndex] = useState(0);
   const [direction, setDirection] = useState(1);
@@ -84,7 +87,7 @@ export function OnboardingFlow() {
 
   // A etapa do ano/série só existe para estudante: o caminho muda com a resposta.
   const steps = useMemo<Step[]>(
-    () => ["nome", "sexo", "nascimento", "funcao", ...(role === "student" ? (["ano"] as const) : []), "avatar"],
+    () => ["nome", "sexo", "nascimento", "funcao", ...(role === "student" ? (["ano"] as const) : []), "avatar", "termos"],
     [role],
   );
   const step = steps[Math.min(stepIndex, steps.length - 1)]!;
@@ -108,6 +111,7 @@ export function OnboardingFlow() {
   const finish = async () => {
     if (!nameResult.success || !sex || !birthOk || !role) return;
     if (role === "student" && !gradePhase) return;
+    if (!acceptedTerms) return;
     setSaving(true);
     setError(null);
     const result = await profileStore.completeOnboarding({
@@ -117,6 +121,8 @@ export function OnboardingFlow() {
       role,
       gradePhase: role === "student" ? gradePhase : null,
       avatarId,
+      acceptedTerms: true,
+      imageConsent,
     });
     setSaving(false);
     // Deu certo: o perfil ganha identidade e o efeito lá em cima leva para a Home.
@@ -258,15 +264,77 @@ export function OnboardingFlow() {
                     ))}
                   </div>
 
+                  <Button variant="leaf" size="lg" className="mt-6 w-full" onClick={() => go(1)} icon={<Check className="size-5" aria-hidden />}>
+                    Continuar
+                  </Button>
+                </Question>
+              )}
+
+              {/*
+                O ACEITE, NO FIM E COM UM TOQUE DELIBERADO.
+                
+                Não é um "ao continuar você concorda" escondido num rodapé:
+                concordar é uma ação, e fica registrada com data. E são DUAS
+                autorizações separadas porque elas têm pesos diferentes —
+                participar é condição para usar; ter a foto vista por outras
+                escolas não é, e quem recusa continua cumprindo missões,
+                ganhando XP e aparecendo no ranking.
+              */}
+              {step === "termos" && (
+                <Question
+                  icon={<ShieldCheck className="size-6" aria-hidden />}
+                  title="Antes de começar"
+                  hint="Duas autorizações. A segunda é opcional e dá para mudar depois, no seu perfil."
+                >
+                  <div className="space-y-3">
+                    <Consent
+                      checked={acceptedTerms}
+                      onChange={setAcceptedTerms}
+                      title="Li e concordo com os Termos de Uso e a Política de Privacidade"
+                      description="A plataforma guarda apelido, avatar, as missões que você cumpre e os litros que o sensor mediu. Nome e data de nascimento ficam fora do que aparece para os outros."
+                      required
+                    />
+                    <Consent
+                      checked={imageConsent}
+                      onChange={setImageConsent}
+                      title="Autorizo o uso da minha imagem no mural das missões"
+                      description="A foto que você escolher enviar depois de uma missão pode aparecer no mural, visível para as outras escolas da rede. Sem esta autorização você faz tudo igual — só não aparece no mural."
+                    />
+                  </div>
+
+                  <p className="mt-3 text-center text-xs leading-relaxed text-mist-500">
+                    Leia os{" "}
+                    <Link href="/termos" className="font-semibold text-mist-300 underline underline-offset-2">
+                      Termos de Uso
+                    </Link>{" "}
+                    e a{" "}
+                    <Link href="/privacidade" className="font-semibold text-mist-300 underline underline-offset-2">
+                      Política de Privacidade
+                    </Link>
+                    .
+                  </p>
+
                   {error && (
                     <p role="alert" className="mt-4 text-sm text-alert-400">
                       {error}
                     </p>
                   )}
 
-                  <Button variant="leaf" size="lg" className="mt-6 w-full" disabled={saving} onClick={finish} icon={<Check className="size-5" aria-hidden />}>
-                    {saving ? "Salvando…" : "Começar"}
+                  <Button
+                    variant="leaf"
+                    size="lg"
+                    className="mt-5 w-full"
+                    disabled={saving || !acceptedTerms}
+                    onClick={finish}
+                    icon={<Check className="size-5" aria-hidden />}
+                  >
+                    {saving ? "Salvando…" : "Concordo e quero começar"}
                   </Button>
+                  {!acceptedTerms && (
+                    <p className="mt-2 text-center text-xs text-mist-500">
+                      O aceite dos termos é necessário para usar a plataforma.
+                    </p>
+                  )}
                   <p className="mt-3 text-center text-xs leading-relaxed text-mist-500">
                     Para fazer missões, leia o QR Code de um captador da sua escola.
                   </p>
@@ -277,6 +345,56 @@ export function OnboardingFlow() {
         </div>
       </main>
     </MotionConfig>
+  );
+}
+
+/**
+ * Uma autorização, com a frase inteira à vista.
+ *
+ * Caixa grande e a descrição sempre visível: consentimento escondido atrás de
+ * "leia mais" é consentimento que ninguém leu. A obrigatória diz que é
+ * obrigatória, em vez de deixar a pessoa descobrir no botão desabilitado.
+ */
+function Consent({
+  checked,
+  onChange,
+  title,
+  description,
+  required = false,
+}: {
+  checked: boolean;
+  onChange: (value: boolean) => void;
+  title: string;
+  description: string;
+  required?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "flex w-full items-start gap-3 rounded-2xl p-4 text-left ring-1 ring-inset transition-colors",
+        checked ? "bg-leaf-400/12 ring-leaf-400/40" : "bg-white/[0.04] ring-white/10",
+      )}
+    >
+      <span
+        className={cn(
+          "mt-0.5 grid size-6 shrink-0 place-items-center rounded-md ring-1 ring-inset",
+          checked ? "bg-leaf-400 text-abyss-950 ring-leaf-400" : "bg-transparent ring-white/25",
+        )}
+      >
+        {checked && <Check className="size-4" aria-hidden />}
+      </span>
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold leading-snug text-mist-50">
+          {title}
+          {required && <span className="ml-1.5 text-xs font-normal text-sun-300">obrigatório</span>}
+        </span>
+        <span className="mt-1 block text-xs leading-relaxed text-mist-400">{description}</span>
+      </span>
+    </button>
   );
 }
 

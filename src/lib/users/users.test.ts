@@ -65,7 +65,9 @@ describe("identidade de exibição", () => {
 });
 
 describe("primeiro acesso", () => {
-  const base = { name: "Jhow", sex: "masculino", birthDate: "2010-04-15", avatarId: "broto" } as const;
+  // O aceite dos termos entra na base: sem ele nenhum cadastro passa, e os
+  // testes das outras regras ficariam todos falhando pelo mesmo motivo.
+  const base = { name: "Jhow", sex: "masculino", birthDate: "2010-04-15", avatarId: "broto", acceptedTerms: true } as const;
 
   it("aceita o cadastro mínimo de estudante", () => {
     expect(onboardingSchema.safeParse({ ...base, role: "student", gradePhase: "ano_9" }).success).toBe(true);
@@ -85,6 +87,25 @@ describe("primeiro acesso", () => {
   it("administração NÃO é autoatribuível no primeiro acesso", () => {
     expect(onboardingSchema.safeParse({ ...base, role: "admin" }).success).toBe(false);
     expect(SELF_DECLARED_ROLES).not.toContain("admin");
+  });
+
+  /*
+   * O aceite é a condição de entrada, e a autorização de imagem não é.
+   *
+   * Juntar as duas faria o estudante cujo responsável não quer a foto no mural
+   * ficar sem plataforma — por um motivo que não tem nada a ver com água.
+   */
+  it("sem aceitar os termos, o cadastro não passa", () => {
+    expect(onboardingSchema.safeParse({ ...base, role: "teacher", acceptedTerms: false }).success).toBe(false);
+    const semAceite = { ...base, acceptedTerms: undefined };
+    expect(onboardingSchema.safeParse({ ...semAceite, role: "teacher" }).success).toBe(false);
+  });
+
+  it("a autorização de imagem é opcional, e o padrão é NÃO autorizar", () => {
+    const parsed = onboardingSchema.safeParse({ ...base, role: "teacher" });
+    expect(parsed.success).toBe(true);
+    expect(parsed.data?.imageConsent).toBe(false);
+    expect(onboardingSchema.safeParse({ ...base, role: "teacher", imageConsent: true }).data?.imageConsent).toBe(true);
   });
 
   it("exige sexo e data de nascimento em formato ISO", () => {

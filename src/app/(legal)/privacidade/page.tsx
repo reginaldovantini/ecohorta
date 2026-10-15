@@ -108,13 +108,21 @@ export default function PrivacidadePage() {
       <h2>Fotos no mural</h2>
       <p>
         Publicar foto é <strong>opcional</strong>. Uma missão se conclui pelo volume medido pelo sensor, nunca por uma
-        foto, e ninguém perde pontos por não publicar.
+        foto, e ninguém perde a pontuação base por não publicar — publicar dá um bônus, não a pontuação.
       </p>
       <p>
-        Para estudantes menores de idade, a foto só é publicada se houver <strong>autorização do responsável para uso de
-        imagem</strong>, registrada pela escola. Essa autorização é separada da autorização de participar do projeto: dá
-        para participar de tudo sem nunca aparecer em foto, e a autorização de imagem pode ser retirada depois sem que
-        isso afete a participação.
+        A <strong>autorização de uso de imagem</strong> é dada no primeiro acesso, junto com o aceite destes termos, numa
+        caixa separada que pode ficar desmarcada. Ela é diferente da autorização de participar: dá para usar a
+        plataforma inteira, cumprir missões e aparecer no ranking sem nunca aparecer em foto.
+      </p>
+      <p>
+        A autorização pode ser <strong>retirada a qualquer momento</strong>, no seu perfil, em “Minha imagem no mural”.
+        Retirada, as publicações deixam de aparecer e nenhuma nova é aceita. O registro de que houve autorização fica
+        guardado com a data, porque é ele que mostra quando e como ela foi dada.
+      </p>
+      <p>
+        Para estudantes menores de idade, a escola é responsável por conferir com a família que essa autorização pode
+        ser dada. A plataforma registra quem autorizou e quando; a conversa com a família acontece na escola.
       </p>
       <p>Qualquer publicação pode ser denunciada dentro do aplicativo e removida pela equipe da escola.</p>
 
