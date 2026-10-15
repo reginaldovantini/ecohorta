@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { describeSilence, ESTIMATE_HORIZON_MS, hotspotRescue, offlineEstimate, type OfflineInput } from "./offline-estimate";
 
 const HORA = 3_600_000;
-const AGORA = 1_760_000_000_000;
+/*
+ * Quarta-feira, 14h em Campo Grande — escola aberta.
+ *
+ * A hora importa desde que a estimativa passou a contar só as horas de aula: o
+ * captador enche quando o ar-condicionado está ligado. Um cenário às 3h da
+ * manhã estimaria zero, e com razão.
+ */
+const AGORA = 1_792_000_800_000;
 
 const base: OfflineInput = {
   lastSeenAt: AGORA - 3 * HORA,
@@ -31,6 +38,45 @@ describe("captador calado", () => {
     // 4 L medidos + 3 h × 1,2 L/h
     expect(silencio.estimatedLiters).toBe(7.6);
     expect(silencio.confidence).toBe("estimativa");
+  });
+
+  /*
+   * O erro que esta regra corrige: a placa cala na sexta e alguém olha no
+   * domingo. Sem contar só as horas de aula, a tela "estimava" dois dias de
+   * entrada num tubo onde não caiu uma gota — e mandava alguém à escola
+   * fechada resgatar água que não existe.
+   */
+  it("não inventa água de fim de semana: o ar-condicionado estava desligado", () => {
+    const sextaDezessete = new Date("2026-10-16T21:00:00Z").getTime(); // sexta, 17h locais
+    const domingoDez = new Date("2026-10-18T14:00:00Z").getTime(); // domingo, 10h locais
+    const silencio = estimar({ lastSeenAt: sextaDezessete, nowMs: domingoDez })!;
+
+    // Pelo horário padrão (7h às 17h30), só meia hora de sexta conta:
+    // 4 L + 0,5 h × 1,2 L/h.
+    expect(silencio.estimatedLiters).toBeCloseTo(4.6, 1);
+    expect(silencio.offlineFor).toMatch(/dia/);
+  });
+
+  it("a noite entre dois dias de aula também não conta", () => {
+    const quartaDezessete = new Date("2026-10-14T21:00:00Z").getTime(); // quarta, 17h locais
+    const quintaNove = new Date("2026-10-15T13:00:00Z").getTime(); // quinta, 9h locais
+
+    // Dezesseis horas de silêncio, duas e meia de aparelho ligado: meia hora de
+    // quarta (até 17h30) e duas de quinta (7h às 9h). 4 L + 2,5 h × 1,2 L/h.
+    const silencio = estimar({ lastSeenAt: quartaDezessete, nowMs: quintaNove })!;
+    expect(silencio.estimatedLiters).toBeCloseTo(7, 1);
+  });
+
+  it("silêncio longo demais continua sendo \"não sei\", por mais contas que caibam", () => {
+    // Sexta 17h até segunda 10h: 65 horas caladas. Independentemente de quantas
+    // delas tinham aula, três dias sem notícia é captador com problema — e a
+    // resposta honesta é mandar alguém olhar, não exibir um número.
+    const sexta = new Date("2026-10-16T21:00:00Z").getTime();
+    const segunda = new Date("2026-10-19T14:00:00Z").getTime();
+    const silencio = estimar({ lastSeenAt: sexta, nowMs: segunda })!;
+    expect(silencio.estimatedLiters).toBeNull();
+    expect(silencio.confidence).toBe("sem_estimativa");
+    expect(silencio.callToAction).toBe(true);
   });
 
   it("mantém na tela o último número REAL, com o estimado ao lado", () => {

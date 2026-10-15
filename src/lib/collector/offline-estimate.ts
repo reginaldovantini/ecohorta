@@ -1,10 +1,10 @@
 /*
  * QUANDO O CAPTADOR CALA.
  *
- * A internet da escola cai no fim de semana, o roteador fica num armário que
- * alguém desliga, a rede do pátio não alcança o tubo. O captador segue captando
- * água — só não consegue contar. E é exatamente aí que a água transborda, porque
- * ninguém foi avisado.
+ * A internet da escola cai, o roteador fica num armário que alguém desliga, a
+ * rede do pátio não alcança o tubo. O captador segue captando água enquanto
+ * houver aula — só não consegue contar. E é exatamente aí que a água
+ * transborda, porque ninguém foi avisado.
  *
  * Então, offline, a plataforma faz duas coisas e nenhuma terceira:
  *
@@ -25,6 +25,7 @@
  */
 
 import { fillRatio, getLevelState } from "./level-state";
+import { schoolHoursBetween, type SchoolSchedule } from "./school-hours";
 
 /** Depois disso sem telemetria, o captador está offline (mesmo limite do servidor). */
 export const OFFLINE_AFTER_MS = 15_000;
@@ -32,9 +33,11 @@ export const OFFLINE_AFTER_MS = 15_000;
 /**
  * Tempo máximo de silêncio em que ainda faz sentido estimar.
  *
- * Dois dias de média aprendida já é esticar: um fim de semana de chuva, um
- * feriado com o ar-condicionado desligado, e a conta deixa de valer. Passado
- * isso a plataforma prefere dizer "não sei" a mostrar um número bonito e errado.
+ * As horas de escola fechada já saem da conta (`schoolHoursBetween`), mas dois
+ * dias de média aprendida continua sendo esticar: uma semana fria com o
+ * ar-condicionado pouco ligado, um feriado no meio, e a média deixa de valer.
+ * Passado isso a plataforma prefere dizer "não sei" a mostrar um número bonito
+ * e errado.
  */
 export const ESTIMATE_HORIZON_MS = 48 * 3_600_000;
 
@@ -48,6 +51,13 @@ export interface OfflineInput {
   capacityLiters: number;
   /** Média de entrada aprendida medindo, em litros por hora. */
   learnedInflowLitersPerHour: number;
+  /**
+   * Quando o ar-condicionado daquele bloco funciona.
+   *
+   * Sem ele a conta inventaria água de fim de semana. Opcional porque captador
+   * cadastrado antes desta regra não informou horário nenhum — aí vale o padrão.
+   */
+  acSchedule?: SchoolSchedule;
   nowMs: number;
 }
 
@@ -115,7 +125,16 @@ export function offlineEstimate(input: OfflineInput): OfflineEstimate | null {
     };
   }
 
-  const estimated = Math.min(input.capacityLiters, base! + (rate * offlineForMs) / MS_PER_HOUR);
+  /*
+   * Só as horas de ESCOLA ABERTA entram na conta.
+   *
+   * O tubo enche quando o ar-condicionado está ligado, e ele só está ligado
+   * quando há aula. Multiplicar a vazão pelo silêncio inteiro inventaria água
+   * de fim de semana: a placa que cala na sexta às 17h voltaria no domingo
+   * "estimando" 48 horas de entrada num tubo onde não caiu uma gota.
+   */
+  const captando = schoolHoursBetween(input.lastSeenAt, input.nowMs, input.acSchedule);
+  const estimated = Math.min(input.capacityLiters, base! + (rate * captando) / MS_PER_HOUR);
   const { urgency } = getLevelState(fillRatio(estimated, input.capacityLiters));
   const cheio = urgency !== "normal";
   return {

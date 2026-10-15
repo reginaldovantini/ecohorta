@@ -3,6 +3,7 @@ import type { CollectorSnapshot, DispenseProgress } from "@/lib/iot/types";
 import { getMissionAvailability } from "./availability";
 import { MISSION_CATALOG, type MissionDefinition } from "./catalog";
 import { isTerminal, xpForExecution } from "./execution";
+import { DEFAULT_SCHOOL_SCHEDULE } from "@/lib/collector/school-hours";
 
 const mission: MissionDefinition = { ...MISSION_CATALOG[0]!, liters: 3, xp: 50 };
 
@@ -21,6 +22,7 @@ function snapshot(volumeLiters: number, status: CollectorSnapshot["telemetry"]["
       overflowing: false,
       measuredAt: 0,
       learnedInflowLitersPerHour: 1.2,
+      acSchedule: DEFAULT_SCHOOL_SCHEDULE,
     },
     totals: { capturedLiters: 0, reusedLiters: 0, discardedEstimatedLiters: 0 },
     simulation: null,

@@ -43,6 +43,7 @@ export function CollectorOfflineCard({ snapshot, network }: OfflineCardProps) {
     lastVolumeLiters: snapshot.telemetry.measuredAt === null ? null : snapshot.telemetry.volumeLiters,
     capacityLiters: snapshot.info.capacityLiters,
     learnedInflowLitersPerHour: snapshot.telemetry.learnedInflowLitersPerHour,
+    acSchedule: snapshot.telemetry.acSchedule,
     nowMs: now,
   });
   if (!silence) return null;

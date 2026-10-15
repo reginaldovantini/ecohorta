@@ -1,4 +1,5 @@
 import type { DistanceSensorModel, SensorCompatibility, SensorState } from "@/lib/collector/distance-sensors";
+import type { SchoolSchedule } from "@/lib/collector/school-hours";
 
 /**
  * Contrato de dados entre captador físico (ESP32), backend e interface.
@@ -146,6 +147,16 @@ export interface CollectorTelemetry {
    * haver no tubo de um captador calado (src/lib/collector/offline-estimate.ts).
    */
   learnedInflowLitersPerHour: number;
+  /**
+   * Quando o ar-condicionado daquele bloco funciona.
+   *
+   * Viaja até a tela porque é ela que faz a estimativa do período offline: sem
+   * isso, a placa que cala na sexta às 17h voltaria no domingo "estimando" 48
+   * horas de entrada num tubo onde não caiu uma gota. Assim que a placa volta a
+   * falar — inclusive pelo ponto de acesso do celular —, a estimativa some e o
+   * volume medido toma o lugar dela.
+   */
+  acSchedule: SchoolSchedule;
 }
 
 export interface WaterTotals {

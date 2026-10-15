@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "motion/react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Droplets } from "lucide-react";
 import Link from "next/link";
 import { CollectorAlertBanner } from "@/components/collector/collector-alert";
 import { CollectorHero } from "@/components/collector/collector-hero";
@@ -122,6 +122,30 @@ export function HomeScreen() {
       <motion.section variants={item} className="space-y-3">
         <h2 className="eyebrow">Impacto do captador {collectorCode}</h2>
         <WaterBalance totals={snapshot.totals} />
+
+        {/*
+          A porta para a tela do captador.
+          
+          Ela perdeu a aba quando o Mural entrou, e o que há lá dentro — sensor,
+          calibração, histórico de nível, socorro offline — não pode depender de
+          alguém lembrar de tocar no tubo lá em cima. Fica no fim da Início, logo
+          depois dos números que ela detalha.
+        */}
+        <Link
+          href="/agua"
+          className="flex items-center gap-3 rounded-card bg-white/[0.04] p-4 ring-1 ring-inset ring-white/[0.08] active:scale-[0.99] transition-transform"
+        >
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-aqua-400/12 text-aqua-300">
+            <Droplets className="size-5" aria-hidden />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-display font-semibold text-mist-50">Ver o captador por dentro</span>
+            <span className="mt-0.5 block text-xs leading-relaxed text-mist-400">
+              Nível medido agora, sensor, calibração e o que fazer quando ele fica sem internet.
+            </span>
+          </span>
+          <ChevronRight className="size-5 shrink-0 text-mist-400" aria-hidden />
+        </Link>
       </motion.section>
     </motion.div>
   );

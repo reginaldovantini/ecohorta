@@ -147,6 +147,17 @@ export interface CollectorRegistrationInput {
   connectivity?: CollectorConnectivity;
   distanceSensor?: DistanceSensorModel | string | null;
   createdBy: string | null;
+  /**
+   * Quando o ar-condicionado DAQUELE bloco funciona.
+   *
+   * Perguntado no cadastro do captador, e não só no da escola, porque a água
+   * vem de um aparelho específico: numa escola grande o bloco das salas e o da
+   * administração não ligam no mesmo horário. Sem isso, a estimativa do período
+   * offline inventaria água de fim de semana.
+   *
+   * Omitido, herda o horário da escola.
+   */
+  acSchedule?: { weekdays: readonly number[]; startMinutes: number; endMinutes: number };
   /** Segredo do ambiente usado no hash do código de responsável. */
   pepper: string;
 }
@@ -212,8 +223,12 @@ export async function registerCollector(tx: Queryable, input: CollectorRegistrat
     `insert into public.collectors
        (school_id, prefix, seq, code, proto_code, name, location, capacity_liters, reserve_liters, nominal_diameter_mm,
         nominal_useful_height_mm, distance_sensor, qr_token, steward_code_hash, created_by,
-        hotspot_ssid, hotspot_password, connectivity, valve_kind)
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'motorized_ball')
+        hotspot_ssid, hotspot_password, connectivity, valve_kind,
+        ac_weekdays, ac_start_minutes, ac_end_minutes)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 'motorized_ball',
+       coalesce($19::smallint[], (select school_weekdays from public.schools where id = $1)),
+       coalesce($20::smallint, (select school_start_minutes from public.schools where id = $1)),
+       coalesce($21::smallint, (select school_end_minutes from public.schools where id = $1)))
      returning id`,
     [
       input.schoolId,
@@ -234,6 +249,10 @@ export async function registerCollector(tx: Queryable, input: CollectorRegistrat
       network.ssid,
       network.password,
       connectivity,
+      // Nulo herda o horário da escola, resolvido na própria consulta.
+      input.acSchedule ? [...input.acSchedule.weekdays] : null,
+      input.acSchedule?.startMinutes ?? null,
+      input.acSchedule?.endMinutes ?? null,
     ],
   );
   const id = rows[0]!.id;

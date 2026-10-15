@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Surface } from "@/components/ui/surface";
 import { useProfile } from "@/hooks/use-profile";
 import { DISTANCE_SENSORS, DISTANCE_SENSOR_MODELS, type DistanceSensorModel } from "@/lib/collector/distance-sensors";
+import { DEFAULT_SCHOOL_SCHEDULE } from "@/lib/collector/school-hours";
 import { nominalCapacityLiters } from "@/lib/collector/volume-calibration";
 import { formatLiters } from "@/lib/utils/format";
 import { UF_LIST } from "@/lib/server/school-registry";
@@ -38,6 +39,23 @@ const inputClass = `${inputBase} w-full`;
 
 /** O tubo do manual. Mudar aqui muda o padrão oferecido a toda escola nova. */
 const PADRAO = { diameterMm: 100, usefulHeightMm: 1500, reserveLiters: "0,5" } as const;
+
+/** Minutos desde a meia-noite ⇄ "07:10", que é como o campo de hora do celular fala. */
+const paraHora = (minutos: number) => `${String(Math.floor(minutos / 60)).padStart(2, "0")}:${String(minutos % 60).padStart(2, "0")}`;
+const paraMinutos = (hora: string) => {
+  const [h, m] = hora.split(":").map(Number);
+  return (h ?? 0) * 60 + (m ?? 0);
+};
+
+const DIAS_SEMANA = [
+  { valor: 1, rotulo: "S" },
+  { valor: 2, rotulo: "T" },
+  { valor: 3, rotulo: "Q" },
+  { valor: 4, rotulo: "Q" },
+  { valor: 5, rotulo: "S" },
+  { valor: 6, rotulo: "S" },
+  { valor: 0, rotulo: "D" },
+] as const;
 
 interface SchoolOption {
   id: string;
@@ -97,6 +115,10 @@ function Formulario({
   const [altura, setAltura] = useState(String(PADRAO.usefulHeightMm));
   const [reserva, setReserva] = useState<string>(PADRAO.reserveLiters);
   const [sensor, setSensor] = useState<DistanceSensorModel>("VL53L1X");
+  // O horário do ar-condicionado daquele bloco. Padrão: dias úteis, 7h às 17h30.
+  const [dias, setDias] = useState<number[]>([...DEFAULT_SCHOOL_SCHEDULE.weekdays]);
+  const [inicio, setInicio] = useState(paraHora(DEFAULT_SCHOOL_SCHEDULE.startMinutes));
+  const [fim, setFim] = useState(paraHora(DEFAULT_SCHOOL_SCHEDULE.endMinutes));
   const [semRede, setSemRede] = useState(false);
   const [avancado, setAvancado] = useState(false);
 
@@ -143,6 +165,7 @@ function Formulario({
           distanceSensor: sensor,
           connectivity: semRede ? "hotspot_only" : "school_network",
           ...(matriculadosNumero > 0 ? { enrolledStudents: matriculadosNumero } : {}),
+          acSchedule: { weekdays: dias, startMinutes: paraMinutos(inicio), endMinutes: paraMinutos(fim) },
           ...(criandoEscola ? { school: novaEscola } : escolaId ? { schoolId: escolaId } : {}),
         }),
       });
@@ -161,7 +184,11 @@ function Formulario({
 
   const escolaDefinida = !platformAdmin || temEscolaPropria || escolaId !== "";
   const pronto =
-    location.trim().length >= 2 && escolaDefinida && (!criandoEscola || novaEscola.name.trim().length >= 3);
+    location.trim().length >= 2 &&
+    escolaDefinida &&
+    dias.length > 0 &&
+    paraMinutos(fim) > paraMinutos(inicio) &&
+    (!criandoEscola || novaEscola.name.trim().length >= 3);
 
   return (
     <div className="space-y-4">
@@ -298,6 +325,62 @@ function Formulario({
               Está escrito na plaquinha do sensor. Em caso de dúvida, dá para trocar depois em Ligações.
             </p>
           </div>
+          {/*
+            O HORÁRIO DO AR-CONDICIONADO DAQUELE BLOCO.
+            
+            O tubo só enche quando o aparelho está ligado. Sem este horário, a
+            placa que cala na sexta às 17h voltaria no domingo com a tela
+            "estimando" dois dias de entrada num tubo onde não caiu uma gota.
+            
+            Pergunta-se aqui, e não só no cadastro da escola, porque numa
+            escola grande o bloco das salas e o da administração não ligam no
+            mesmo horário — e quem cadastra está olhando para o aparelho.
+          */}
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-mist-400">Quando o ar-condicionado funciona</p>
+            <p className="mb-2 mt-1 text-[0.7rem] leading-relaxed text-mist-500">
+              O tubo só enche com o aparelho ligado. É com isto que a plataforma estima o nível enquanto o captador está
+              sem internet.
+            </p>
+            <div className="flex gap-1.5">
+              {DIAS_SEMANA.map(({ valor, rotulo }) => {
+                const marcado = dias.includes(valor);
+                return (
+                  <button
+                    key={valor}
+                    type="button"
+                    aria-pressed={marcado}
+                    aria-label={`Dia ${valor}`}
+                    onClick={() => setDias((atual) => (marcado ? atual.filter((d) => d !== valor) : [...atual, valor]))}
+                    className={`h-10 flex-1 rounded-xl text-sm font-semibold ring-1 ring-inset ${
+                      marcado ? "bg-aqua-400/15 text-aqua-200 ring-aqua-400/40" : "bg-white/[0.04] text-mist-500 ring-white/10"
+                    }`}
+                  >
+                    {rotulo}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="time"
+                value={inicio}
+                onChange={(e) => setInicio(e.target.value)}
+                aria-label="Hora em que liga"
+                className={`${inputBase} min-w-0 flex-1`}
+              />
+              <span className="shrink-0 text-sm text-mist-400">às</span>
+              <input
+                type="time"
+                value={fim}
+                onChange={(e) => setFim(e.target.value)}
+                aria-label="Hora em que desliga"
+                className={`${inputBase} min-w-0 flex-1`}
+              />
+            </div>
+            {dias.length === 0 && <p className="mt-1.5 text-[0.7rem] text-sun-300">Escolha ao menos um dia.</p>}
+          </div>
+
           <label className="flex items-start gap-3">
             <input
               type="checkbox"

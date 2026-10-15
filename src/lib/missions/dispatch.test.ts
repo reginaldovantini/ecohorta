@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CollectorSnapshot, DeviceStatus } from "@/lib/iot/types";
 import { findMission } from "./catalog";
 import { isDispatchable, priorityOf, rankCollectors, rescueTarget, targetFor, totalDiscardedLiters } from "./dispatch";
+import { DEFAULT_SCHOOL_SCHEDULE } from "@/lib/collector/school-hours";
 
 function snapshot(
   code: string,
@@ -41,6 +42,7 @@ function snapshot(
       overflowing: extra.overflowing ?? false,
       measuredAt: Date.now(),
       learnedInflowLitersPerHour: 1.2,
+      acSchedule: DEFAULT_SCHOOL_SCHEDULE,
     },
     totals: { capturedLiters: volumeLiters, reusedLiters: 0, discardedEstimatedLiters: extra.discarded ?? 0 },
     simulation: null,

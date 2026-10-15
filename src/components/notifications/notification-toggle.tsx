@@ -8,9 +8,9 @@ import { cn } from "@/lib/utils/cn";
 /*
  * LIGAR OS AVISOS DO CAPTADOR.
  *
- * O tubo enche de madrugada e no fim de semana. Sem aviso, quem descobre é
- * quem abre o aplicativo por acaso — e a missão de resgate fica existindo para
- * ninguém.
+ * O tubo enche durante a aula, quando o ar-condicionado está ligado. Numa manhã
+ * de calor ele passa de 95% e a água começa a escorrer pelo dreno — e sem aviso
+ * quem descobre é quem abre o aplicativo por acaso.
  *
  * O pedido de permissão só acontece NO TOQUE, nunca ao abrir a tela. Navegador
  * que pergunta sozinho leva "bloquear", e bloqueado não se desfaz de dentro do
@@ -128,8 +128,8 @@ export function NotificationToggle({ publicKey }: { publicKey: string | null }) 
             {estado === "bloqueado"
               ? "Os avisos estão bloqueados para este site. Libere nas configurações do navegador."
               : ligado
-                ? "Você é avisado quando o tubo enche e a água corre risco de escorrer pelo dreno."
-                : "O tubo enche de madrugada e no fim de semana. Ligue para ser avisado quando houver água esperando."}
+                ? "Você é avisado quando o tubo está enchendo e a água corre risco de escorrer pelo dreno."
+                : "O tubo enche durante a aula, com o ar-condicionado ligado. Ligue para ser avisado quando houver água esperando."}
           </p>
         </div>
         {estado !== "bloqueado" && (

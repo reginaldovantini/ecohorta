@@ -3,6 +3,7 @@ import { normalizeCollectorCode } from "@/lib/collector/code";
 import { assessSensorCompatibility, sensorMatchesConfiguration, type DistanceSensorModel } from "@/lib/collector/distance-sensors";
 import { appendDistanceSample, parseDistanceSamples } from "@/lib/collector/distance-stability";
 import { fillRatio, getLevelState } from "@/lib/collector/level-state";
+import type { SchoolSchedule } from "@/lib/collector/school-hours";
 import { OFFLINE_AFTER_MS } from "@/lib/collector/offline-estimate";
 import { measuredReuse, volumeFromDistance, type VolumeModel } from "@/lib/collector/volume-calibration";
 import {
@@ -17,7 +18,7 @@ import {
 } from "@/lib/collector/water-accounting";
 import { availableLiters } from "@/lib/collector/water";
 import { checkScan, SCAN_REJECTION_MESSAGE } from "./collector-registry";
-import { notifyLevel, type AlertKind } from "./notifications";
+import { notifyLevel } from "./notifications";
 import type {
   CommandReport,
   DeviceCommand,
@@ -80,6 +81,12 @@ interface CollectorRow {
   capacity_liters: string | number;
   reserve_liters: string | number;
   valve_kind: ValveKind;
+  /** Quando o ar-condicionado daquele bloco funciona: decide aviso e estimativa. */
+  ac_weekdays: number[];
+  ac_start_minutes: number;
+  ac_end_minutes: number;
+  /** O fuso vem da escola: um captador não fica em outro fuso que a escola dele. */
+  time_zone: string;
   nominal_diameter_mm: string | number | null;
   nominal_useful_height_mm: string | number | null;
   // Configuração de hardware (plataforma) e o que o firmware informou
@@ -185,6 +192,7 @@ const notFound = fail(404, "Captador não encontrado.");
 export const COLLECTOR_SELECT = `
   select c.id, c.school_id, c.code, c.name, c.location, c.capacity_liters, c.reserve_liters, c.valve_kind,
          c.hotspot_ssid, c.hotspot_password,
+         c.ac_weekdays, c.ac_start_minutes, c.ac_end_minutes, sc.time_zone,
          c.nominal_diameter_mm, c.nominal_useful_height_mm,
          c.distance_sensor, c.hardware_revision, c.hardware_updated_at, c.hardware_updated_by,
          d.id as device_id, d.device_key, d.is_simulated, d.firmware_version,
@@ -200,6 +208,7 @@ export const COLLECTOR_SELECT = `
          k.is_simulated as calibration_is_simulated, k.device_id as calibration_device_id,
          k.hardware_revision as calibration_hardware_revision
   from public.collectors c
+  join public.schools sc on sc.id = c.school_id
   join public.collector_state s on s.collector_id = c.id
   left join public.devices d on d.collector_id = c.id and d.active
   left join public.collector_calibrations k on k.collector_id = c.id and k.status = 'active'`;
@@ -283,6 +292,14 @@ function calibrationSummary(row: CollectorRow): CollectorCalibrationSummary | nu
 }
 
 /** Capacidade usada nas regras: a efetiva da calibração ativa; senão, a cadastrada. */
+/** O horário daquele ar-condicionado, no formato que as regras usam. */
+export const collectorSchedule = (row: CollectorRow): SchoolSchedule => ({
+  timeZone: row.time_zone,
+  weekdays: row.ac_weekdays.map(Number),
+  startMinutes: Number(row.ac_start_minutes),
+  endMinutes: Number(row.ac_end_minutes),
+});
+
 const effectiveCapacity = (row: CollectorRow) => activeVolumeModel(row)?.capacityLiters ?? num(row.capacity_liters);
 
 export type { CollectorRow };
@@ -456,6 +473,7 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
         // Sem arredondar para 2 casas como a taxa atual: 1,2 L/h de condensado
         // real é um número pequeno, e ele multiplica horas de silêncio.
         learnedInflowLitersPerHour: Math.round(accounting.learnedInflowLitersPerHour * 1000) / 1000,
+        acSchedule: collectorSchedule(row),
       },
       totals: {
         capturedLiters: round2(totals.capturedLiters),
@@ -649,8 +667,7 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
        * placa esperar. A transação só decide SE há aviso; quem manda é a linha
        * depois dela, e uma falha ali não derruba a telemetria.
        */
-      let aviso: { collectorId: string; collectorCode: string; schoolId: string; kind: AlertKind | null; freeLiters: number; nowMs: number } | null =
-        null;
+      let aviso: Parameters<typeof notifyLevel>[1] | null = null;
       const resposta = await db.transaction(async (tx) => {
         const nowMs = now();
         const row = (await loadById(tx, device.collectorId, true))!;
@@ -811,6 +828,9 @@ export function createCollectorService({ db, pepper, now = Date.now }: { db: Dat
             kind: estado === "normal" ? null : estado,
             freeLiters: availableLiters(volume, num(row.reserve_liters)),
             nowMs,
+            // Nível subindo é prova de ar-condicionado ligado — e de gente na
+            // escola para agir. Vale mais que calendário: acerta sábado letivo.
+            rising: getTrend(accounting, dispensing).trend === "rising",
           };
         }
 

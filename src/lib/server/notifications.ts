@@ -6,18 +6,27 @@ import { fail, type ServiceResult } from "./errors";
 /*
  * O AVISO QUE CHEGA SEM O APLICATIVO ABERTO.
  *
- * O tubo enche sozinho — de madrugada, no fim de semana, durante a aula. Acima
- * de 95% a água começa a escorrer pelo dreno, e até agora só descobria isso
- * quem abrisse o aplicativo por acaso. A missão de resgate existia e ninguém
- * era chamado para ela.
+ * O captador enche durante a aula, porque é quando o ar-condicionado está
+ * ligado. Numa manhã de calor o tubo passa de 95% e a água começa a escorrer
+ * pelo dreno — e até agora só descobria isso quem abrisse o aplicativo por
+ * acaso. A missão de resgate existia e ninguém era chamado para ela.
  *
- * Três contenções moram aqui, e sem elas um aviso útil vira perseguição:
+ * Quatro contenções moram aqui, e sem elas um aviso útil vira perseguição:
  *
- *   1. SILÊNCIO ENTRE AVISOS. Telemetria chega a cada três segundos. Sem
+ *   1. SÓ COM O TUBO ENCHENDO. O tubo que ficou quase cheio na sexta continua
+ *      quase cheio no domingo, e ninguém pode fazer nada a respeito. Avisar
+ *      assim mesmo faria o celular tocar de seis em seis horas o fim de semana
+ *      inteiro — e a pessoa desligaria o canal, perdendo o aviso de segunda.
+ *
+ *      O sinal não é o calendário: é a ÁGUA SUBINDO. O ar-condicionado só liga
+ *      com gente na escola, então nível subindo é prova de que há alguém lá
+ *      para agir. Isso acerta o sábado letivo — quatro ou cinco por ano — sem
+ *      que ninguém precise manter uma lista de exceções em dia.
+ *   2. SILÊNCIO ENTRE AVISOS. Telemetria chega a cada três segundos. Sem
  *      intervalo, "o tubo está cheio" viraria um aviso a cada três segundos.
- *   2. SÓ QUEM PERTENCE À ESCOLA. O aviso é sobre um tubo específico; mandar
+ *   3. SÓ QUEM PERTENCE À ESCOLA. O aviso é sobre um tubo específico; mandar
  *      para a rede inteira seria barulho para quem não pode agir.
- *   3. ENDEREÇO MORTO SE APAGA. Celular trocado, app desinstalado, inscrição
+ *   4. ENDEREÇO MORTO SE APAGA. Celular trocado, app desinstalado, inscrição
  *      expirada — o serviço de push responde 404 ou 410, e insistir com um
  *      endereço morto é gastar tempo de requisição para sempre.
  */
@@ -179,13 +188,30 @@ export function alertMessage(kind: AlertKind, collectorCode: string, freeLiters:
  */
 export async function notifyLevel(
   db: Database,
-  input: { collectorId: string; collectorCode: string; schoolId: string; kind: AlertKind | null; freeLiters: number; nowMs: number },
+  input: {
+    collectorId: string;
+    collectorCode: string;
+    schoolId: string;
+    kind: AlertKind | null;
+    freeLiters: number;
+    nowMs: number;
+    /** O nível está subindo? É a prova de que há alguém na escola para agir. */
+    rising: boolean;
+  },
 ): Promise<void> {
   if (!pushConfigured()) return;
   if (input.kind === null) {
     await clearAlerts(db, input.collectorId);
     return;
   }
+  /*
+   * Tubo parado, aviso guardado.
+   *
+   * A marca NÃO é lançada aqui de propósito: gastar o silêncio de seis horas
+   * com a escola fechada deixaria o aviso calado justamente na manhã de
+   * segunda, quando ele serviria.
+   */
+  if (!input.rising) return;
   if (!(await claimAlert(db, input.collectorId, input.kind, input.nowMs))) return;
   await sendToSchool(db, input.schoolId, alertMessage(input.kind, input.collectorCode, input.freeLiters));
 }

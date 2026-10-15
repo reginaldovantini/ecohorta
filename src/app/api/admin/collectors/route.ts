@@ -45,6 +45,20 @@ const bodySchema = z.object({
    * "280 missões" pode ser a escola inteira ou uma turma.
    */
   enrolledStudents: z.number().int().min(1).max(200_000).optional(),
+  /**
+   * Quando o ar-condicionado daquele bloco funciona.
+   *
+   * A água vem de UM aparelho: numa escola grande, o bloco das salas e o da
+   * administração não ligam no mesmo horário. Omitido, herda o da escola.
+   */
+  acSchedule: z
+    .object({
+      weekdays: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+      startMinutes: z.number().int().min(0).max(1439),
+      endMinutes: z.number().int().min(1).max(1440),
+    })
+    .refine((valor) => valor.endMinutes > valor.startMinutes, { message: "O fim do expediente vem depois do início." })
+    .optional(),
 });
 
 export async function POST(request: Request) {

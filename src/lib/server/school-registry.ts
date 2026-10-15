@@ -1,3 +1,4 @@
+import type { SchoolSchedule } from "@/lib/collector/school-hours";
 import type { Queryable } from "./db/types";
 
 /*
@@ -39,6 +40,19 @@ export interface School {
   city: string | null;
   state: string | null;
   enrolledStudents: number | null;
+  /**
+   * Horário de funcionamento da escola.
+   *
+   * Serve de PADRÃO para os captadores da escola: cada um herda este horário no
+   * cadastro e pode ter o seu, porque a água vem de um ar-condicionado
+   * específico — numa escola grande o bloco das salas e o da administração não
+   * ligam no mesmo horário.
+   *
+   * Para que serve: estimar o nível enquanto o captador está sem internet. Sem
+   * isso, a placa que cala na sexta às 17h voltaria no domingo "estimando" dois
+   * dias de entrada num tubo onde não caiu uma gota.
+   */
+  schedule: SchoolSchedule;
 }
 
 /**
@@ -63,7 +77,21 @@ interface SchoolRow {
   city: string | null;
   state: string | null;
   enrolled_students: number | null;
+  time_zone: string;
+  school_weekdays: number[];
+  school_start_minutes: number;
+  school_end_minutes: number;
 }
+
+/** Colunas do horário, iguais em toda consulta de escola. */
+export const SCHOOL_HOURS_COLUMNS = "time_zone, school_weekdays, school_start_minutes, school_end_minutes";
+
+export const toSchedule = (row: Pick<SchoolRow, "time_zone" | "school_weekdays" | "school_start_minutes" | "school_end_minutes">): SchoolSchedule => ({
+  timeZone: row.time_zone,
+  weekdays: row.school_weekdays.map(Number),
+  startMinutes: Number(row.school_start_minutes),
+  endMinutes: Number(row.school_end_minutes),
+});
 
 const toSchool = (row: SchoolRow): School => ({
   id: row.id,
@@ -71,6 +99,7 @@ const toSchool = (row: SchoolRow): School => ({
   city: row.city,
   state: row.state,
   enrolledStudents: row.enrolled_students,
+  schedule: toSchedule(row),
 });
 
 /**
@@ -92,7 +121,7 @@ export async function registerSchool(tx: Queryable, input: SchoolInput): Promise
      on conflict (name) do update set city = coalesce(excluded.city, public.schools.city),
        state = coalesce(excluded.state, public.schools.state),
        enrolled_students = coalesce(excluded.enrolled_students, public.schools.enrolled_students)
-     returning id, name, city, state, enrolled_students`,
+     returning id, name, city, state, enrolled_students, time_zone, school_weekdays, school_start_minutes, school_end_minutes`,
     [name, city, input.state, input.enrolledStudents ?? null],
   );
   return toSchool(rows[0]!);
@@ -118,6 +147,7 @@ export async function setEnrolledStudents(tx: Queryable, schoolId: string, enrol
 export async function listSchools(tx: Queryable): Promise<(School & { activeCollectors: number; prototypes: number })[]> {
   const { rows } = await tx.query<SchoolRow & { active_collectors: number; prototypes: number }>(
     `select s.id, s.name, s.city, s.state, s.enrolled_students,
+            s.time_zone, s.school_weekdays, s.school_start_minutes, s.school_end_minutes,
             count(c.id) filter (where c.activated_at is not null and c.prefix = 'ECO')::int as active_collectors,
             count(c.id) filter (where c.prefix = 'PROTO')::int as prototypes
      from public.schools s left join public.collectors c on c.school_id = s.id
@@ -149,7 +179,7 @@ export async function updateSchool(tx: Queryable, id: string, input: SchoolInput
   const { rows } = await tx.query<SchoolRow>(
     `update public.schools set name = $2, city = $3, state = $4,
        enrolled_students = coalesce($5, enrolled_students)
-     where id = $1 returning id, name, city, state, enrolled_students`,
+     where id = $1 returning id, name, city, state, enrolled_students, time_zone, school_weekdays, school_start_minutes, school_end_minutes`,
     [id, name, city, input.state, input.enrolledStudents ?? null],
   );
   const escola = rows[0];

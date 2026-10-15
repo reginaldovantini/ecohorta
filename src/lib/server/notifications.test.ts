@@ -137,19 +137,72 @@ describe("o nível do tubo decide o aviso", () => {
       fw_version: "esp32-0.5.0",
     });
 
-    // Metade do tubo: nada a avisar.
-    await collectors.ingestTelemetry(device, leitura(6, 1));
+    /*
+     * O tubo ENCHENDO, que é o sinal de que o ar-condicionado está ligado — e
+     * portanto de que há alguém na escola para agir. Uma leitura só não basta:
+     * a tendência precisa de uma janela de amostras para existir.
+     */
+    let seq = 0;
+    const encher = async (de: number, ate: number) => {
+      const passos = 40;
+      for (let i = 0; i <= passos; i++) {
+        clock += 3000;
+        await collectors.ingestTelemetry(device, leitura(de + ((ate - de) * i) / passos, ++seq));
+      }
+    };
+
+    // Metade do tubo, subindo devagar: nada a avisar ainda.
+    await encher(5.5, 6);
     expect((await db.query("select 1 from public.collector_alerts")).rows).toHaveLength(0);
 
-    // Acima de 95% da capacidade (12 L): crítico.
-    clock += 1000;
-    await collectors.ingestTelemetry(device, leitura(11.6, 2));
+    // Enchendo até passar de 95% da capacidade (12 L). No caminho cruza os dois
+    // patamares, e os dois avisam: "há água esperando" e depois "vai
+    // transbordar" são recados diferentes. Na bandeja do celular o segundo
+    // substitui o primeiro, porque carregam a mesma etiqueta.
+    await encher(6, 11.6);
     const { rows } = await db.query<{ kind: string }>("select kind from public.collector_alerts where collector_id = $1", [IDS.collector]);
-    expect(rows[0]!.kind).toBe("critical");
+    expect(rows.map((linha) => linha.kind).sort()).toEqual(["attention", "critical"]);
 
     // Alguém cumpriu a missão: o tubo esvazia e a marca sai, liberando o próximo aviso.
-    clock += 1000;
-    await collectors.ingestTelemetry(device, leitura(5, 3));
+    clock += 3000;
+    await collectors.ingestTelemetry(device, leitura(5, ++seq));
+    expect((await db.query("select 1 from public.collector_alerts")).rows).toHaveLength(0);
+  });
+
+  /*
+   * O ERRO QUE ESTA REGRA CORRIGE.
+   *
+   * O tubo que ficou quase cheio na sexta continua quase cheio no domingo. Sem
+   * exigir que o nível esteja SUBINDO, o intervalo de seis horas faria o
+   * celular de um estudante tocar quatro vezes por dia, o fim de semana
+   * inteiro, sobre algo que ele não tem como resolver — e ele desligaria o
+   * canal, perdendo também o aviso de segunda-feira.
+   *
+   * O sinal não é calendário: é a água. O ar-condicionado só liga com gente na
+   * escola, então nível subindo é prova de que há alguém lá. Isso acerta o
+   * sábado letivo sem que ninguém mantenha uma lista de exceções em dia.
+   */
+  it("tubo cheio e PARADO não avisa: não há ninguém na escola para agir", async () => {
+    const collectors = createCollectorService({ db, pepper: TEST_PEPPER, now: () => clock });
+    await makeCollectorReal(db);
+    const device = await collectors.authenticateDevice(`Bearer ${TEST_DEVICE_TOKEN}`, "VIRTUAL-001", "ECO-001");
+    if (!device) throw new Error("dispositivo de teste não autenticou");
+
+    // Quinze minutos de leituras no mesmo nível: tubo cheio, água parada.
+    for (let seq = 1; seq <= 60; seq++) {
+      clock += 15_000;
+      await collectors.ingestTelemetry(device, {
+        device_id: "VIRTUAL-001",
+        collector_code: "ECO-001",
+        seq,
+        uptime_ms: seq * 15_000,
+        distance_mm: 300,
+        volume_liters: 11.6,
+        valve: "closed",
+        status: "READY",
+        fw_version: "esp32-0.5.0",
+      });
+    }
     expect((await db.query("select 1 from public.collector_alerts")).rows).toHaveLength(0);
   });
 
